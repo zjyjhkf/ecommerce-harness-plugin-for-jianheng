@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output (scripts/build.mjs 产物，由源码生成，不入库)
+dist/
+
+# runtime state (导入/累积数据，不入库；seed.json 为种子数据，保留入库)
+data/store.json
+
+# typescript
+*.tsbuildinfo
+
+# temp parse artifacts
+.tmp*
+
+# backups & temp checks
+*.bak*
+data/tmp-*
+data/*-check.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.log

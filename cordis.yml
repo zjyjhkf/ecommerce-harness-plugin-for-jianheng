@@ -1,0 +1,12 @@
+# ecommerce-analyst-plugin — dsh 插件加载配置
+# 用法（在仓库根目录执行）：
+#   pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
+# 或启用插件配置（可选的插件配置块）：
+#   ecommerceAnalyst:
+#     platform:
+#       name: mock
+#     storage:
+#       file: "./ecommerce-analyst-plugin/data/store.json"
+- insert:
+    - id: ecommerce-analyst
+      name: '/absolute/path/to/deepseek-harness/ecommerce-analyst-plugin/src/index.ts'

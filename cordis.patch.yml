@@ -1,0 +1,7 @@
+# dsh.bundle patch — ecommerce-analyst-plugin 插件组合行
+# 由 dsh plugin add 安装后由 Loader 组合进 profile
+# 注意：不要在此处写 inject —— 插件自身的 inject 声明（systemPrompt/webServer/tools）
+# 会被 cordis Loader 作为组合契约使用；此处覆写 inject 会破坏服务注入。
+- insert:
+    - id: ecommerce-analyst
+      name: 'ecommerce-analyst-plugin'

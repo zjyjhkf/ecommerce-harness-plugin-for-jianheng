@@ -1,0 +1,25 @@
+{
+  "name": "ecommerce-analyst-plugin",
+  "version": "0.3.0",
+  "description": "dsh 电商商单智能体插件：商品管理 / 订单处理 / 销售数据分析 / 库存预警",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --import tsx --test \"tests/*.test.ts\"",
+    "typecheck": "node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json",
+    "build": "node scripts/build.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
+    "pdfjs-dist": "^4.10.38",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "xlsx": "^0.18.5"
+  }
+}
