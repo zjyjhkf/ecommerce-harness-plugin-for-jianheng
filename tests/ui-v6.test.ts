@@ -25,6 +25,7 @@ const SRC = resolve(import.meta.dirname, '..', 'src')
 const CLIENT_INDEX = readFileSync(resolve(SRC, 'client', 'index.tsx'), 'utf8')
 const SHOP_DESK = readFileSync(resolve(SRC, 'client', 'ShopDeskPanel.tsx'), 'utf8')
 const STYLES = readFileSync(resolve(SRC, 'client', 'styles.ts'), 'utf8')
+const COCKPIT_BUS = readFileSync(resolve(SRC, 'client', 'cockpit-bus.ts'), 'utf8')
 
 /* === 客户端入口（index.tsx）改动校验 === */
 
@@ -36,12 +37,26 @@ test('v0.6 [index.tsx] 删除 CockpitDockLauncher 函数（顶部 dock 长按键
   )
 })
 
-test('v0.6 [index.tsx] 删除 conversation.input.dock 注册块', () => {
-  assert.equal(
-    CLIENT_INDEX.includes('conversation.input.dock'),
-    false,
-    'conversation.input.dock 注册应当已被删除',
-  )
+test('v0.6 [index.tsx] skill 条改注册到 conversation.input.dock（旧 CockpitDockLauncher 已删除）', () => {
+  // v0.6 删除了旧顶部 dock 按钮；后续 skill 模块条重新占用 input.dock（含空白会话也会渲染）
+  assert.match(CLIENT_INDEX, /slots\.inject\(['"]conversation\.input\.dock['"]/)
+  assert.match(CLIENT_INDEX, /id:\s*['"]ecommerce-skill-dock['"]/)
+})
+
+test('v0.6 [cockpit-bus] skill 条随侧边栏开关「归位」（可逆 esd-cockpit-open 取代一次性 latch）', () => {
+  // 打开侧边栏加 esd-cockpit-open、关闭时移除，使 dock 技能条能恢复到初始隐藏状态
+  assert.match(COCKPIT_BUS, /classList\.toggle\(['"]esd-cockpit-open['"],\s*open\)/)
+  assert.match(COCKPIT_BUS, /function syncDockVisibility/)
+  // 关闭侧边栏时归位全屏状态，避免重开仍停留在全屏
+  assert.match(COCKPIT_BUS, /else resetFullscreen\(\)/)
+  assert.match(COCKPIT_BUS, /function resetFullscreen/)
+  // 不再依赖旧的一次性 esd-cockpit-opened latch 驱动显隐
+  assert.doesNotMatch(COCKPIT_BUS, /classList\.add\(['"]esd-cockpit-opened['"]\)/)
+})
+
+test('v0.6 [styles] dock 技能条显隐改用可逆的 esd-cockpit-open', () => {
+  assert.match(STYLES, /body:not\(\.esd-cockpit-open\) \.esd-skillbar-dock\s*\{\s*display:\s*none;/)
+  assert.doesNotMatch(STYLES, /body:not\(\.esd-cockpit-opened\)/)
 })
 
 test('v0.6 [index.tsx] 保留 sidebar.footer.action 圆形总控 + DataFooterLauncher', () => {
@@ -94,7 +109,7 @@ test('v0.6 [ShopDeskPanel] 保留 panel header 全屏按钮 ⛶', () => {
   assert.ok(panelHTML.includes('⛶') || panelHTML.includes('🗗'), '应包含全屏图标')
 })
 
-test('v0.6 [ShopDeskPanel] 保留主要模块：经营总览 / 打开仪表盘 / 商品分类 / BI 看板 / 商品管理 / 一页简报', () => {
+test('v0.6 [ShopDeskPanel] 保留主要模块：经营总览 / 打开仪表盘 / 商品分类 / BI 看板 / 一页简报', () => {
   assert.match(SHOP_DESK, /BiDashboardSection/, 'BI 数据看板')
   assert.match(SHOP_DESK, /OverviewSection/, '经营总览')
   assert.match(SHOP_DESK, /CategorySection/, '商品分类')
@@ -102,8 +117,12 @@ test('v0.6 [ShopDeskPanel] 保留主要模块：经营总览 / 打开仪表盘 /
   assert.match(SHOP_DESK, /LowStockSection/, '低库存预警')
   assert.match(SHOP_DESK, /TodoSection/, '今日待办')
   assert.match(SHOP_DESK, /BriefSection/, '一页简报')
-  assert.match(SHOP_DESK, /ProductManagerSection/, '商品管理表格')
   assert.match(SHOP_DESK, /openDashboard/, '打开仪表盘入口')
+})
+
+test('v0.6 [ShopDeskPanel] 删除商品管理表格（单个商品增删改查/上下架已由导入维护）', () => {
+  assert.doesNotMatch(SHOP_DESK, /ProductManagerSection/, '商品管理表格组件应已删除')
+  assert.doesNotMatch(SHOP_DESK, /onProductCreate|onProductDelete|onProductStatus|adjustStock/, '商品写操作处理器应已删除')
 })
 
 /* === demo 模式导入引导横幅 === */

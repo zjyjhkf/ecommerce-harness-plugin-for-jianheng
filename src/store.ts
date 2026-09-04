@@ -15,6 +15,7 @@ import {
   ORDER_TRANSITIONS,
   toCents,
   type CategoryStat,
+  type MonthlyReport,
   type DateRange,
   type LowStockItem,
   type Order,
@@ -24,12 +25,14 @@ import {
   type Page,
   type Product,
   type ProductFilter,
-  type ProductStatus,
   type RestockSuggestion,
   type StatsOverview,
   type TopProduct,
   type TrendPoint,
+  type WeeklyReport,
 } from './types.ts'
+import { mergeWeekly } from './weekly-report.ts'
+import { mergeMonthly, type MonthlyParseResult } from './monthly-report.ts'
 import { filterOrders, filterProducts } from './platform/mock.ts'
 import type { PlatformAdapter } from './platform/adapter.ts'
 
@@ -61,6 +64,13 @@ export class EcommerceStore {
   private ordersSource: 'demo' | 'imported' = 'demo'
   /** 最近一次导入的数据快照（深拷贝），供「切换回导入数据」使用 */
   private lastImported: { products: Product[]; orders: Order[] } | null = null
+  /** 月度复盘（7月月度复盘.xlsx 导入）：30/60 天「月复盘」视图数据源 */
+  private monthlyReport: MonthlyReport | null = null
+  /** 周复盘（「周数据」三份「商品排名导出」导入，按展示形式合并）：7 天「周复盘」视图数据源 */
+  private weeklyReport: WeeklyReport | null = null
+  /** 报表数据单调递增版本号：任一报表（月/周）导入或替换即 +1，供前端判断「数据是否真正变化」，
+   *  避免仅靠行数/周期这类粗粒度指纹漏掉「数值变化但行数相同」的插入更新。 */
+  private reportRevision = 0
 
   constructor(adapter: PlatformAdapter, cfg: StoreConfig) {
     this.adapter = adapter
@@ -76,11 +86,15 @@ export class EcommerceStore {
         const data = JSON.parse(raw) as {
           products: Product[]
           orders: Order[]
+          monthlyReport?: MonthlyReport | null
+          weeklyReport?: WeeklyReport | null
           meta?: { dataMode?: string; updatedAt?: string }
         }
         if (Array.isArray(data.products) && Array.isArray(data.orders)) {
           this.products = data.products
           this.orders = data.orders
+          // 报表（月/周复盘）不随持久化恢复：每次启动插件重置为空，仅当本会话导入后才填充，
+          // 杜绝「打开插件即显示上一会话遗留数据」。备份（exportBackup/importBackup）仍显式保留报表。
           const imported =
             this.adapter.name === 'rest'
               ? 'rest'
@@ -143,20 +157,32 @@ export class EcommerceStore {
 
   /** 导出 JSON 备份 */
   exportBackup(): string {
-    return JSON.stringify({ products: this.products, orders: this.orders }, null, 2)
+    return JSON.stringify(
+      { products: this.products, orders: this.orders, monthlyReport: this.monthlyReport, weeklyReport: this.weeklyReport },
+      null,
+      2,
+    )
   }
 
   /** 导入 JSON 备份（整体替换） */
   importBackup(json: string): { products: number; orders: number } {
-    const data = JSON.parse(json) as { products: Product[]; orders: Order[] }
+    const data = JSON.parse(json) as {
+      products: Product[]
+      orders: Order[]
+      monthlyReport?: MonthlyReport | null
+      weeklyReport?: WeeklyReport | null
+    }
     if (!Array.isArray(data.products) || !Array.isArray(data.orders)) {
       throw new Error('备份文件格式不正确：缺少 products/orders 数组')
     }
     this.products = data.products
     this.orders = data.orders
+    this.monthlyReport = data.monthlyReport ?? null
+    this.weeklyReport = data.weeklyReport ?? null
     this.dataMode = 'imported'
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
+    this.reportRevision += 1
     this.captureImported()
     this.recomputeCounters()
     this.save()
@@ -283,6 +309,60 @@ export class EcommerceStore {
     return { products: this.products.length, orders: this.orders.length, derivedProducts }
   }
 
+  // ─────────────────────────── 月度复盘 ───────────────────────────
+
+  /** 写入月度复盘（来自 JSON 完整月报导入） */
+  setMonthlyReport(report: MonthlyReport | null): void {
+    this.monthlyReport = report
+    this.reportRevision += 1
+    this.save()
+  }
+
+  /** 合并月度复盘章节（「月度表」4 份文件分次导入，按展示形式/利润表覆盖对应章节） */
+  mergeMonthlyReport(part: MonthlyParseResult): void {
+    this.monthlyReport = mergeMonthly(this.monthlyReport, part)
+    this.reportRevision += 1
+    this.save()
+  }
+
+  /**
+   * 批量导入月度复盘（30 天周期）：以「这批文件」为唯一数据源，从零整体重建
+   * MonthlyReport（不继承任何旧周期章节），保证 30 天面板的分析结果完全来自
+   * 本次一次性导入的 4 份 Excel（利润表 + 三份「商品排名导出」），杜绝旧数据残留。
+   */
+  importMonthlyReport(parts: MonthlyParseResult[]): void {
+    let report: MonthlyReport | null = null
+    for (const part of parts) {
+      report = mergeMonthly(report, part)
+    }
+    if (report === null) return
+    this.monthlyReport = report
+    this.reportRevision += 1
+    this.save()
+  }
+
+  /** 读取月度复盘（无导入记录返回 null） */
+  getMonthlyReport(): MonthlyReport | null {
+    return this.monthlyReport
+  }
+
+  /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节） */
+  mergeWeeklyReport(part: import('./weekly-report.ts').WeeklyParseResult): void {
+    this.weeklyReport = mergeWeekly(this.weeklyReport, part)
+    this.reportRevision += 1
+    this.save()
+  }
+
+  /** 读取周复盘（无导入记录返回 null） */
+  getWeeklyReport(): WeeklyReport | null {
+    return this.weeklyReport
+  }
+
+  /** 报表数据版本号（单调递增），供 /ecommerce-api/*-report 接口返回给前端做变更检测 */
+  getReportRevision(): number {
+    return this.reportRevision
+  }
+
   // ─────────────────────────── 数据源模式切换 ───────────────────────────
 
   /** 深拷贝当前数据为「最近导入快照」（避免后续 CRUD 就地修改污染快照） */
@@ -386,7 +466,7 @@ export class EcommerceStore {
     }
   }
 
-  // ─────────────────────────── 商品 CRUD ───────────────────────────
+  // ─────────────────────────── 商品查询 ───────────────────────────
 
   listProducts(filter: ProductFilter): Page<Product> {
     const pageSize = filter.page_size ?? 20
@@ -400,75 +480,6 @@ export class EcommerceStore {
 
   getProduct(sku: string): Product | undefined {
     return this.products.find((p) => p.sku === sku)
-  }
-
-  async createProduct(input: {
-    name: string
-    price: number
-    stock: number
-    category: string
-    status?: ProductStatus
-  }): Promise<Product> {
-    const now = new Date().toISOString()
-    const product: Product = {
-      sku: `SKU-${String(this.nextSku).padStart(4, '0')}`,
-      name: input.name,
-      price: fromCents(toCents(input.price)),
-      stock: input.stock,
-      category: input.category,
-      status: input.status ?? 'on_sale',
-      created_at: now,
-      updated_at: now,
-    }
-    this.nextSku += 1
-    this.products.push(product)
-    this.save()
-    return product
-  }
-
-  async updateProduct(
-    sku: string,
-    patch: Partial<Pick<Product, 'name' | 'price' | 'stock' | 'category' | 'status'>>,
-  ): Promise<Product> {
-    const product = this.getProduct(sku)
-    if (!product) throw new Error(`商品不存在：${sku}`)
-    if (patch.price !== undefined) {
-      patch.price = fromCents(toCents(patch.price))
-    }
-    Object.assign(product, patch, { updated_at: new Date().toISOString() })
-    this.save()
-    return product
-  }
-
-  async deleteProduct(sku: string): Promise<void> {
-    const idx = this.products.findIndex((p) => p.sku === sku)
-    if (idx === -1) throw new Error(`商品不存在：${sku}`)
-    this.products.splice(idx, 1)
-    this.save()
-  }
-
-  async adjustStock(sku: string, delta: number, reason?: string): Promise<Product> {
-    const product = this.getProduct(sku)
-    if (!product) throw new Error(`商品不存在：${sku}`)
-    if (!Number.isInteger(delta)) throw new Error('库存调整量必须是整数')
-    const next = product.stock + delta
-    if (next < 0) throw new Error(`库存不足：当前 ${product.stock}，无法减少 ${-delta}`)
-    product.stock = next
-    product.updated_at = new Date().toISOString()
-    if (product.stock === 0 && reason === '售罄') {
-      product.status = 'off_sale'
-    }
-    this.save()
-    return product
-  }
-
-  async setProductStatus(sku: string, status: ProductStatus): Promise<Product> {
-    const product = this.getProduct(sku)
-    if (!product) throw new Error(`商品不存在：${sku}`)
-    product.status = status
-    product.updated_at = new Date().toISOString()
-    this.save()
-    return product
   }
 
   // ─────────────────────────── 订单处理 ───────────────────────────

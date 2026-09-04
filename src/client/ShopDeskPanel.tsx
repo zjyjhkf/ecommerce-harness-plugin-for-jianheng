@@ -9,25 +9,19 @@
  */
 import * as React from 'react'
 import {
-  adjustStock,
-  analysisPromptOf,
-  createProduct,
   dashboardUrl,
-  deleteProduct,
+  dataCenterUrl,
   exportData,
   fetchActions,
-  fetchAllProducts,
   fetchBrief,
   fetchCategoryProducts,
   fetchSnapshot,
   formatMoney,
   formatTime,
-  importLocalFile,
+  importLocalFiles,
   modeLabelOf,
   resetToDemo,
-  setProductStatus,
   switchMode,
-  updateProduct,
   type ModeInfo,
   type ProductRow,
   type ShopActions,
@@ -35,16 +29,18 @@ import {
   type ShopSnapshot,
 } from './data.ts'
 import {
+  appendToConversation,
   isCockpitOpen,
   isFullscreen,
-  sendToConversation,
+  openNewConversation,
   subscribeCockpit,
   subscribeFullscreen,
   toggleCockpit,
   toggleFullscreen,
 } from './cockpit-bus.ts'
-import { BiDashboardSection, ProductManagerSection } from './BiDashboard.tsx'
+import { BiDashboardSection } from './BiDashboard.tsx'
 import { BrandBadge, SecIcon, type SecIconName } from './brand.tsx'
+import { valuePromptOf } from './skills.ts'
 
 /* ────────────── 渲染边界：面板内任何渲染错误不波及宿主 ────────────── */
 
@@ -141,6 +137,7 @@ export interface ShopDeskData {
   importMsg: { ok: boolean; text: string } | null
   setImportMsg: (v: { ok: boolean; text: string } | null) => void
   fileInputRef: React.RefObject<HTMLInputElement | null>
+  dcIframeRef: React.RefObject<HTMLIFrameElement | null>
   overdueCount: number
   modeLabel: string
   modeDot: string
@@ -153,22 +150,13 @@ export interface ShopDeskData {
   toggleExpand: (key: keyof ExpandState) => void
   openFilePicker: () => void
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>
-  /** 商品管理：全量商品列表 + 增删改查 */
-  products: ProductRow[] | null
-  productsLoading: boolean
-  loadProducts: (force?: boolean) => Promise<void>
-  onProductCreate: (input: { name: string; price: number; stock: number; category: string }) => Promise<void>
-  onProductUpdate: (sku: string, patch: Partial<Pick<ProductRow, 'name' | 'price' | 'stock' | 'category' | 'status'>>) => Promise<void>
-  onProductDelete: (sku: string) => Promise<void>
-  onProductStock: (sku: string, delta: number) => Promise<void>
-  onProductStatus: (sku: string, status: 'on_sale' | 'off_sale') => Promise<void>
-  /** 点击商品 → 向会话框生成分析指令 */
-  analyzeProduct: (product: ProductRow) => void
   /** 全屏浏览 */
   fullscreen: boolean
   toggleFullscreen: () => void
   /** 数据导出 */
   doExport: (type: 'csv' | 'json', scope: 'products' | 'orders' | 'all') => void
+  /** 点击任意视图 → 追加对应数值/指令到会话框（与已选技能拼合后一起分析） */
+  emitValue: (text: string, okText?: string) => void
 }
 
 function useShopDeskData(): ShopDeskData {
@@ -207,13 +195,18 @@ function useShopDeskData(): ShopDeskData {
   const [importing, setImporting] = React.useState(false)
   const [importMsg, setImportMsg] = React.useState<{ ok: boolean; text: string } | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  /* 数据中台 iframe：导入/切换数据源/重置后 postMessage 通知其刷新（面板数据动态联动，不依赖整页刷新） */
+  const dcIframeRef = React.useRef<HTMLIFrameElement | null>(null)
+  const notifyDcRefresh = React.useCallback((): void => {
+    try {
+      dcIframeRef.current?.contentWindow?.postMessage({ type: 'ecommerce:refresh' }, '*')
+    } catch {
+      /* 忽略跨域或 iframe 未就绪 */
+    }
+  }, [])
 
   /* 数据源切换：switchingMode=进行中（demo/imported/rest） */
   const [switchingMode, setSwitchingMode] = React.useState(false)
-
-  /* 商品管理：全量商品列表 + 增删改查 */
-  const [products, setProducts] = React.useState<ProductRow[] | null>(null)
-  const [productsLoading, setProductsLoading] = React.useState(false)
 
   /* 全屏浏览状态（由 cockpit-bus 共享，多入口同步） */
   const [, forceFs] = React.useState(0)
@@ -260,24 +253,6 @@ function useShopDeskData(): ShopDeskData {
     }
   }, [])
 
-  /* 全量商品加载（商品管理表格）——用 ref 标记已加载，避免依赖循环 */
-  const productsLoadedRef = React.useRef(false)
-  const loadProducts = React.useCallback(async (force = false): Promise<void> => {
-    if (!force && productsLoadedRef.current) return
-    setProductsLoading(true)
-    try {
-      const items = await fetchAllProducts()
-      if (mountedRef.current) {
-        setProducts(items)
-        productsLoadedRef.current = true
-      }
-    } catch (err) {
-      if (mountedRef.current) setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      if (mountedRef.current) setProductsLoading(false)
-    }
-  }, [])
-
   /* 一页经营简报：懒加载（首次展开时拉取） */
   const loadBrief = React.useCallback(async (): Promise<void> => {
     if (brief !== null || briefLoading) return
@@ -310,11 +285,10 @@ function useShopDeskData(): ShopDeskData {
   React.useEffect(() => {
     mountedRef.current = true
     void load(true)
-    void loadProducts(true)
     return () => {
       mountedRef.current = false
     }
-  }, [load, loadProducts])
+  }, [load])
 
   /* 打开面板：若数据过期则刷新；打开期间每 60s 静默刷新 */
   React.useEffect(() => {
@@ -357,20 +331,22 @@ function useShopDeskData(): ShopDeskData {
     fileInputRef.current?.click()
   }, [])
 
-  /* 选择文件后上传解析并导入 */
+  /* 选择文件后上传解析并导入（支持一次性多选 4 份 Excel，批量导入后统一刷新：
+   *  30 天周期的「利润表 + 三份商品排名导出」在同一请求内解析并整体重建月度复盘，
+   *  保证面板分析结果完全来自本次导入的文件）。 */
   const handleFileChange = React.useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
-      const file = event.target.files?.[0]
+      const files = Array.from(event.target.files ?? [])
       event.target.value = ''
-      if (!file) return
+      if (files.length === 0) return
       setImporting(true)
       setImportMsg(null)
       try {
-        const result = await importLocalFile(file)
+        const result = await importLocalFiles(files)
         if (!mountedRef.current) return
         setImportMsg({
           ok: true,
-          text: `导入完成：${result.products} 件商品 / ${result.orders} 笔订单（${result.hint ?? ''}）`,
+          text: `导入完成（${files.length} 个文件）：${result.hint}`,
         })
         // 导入后实时刷新：重载快照 + 商品表 + 失效已缓存的简报（强制重新生成）
         setBrief(null)
@@ -378,7 +354,8 @@ function useShopDeskData(): ShopDeskData {
         setCatProducts(null)
         setSelectedCategory(null)
         void load(true)
-        void loadProducts(true)
+        // 通知数据中台 iframe 重新拉取导入的月度/周复盘数据（面板随插入数据动态更新）
+        notifyDcRefresh()
       } catch (err) {
         if (!mountedRef.current) return
         setImportMsg({
@@ -389,7 +366,7 @@ function useShopDeskData(): ShopDeskData {
         if (mountedRef.current) setImporting(false)
       }
     },
-    [load],
+    [load, notifyDcRefresh],
   )
 
   const overdueCount = snapshot?.today.overdueCount ?? 0
@@ -417,7 +394,7 @@ function useShopDeskData(): ShopDeskData {
         setCatProducts(null)
         setSelectedCategory(null)
         void load(true)
-        void loadProducts(true)
+        notifyDcRefresh()
       } catch (err) {
         if (!mountedRef.current) return
         setImportMsg({
@@ -428,7 +405,7 @@ function useShopDeskData(): ShopDeskData {
         if (mountedRef.current) setSwitchingMode(false)
       }
     },
-    [load],
+    [load, notifyDcRefresh],
   )
 
   /* 一键重置为演示数据（服务端保留备份） */
@@ -449,7 +426,7 @@ function useShopDeskData(): ShopDeskData {
         setCatProducts(null)
         setSelectedCategory(null)
         void load(true)
-        void loadProducts(true)
+        notifyDcRefresh()
     } catch (err) {
       if (!mountedRef.current) return
       setImportMsg({
@@ -459,73 +436,71 @@ function useShopDeskData(): ShopDeskData {
     } finally {
       if (mountedRef.current) setSwitchingMode(false)
     }
-  }, [load])
+  }, [load, notifyDcRefresh])
 
   /* 一键打开独立仪表盘页面 */
   const openDashboard = React.useCallback((): void => {
     window.open(dashboardUrl(), '_blank', 'noopener')
   }, [])
 
-  /* 商品增删改查后统一刷新快照 + 商品列表 */
-  const refreshAfterChange = React.useCallback(async (): Promise<void> => {
-    await Promise.all([load(true), loadProducts(true)])
-  }, [load, loadProducts])
+  /* 链接预警分析：监听数据中台 iframe 的 postMessage（点击退款商品明细里的商品名触发）。
+   *  收到后开启全新会话并把 AI 分析提示词自动输入到会话框。 */
+  React.useEffect(() => {
+    const onMessage = (event: MessageEvent): void => {
+      const data = event.data as { type?: string; linkName?: string; prompt?: string; label?: string; value?: string } | null
+      if (data === null || typeof data !== 'object') return
 
-  const onProductCreate = React.useCallback(
-    async (input: { name: string; price: number; stock: number; category: string }): Promise<void> => {
-      await createProduct(input)
-      await refreshAfterChange()
-    },
-    [refreshAfterChange],
-  )
+      /* 通用视图点击 → 追加对应数值到会话框（与已选技能拼合，不新建会话） */
+      if (data.type === 'ecommerce:analyze-value') {
+        const label = typeof data.label === 'string' ? data.label : ''
+        const value = typeof data.value === 'string' ? data.value : ''
+        if (label === '' || value === '') return
+        const r = appendToConversation(valuePromptOf(label, value))
+        setImportMsg({
+          ok: r.sent,
+          text: r.sent ? `已在会话框追加「${label}」：${value}` : '会话框未连接，已复制对应数值到剪贴板',
+        })
+        return
+      }
 
-  const onProductUpdate = React.useCallback(
-    async (sku: string, patch: Partial<Pick<ProductRow, 'name' | 'price' | 'stock' | 'category' | 'status'>>): Promise<void> => {
-      await updateProduct(sku, patch)
-      await refreshAfterChange()
-    },
-    [refreshAfterChange],
-  )
-
-  const onProductDelete = React.useCallback(
-    async (sku: string): Promise<void> => {
-      await deleteProduct(sku)
-      await refreshAfterChange()
-    },
-    [refreshAfterChange],
-  )
-
-  const onProductStock = React.useCallback(
-    async (sku: string, delta: number): Promise<void> => {
-      await adjustStock(sku, delta)
-      await refreshAfterChange()
-    },
-    [refreshAfterChange],
-  )
-
-  const onProductStatus = React.useCallback(
-    async (sku: string, status: 'on_sale' | 'off_sale'): Promise<void> => {
-      await setProductStatus(sku, status)
-      await refreshAfterChange()
-    },
-    [refreshAfterChange],
-  )
-
-  /* 点击商品 → 向会话框生成分析指令 */
-  const analyzeProduct = React.useCallback((product: ProductRow): void => {
-    const prompt = analysisPromptOf(product)
-    const result = sendToConversation(prompt)
-    setImportMsg({
-      ok: result.sent,
-      text: result.sent
-        ? `已在会话框生成指令：分析「${product.name}」`
-        : `已复制分析指令到剪贴板（会话框未连接，请粘贴发送）`,
-    })
+      if (data.type !== 'ecommerce:analyze-link') return
+      const prompt = typeof data.prompt === 'string' && data.prompt !== '' ? data.prompt : ''
+      if (prompt === '') {
+        setImportMsg({ ok: false, text: '链接预警分析失败：未收到分析提示词' })
+        return
+      }
+      const name = typeof data.linkName === 'string' && data.linkName !== '' ? data.linkName : '该商品'
+      void openNewConversation(prompt).then((r) => {
+        setImportMsg({
+          ok: r.opened,
+          text: r.newSession
+            ? r.opened
+              ? `已在当前会话分组开启全新会话并发送链接预警分析指令：分析「${name}」`
+              : `已新建会话，但发送失败，分析指令已复制到剪贴板（分析「${name}」）`
+            : r.opened
+              ? `已在当前会话中发送链接预警分析指令：分析「${name}」`
+              : `会话服务未就绪，分析指令已复制到剪贴板（分析「${name}」）`,
+        })
+      })
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
   }, [])
 
   /* 数据导出 */
   const doExport = React.useCallback((type: 'csv' | 'json', scope: 'products' | 'orders' | 'all'): void => {
     exportData(type, scope)
+  }, [])
+
+  /* 点击任意视图 → 追加对应数值/指令到会话框（与已选技能拼合后一起发送分析） */
+  const emitValue = React.useCallback((text: string, okText?: string): void => {
+    const result = appendToConversation(text)
+    setImportMsg({
+      ok: result.sent,
+      text: result.sent
+        ? okText ?? '已在会话框追加对应数值'
+        : '会话框未连接，分析指令已复制到剪贴板（请粘贴发送）',
+    })
   }, [])
 
   const toggleFs = React.useCallback((): void => {
@@ -553,6 +528,7 @@ function useShopDeskData(): ShopDeskData {
     importMsg,
     setImportMsg,
     fileInputRef,
+    dcIframeRef,
     overdueCount,
     modeLabel,
     modeDot,
@@ -565,18 +541,10 @@ function useShopDeskData(): ShopDeskData {
     toggleExpand,
     openFilePicker,
     handleFileChange,
-    products,
-    productsLoading,
-    loadProducts,
-    onProductCreate,
-    onProductUpdate,
-    onProductDelete,
-    onProductStock,
-    onProductStatus,
-    analyzeProduct,
     fullscreen,
     toggleFullscreen: toggleFs,
     doExport,
+    emitValue,
   }
 }
 
@@ -638,6 +606,7 @@ export function ShopDeskTab(): React.ReactElement {
             <input
               ref={d.fileInputRef}
               type="file"
+              multiple
               accept=".csv,.txt,.json,.xlsx,.xls,.sql,.pdf"
               style={{ display: 'none' }}
               onChange={(e) => void d.handleFileChange(e)}
@@ -675,12 +644,13 @@ export function ShopDeskTab(): React.ReactElement {
                   </span>
                 </div>
               ) : null}
-              <OverviewSection snapshot={d.snapshot} />
-              <BiDashboardSection snapshot={d.snapshot} />
+              <OverviewSection snapshot={d.snapshot} onValue={d.emitValue} />
+              <BiDashboardSection snapshot={d.snapshot} onValue={d.emitValue} />
               <ActionsSection
                 actions={d.actions}
                 expanded={d.expanded.actions}
                 onToggle={() => d.toggleExpand('actions')}
+                onValue={d.emitValue}
               />
               <ModeSection
                 mode={d.snapshot.mode}
@@ -689,7 +659,7 @@ export function ShopDeskTab(): React.ReactElement {
                 onReset={d.resetDemo}
                 onOpenDashboard={d.openDashboard}
               />
-              <TodoSection snapshot={d.snapshot} expanded={d.expanded} onToggle={d.toggleExpand} />
+              <TodoSection snapshot={d.snapshot} expanded={d.expanded} onToggle={d.toggleExpand} onValue={d.emitValue} />
               <CategorySection
                 snapshot={d.snapshot}
                 selected={d.selectedCategory}
@@ -698,21 +668,10 @@ export function ShopDeskTab(): React.ReactElement {
                 loading={d.catLoading}
                 onSelect={d.selectCategory}
                 onToggle={() => d.toggleExpand('category')}
+                onValue={d.emitValue}
               />
-              <TopSection snapshot={d.snapshot} />
-              <ProductManagerSection
-                products={d.products}
-                loading={d.productsLoading}
-                onRefresh={() => void d.loadProducts(true)}
-                onCreate={d.onProductCreate}
-                onUpdate={d.onProductUpdate}
-                onDelete={d.onProductDelete}
-                onStock={d.onProductStock}
-                onStatus={d.onProductStatus}
-                onAnalyze={d.analyzeProduct}
-                onExport={(scope) => d.doExport('csv', scope)}
-              />
-              <LowStockSection snapshot={d.snapshot} expanded={d.expanded.lowStock} onToggle={() => d.toggleExpand('lowStock')} />
+              <TopSection snapshot={d.snapshot} onValue={d.emitValue} />
+              <LowStockSection snapshot={d.snapshot} expanded={d.expanded.lowStock} onToggle={() => d.toggleExpand('lowStock')} onValue={d.emitValue} />
               <BriefSection
                 brief={d.brief}
                 loading={d.briefLoading}
@@ -795,6 +754,7 @@ export function ShopDeskPanel(): React.ReactElement {
               <input
                 ref={d.fileInputRef}
                 type="file"
+                multiple
                 accept=".csv,.txt,.json,.xlsx,.xls,.sql,.pdf"
                 style={{ display: 'none' }}
                 onChange={(e) => void d.handleFileChange(e)}
@@ -823,70 +783,15 @@ export function ShopDeskPanel(): React.ReactElement {
               </div>
             ) : null}
 
-            {d.loading && d.snapshot === null ? (
-              <div className="esd-loading">正在加载店铺数据…</div>
-            ) : d.snapshot !== null ? (
-              <div className="esd-body">
-                {d.snapshot !== null && d.snapshot.mode.mode === 'demo' ? (
-                  <div className="esd-import-banner">
-                    <span className="esd-import-banner-icon">📥</span>
-                    <span className="esd-import-banner-text">
-                      当前展示<strong>演示数据</strong>。请在头部点击 <kbd>📥</kbd> 按钮导入 Excel/CSV
-                      文件以分析您自己的店铺数据。
-                    </span>
-                  </div>
-                ) : null}
-                <OverviewSection snapshot={d.snapshot} />
-                <BiDashboardSection snapshot={d.snapshot} />
-                <ActionsSection
-                  actions={d.actions}
-                  expanded={d.expanded.actions}
-                  onToggle={() => d.toggleExpand('actions')}
-                />
-                <ModeSection
-                  mode={d.snapshot.mode}
-                  switching={d.switchingMode}
-                  onSwitch={d.switchDataSource}
-                  onReset={d.resetDemo}
-                  onOpenDashboard={d.openDashboard}
-                />
-                <TodoSection snapshot={d.snapshot} expanded={d.expanded} onToggle={d.toggleExpand} />
-                <CategorySection
-                  snapshot={d.snapshot}
-                  selected={d.selectedCategory}
-                  expanded={d.expanded.category}
-                  products={d.catProducts}
-                  loading={d.catLoading}
-                  onSelect={d.selectCategory}
-                  onToggle={() => d.toggleExpand('category')}
-                />
-                <TopSection snapshot={d.snapshot} />
-                <ProductManagerSection
-                  products={d.products}
-                  loading={d.productsLoading}
-                  onRefresh={() => void d.loadProducts(true)}
-                  onCreate={d.onProductCreate}
-                  onUpdate={d.onProductUpdate}
-                  onDelete={d.onProductDelete}
-                  onStock={d.onProductStock}
-                  onStatus={d.onProductStatus}
-                  onAnalyze={d.analyzeProduct}
-                  onExport={(scope) => d.doExport('csv', scope)}
-                />
-                <LowStockSection snapshot={d.snapshot} expanded={d.expanded.lowStock} onToggle={() => d.toggleExpand('lowStock')} />
-                <BriefSection
-                  brief={d.brief}
-                  loading={d.briefLoading}
-                  copied={d.briefCopied}
-                  expanded={d.expanded.brief}
-                  onExpand={() => {
-                    void d.loadBrief()
-                    d.toggleExpand('brief')
-                  }}
-                  onCopy={() => void d.copyBrief()}
-                />
-              </div>
-            ) : null}
+            <div className="esd-dc-frame">
+              <iframe
+                ref={d.dcIframeRef}
+                className="esd-dc-iframe"
+                src={dataCenterUrl()}
+                title="电商数据中台"
+                loading="eager"
+              />
+            </div>
 
             <footer className="esd-footer">
               <span className={'esd-footer-dot ' + d.modeDot}>●</span>
@@ -910,17 +815,22 @@ export function ShopDeskPanel(): React.ReactElement {
 
 /* ────────────── 各区块 ────────────── */
 
-function OverviewSection(props: { snapshot: ShopSnapshot }): React.ReactElement {
+function OverviewSection(props: { snapshot: ShopSnapshot; onValue: (text: string, okText?: string) => void }): React.ReactElement {
   const { overview } = props.snapshot
+  const sku = overview.top_selling_sku || '--'
   return (
-    <Section icon={<SecIcon name="overview" />} title="经营总览" meta={`畅销 ${overview.top_selling_sku || '--'}`}>
+    <Section icon={<SecIcon name="overview" />} title="经营总览" meta={`畅销 ${sku}`}>
       <div className="esd-overview-body">
-        <div className="esd-overview-line">
+        <div
+          className="esd-overview-line esd-clickable"
+          title="点击发送到会话框"
+          onClick={() => props.onValue(valuePromptOf('当前畅销 SKU', sku), '已在会话框弹出「当前畅销 SKU」')}
+        >
           <span className="esd-overview-label">当前畅销 SKU</span>
-          <span className="esd-overview-value esd-overview-sku">{overview.top_selling_sku || '--'}</span>
+          <span className="esd-overview-value esd-overview-sku">{sku}</span>
         </div>
         <div className="esd-overview-hint">
-          销售额、订单量、客单价、退款率、近 30 天趋势、类目占比、库存健康度等详细数据，请查看下方的「BI 数据看板」。
+          销售额、订单量、客单价、退款率、近 30 天趋势、类目占比、库存健康度等详细数据，请查看下方的「BI 数据看板」。点击任意数值可弹出到会话框分析。
         </div>
       </div>
     </Section>
@@ -985,6 +895,7 @@ function TodoSection(props: {
   snapshot: ShopSnapshot
   expanded: ExpandState
   onToggle: (key: keyof ExpandState) => void
+  onValue: (text: string, okText?: string) => void
 }): React.ReactElement {
   const { today, lowStock } = props.snapshot
   const overdue = today.overdueCount
@@ -1000,7 +911,12 @@ function TodoSection(props: {
       {props.expanded.overdues && overdue > 0 ? (
         <div className="esd-overdue-list">
           {today.overdues.slice(0, TODO_SHOW_LIMIT).map((o) => (
-            <div className="esd-overdue-item" key={o.order_id} title={`${o.order_id} 创建于 ${o.created_at}`}>
+            <div
+              className="esd-overdue-item esd-clickable"
+              key={o.order_id}
+              title={`${o.order_id} 创建于 ${o.created_at}（点击发送到会话框）`}
+              onClick={() => props.onValue(valuePromptOf('逾期订单', `${o.order_id} · ${o.buyer} · ${formatMoney(o.amount)}`))}
+            >
               <span className="esd-overdue-id">{o.order_id}</span>
               <span className="esd-overdue-buyer">{o.buyer}</span>
               <span className="esd-overdue-amount">{formatMoney(o.amount)}</span>
@@ -1021,7 +937,12 @@ function TodoSection(props: {
       {props.expanded.shipments && today.shipmentsCount > 0 ? (
         <div className="esd-overdue-list">
           {today.shipments.slice(0, TODO_SHOW_LIMIT).map((o) => (
-            <div className="esd-overdue-item" key={o.order_id} title={`${o.order_id} ｜ ${o.product_name} 创建于 ${o.created_at}`}>
+            <div
+              className="esd-overdue-item esd-clickable"
+              key={o.order_id}
+              title={`${o.order_id} ｜ ${o.product_name} 创建于 ${o.created_at}（点击发送到会话框）`}
+              onClick={() => props.onValue(valuePromptOf('待发货订单', `${o.order_id} · ${o.product_name} ×${o.quantity} · ${formatMoney(o.amount)}`))}
+            >
               <span className="esd-overdue-id">{o.order_id}</span>
               <span className="esd-overdue-buyer">{o.buyer}</span>
               <span className="esd-overdue-amount">{o.product_name} ×{o.quantity}</span>
@@ -1066,6 +987,7 @@ function CategorySection(props: {
   loading: boolean
   onSelect: (category: string) => void
   onToggle: () => void
+  onValue: (text: string, okText?: string) => void
 }): React.ReactElement {
   return (
     <Section icon={<SecIcon name="category" />} title="商品分类" meta={`${props.snapshot.categories.length} 类`}>
@@ -1093,7 +1015,12 @@ function CategorySection(props: {
           ) : null}
           {!props.loading && props.products !== null
             ? props.products.map((p) => (
-                <div className="esd-product" key={p.sku} title={`${p.sku} ｜ 库存 ${p.stock}`}>
+                <div
+                  className="esd-product esd-clickable"
+                  key={p.sku}
+                  title={`${p.sku} ｜ 库存 ${p.stock}（点击发送到会话框）`}
+                  onClick={() => props.onValue(valuePromptOf('分类商品', `${p.name}（${p.sku}）· ${p.category} · ${formatMoney(p.price)} · 库存 ${p.stock}`))}
+                >
                   <span className="esd-product-name">{p.name}</span>
                   <span className={'esd-chip ' + (p.status === 'on_sale' ? 'esd-chip-on' : 'esd-chip-off')}>
                     {p.status === 'on_sale' ? '在售' : '下架'}
@@ -1116,13 +1043,18 @@ function CategorySection(props: {
 }
 
 /** 类目占比紧凑横条（HTML flex，适配侧边栏约 150px 宽单元格） */
-function TopSection(props: { snapshot: ShopSnapshot }): React.ReactElement {
+function TopSection(props: { snapshot: ShopSnapshot; onValue: (text: string, okText?: string) => void }): React.ReactElement {
   const rankClass = (i: number): string => (i === 0 ? ' esd-rank-1' : i === 1 ? ' esd-rank-2' : i === 2 ? ' esd-rank-3' : '')
   return (
     <Section icon={<SecIcon name="top" />} title="销售排行 TOP5">
       {props.snapshot.top.length === 0 ? <div className="esd-empty">暂无销售数据</div> : null}
       {props.snapshot.top.map((t, i) => (
-        <div className="esd-top-item" key={t.sku} title={`${t.sku}`}>
+        <div
+          className="esd-top-item esd-clickable"
+          key={t.sku}
+          title={`${t.sku}（点击发送到会话框）`}
+          onClick={() => props.onValue(valuePromptOf(`销售排行 TOP${i + 1}`, `${t.name} · ${formatMoney(t.revenue)} · ${t.units} 件`))}
+        >
           <span className={'esd-rank' + rankClass(i)}>{i + 1}</span>
           <span className="esd-top-name">{t.name}</span>
           <span className="esd-top-units">{t.units} 件</span>
@@ -1137,6 +1069,7 @@ function LowStockSection(props: {
   snapshot: ShopSnapshot
   expanded: boolean
   onToggle: () => void
+  onValue: (text: string, okText?: string) => void
 }): React.ReactElement {
   const { lowStock } = props.snapshot
   return (
@@ -1152,7 +1085,12 @@ function LowStockSection(props: {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 2px 4px' }}>
             {lowStock.map((item) => (
-              <div className="esd-low-item" key={item.sku}>
+              <div
+                className="esd-low-item esd-clickable"
+                key={item.sku}
+                title={`${item.sku}（点击发送到会话框）`}
+                onClick={() => props.onValue(valuePromptOf('低库存商品', `${item.name}（${item.sku}）· 库存 ${item.stock} / 阈值 ≤${item.threshold}`))}
+              >
                 <span className="esd-low-name">{item.name}</span>
                 <span className="esd-low-sku">{item.sku}</span>
                 <span className="esd-low-cat">{item.category}</span>
@@ -1173,6 +1111,7 @@ function ActionsSection(props: {
   actions: ShopActions | null
   expanded: boolean
   onToggle: () => void
+  onValue: (text: string, okText?: string) => void
 }): React.ReactElement {
   const { actions } = props
   const dock = actions?.dock
@@ -1191,7 +1130,12 @@ function ActionsSection(props: {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 2px 4px' }}>
             {actions.actions.map((a) => (
-              <div className={'esd-low-item' + (a.urgent ? ' esd-zero' : '')} key={a.id}>
+              <div
+                className={'esd-low-item esd-clickable' + (a.urgent ? ' esd-zero' : '')}
+                key={a.id}
+                title={`${a.title}（点击发送到会话框）`}
+                onClick={() => props.onValue(valuePromptOf('行动事项', `${a.title} · ${a.detail}${a.dueToday === true ? '（今天到期）' : ''}`))}
+              >
                 <span className="esd-low-name">
                   {a.kind === 'overdue' ? '⏰' : a.kind === 'ship' ? '📦' : '⚠️'} {a.title}
                   {a.dueToday === true ? <span style={{ color: '#e5484d', fontWeight: 600 }}>（今天到期）</span> : null}

@@ -16,8 +16,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EcommerceStore } from './store.ts'
 import { parseImportFile } from './import-parse.ts'
 import { renderDashboard } from './dashboard.ts'
+import { renderDataCenter } from './data-center.ts'
 import { ordersToCsv, productsToCsv } from './csv-util.ts'
-import type { TrendPoint } from './types.ts'
+import type { MonthlyParseResult } from './monthly-report.ts'
+import type { WeeklyParseResult } from './weekly-report.ts'
+import type { MonthlyReport, Order, Product, TrendPoint } from './types.ts'
+import { buildEvaluationSummary, callLlmForEvaluation, evaluationPrompt, ruleBasedEvaluation } from './data-evaluation.ts'
+import type { EvaluationSummary } from './data-evaluation.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -206,8 +211,78 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   })
 }
 
+/**
+ * 评价缓存：key = cycle:revision，避免每次轮询重复调用 LLM。
+ * `pending` 表示后台 AI 生成仍在进行（此刻缓存里是规则占位文本）。
+ * 设计目标：数据评价生成不再阻塞复盘面板 —— 首次请求立即返回规则占位，
+ * 后台异步调用 LLM，完成后写回缓存；客户端 4s 轮询自动把占位升级为 AI 评价。
+ */
+const evaluationCache = new Map<string, { text: string; source: 'ai' | 'rule'; pending: boolean }>()
+/** 正在生成中的 cacheKey（防止并发重复调用 LLM） */
+const evaluationPending = new Set<string>()
+
+/** 后台生成一句 AI 评价并写回缓存；AI 不可用/不足 40 字时回退规则模板。 */
+async function generateEvaluation(
+  cacheKey: string,
+  cycle: '30d' | '7d',
+  summary: EvaluationSummary,
+  ctx: { get?(name: string): unknown },
+): Promise<void> {
+  if (evaluationPending.has(cacheKey)) return
+  evaluationPending.add(cacheKey)
+  try {
+    let text = await callLlmForEvaluation(ctx, evaluationPrompt(summary))
+    let source: 'ai' | 'rule' = 'ai'
+    if (text === null || text.length < 40) {
+      text = ruleBasedEvaluation(summary)
+      source = 'rule'
+    }
+    if (text.length > 80) text = text.slice(0, 80)
+    evaluationCache.set(cacheKey, { text, source, pending: false })
+  } catch (err) {
+    evaluationCache.set(cacheKey, { text: ruleBasedEvaluation(summary), source: 'rule', pending: false })
+  } finally {
+    evaluationPending.delete(cacheKey)
+  }
+}
+
+/**
+ * 取评价（非阻塞）：命中且非 pending 直接返回；否则先落规则占位（即时返回），
+ * 同时触发一次后台 AI 生成。返回当前应下发的内容与 pending 状态。
+ */
+function ensureEvaluation(
+  cacheKey: string,
+  cycle: '30d' | '7d',
+  summary: EvaluationSummary,
+  ctx: { get?(name: string): unknown },
+): { text: string; source: 'ai' | 'rule'; pending: boolean } {
+  const cached = evaluationCache.get(cacheKey)
+  if (cached && !cached.pending) return cached
+  if (!cached) {
+    evaluationCache.set(cacheKey, { text: ruleBasedEvaluation(summary), source: 'rule', pending: true })
+  }
+  void generateEvaluation(cacheKey, cycle, summary, ctx)
+  return evaluationCache.get(cacheKey)!
+}
+
+/** 导入后预热：后台预生成两个周期的评价，用户进入复盘面板时 AI 结果通常已就绪 */
+function prewarmEvaluations(store: EcommerceStore, ctx: { get?(name: string): unknown }): void {
+  const revision = store.getReportRevision()
+  const monthlyReport = store.getMonthlyReport()
+  const weeklyReport = store.getWeeklyReport()
+  for (const cycle of ['30d', '7d'] as const) {
+    const summary = buildEvaluationSummary(cycle, monthlyReport, weeklyReport)
+    if (summary === null) continue
+    void generateEvaluation(cycle + ':' + revision, cycle, summary, ctx)
+  }
+}
+
 /** 注册 /ecommerce-api 前缀路由，返回 disposer（随插件 fiber 卸载） */
-export function registerShopApi(webServer: WebServerLike, store: EcommerceStore): () => void {
+export function registerShopApi(
+  webServer: WebServerLike,
+  store: EcommerceStore,
+  ctx: { get?(name: string): unknown } = {},
+): () => void {
   return webServer.register({
     kind: 'prefix',
     path: '/ecommerce-api',
@@ -228,12 +303,109 @@ export function registerShopApi(webServer: WebServerLike, store: EcommerceStore)
           const parsed = await parseImportFile(filename, content, encoding)
           const snapshot = store.exportBackup()
           const result = store.importFromFile(parsed.products, parsed.orders)
+          // 月度完整月报（JSON，整体替换）：供 30 天「月复盘」使用
+          if (parsed.monthlyReport !== undefined) {
+            store.setMonthlyReport(parsed.monthlyReport)
+          }
+          // 月度单份文件（「月度表」3 份「商品排名导出」+ 1 份「利润表」，逐份合并）
+          if (parsed.monthlyPart !== undefined) {
+            store.mergeMonthlyReport(parsed.monthlyPart)
+          }
+          // 周复盘（「商品排名导出」三份，按展示形式合并）：供 7 天「周复盘」使用
+          if (parsed.weeklyReport !== undefined) {
+            store.mergeWeeklyReport(parsed.weeklyReport)
+          }
+          // 导入后预热：后台预生成两周期数据评价，进入复盘面板即见 AI 结果（不阻塞）
+          prewarmEvaluations(store, ctx)
           sendJson(res, 200, {
             ok: true,
             value: {
               products: result.products,
               orders: result.orders,
+              monthlyReport: store.getMonthlyReport() !== null,
+              weeklyReport: store.getWeeklyReport() !== null,
               hint: parsed.hint,
+              snapshot,
+            },
+          })
+          return
+        }
+        if (pathname === '/ecommerce-api/import-batch' && req.method === 'POST') {
+          // 批量导入：一次性接收多个文件（30 天周期的 4 份 Excel：利润表 + 三份「商品排名导出」），
+          // 在同一请求内解析并整体重建月度复盘，保证 30 天面板的分析结果完全来自本次导入的文件。
+          const body = await readJsonBody(req)
+          const rawFiles = Array.isArray(body.files) ? body.files : []
+          if (rawFiles.length === 0) {
+            sendJson(res, 400, {
+              ok: false,
+              error: { code: 'NO_FILES', message: '未收到任何文件（files 为空）' },
+            })
+            return
+          }
+          const files = rawFiles.map((f) => {
+            const o = (f ?? {}) as Record<string, unknown>
+            return {
+              filename: String(o.filename ?? ''),
+              content: String(o.content ?? ''),
+              encoding: o.encoding === 'base64' ? ('base64' as const) : ('utf8' as const),
+            }
+          })
+          // 逐文件解析：单个文件失败（如误带的图片/损坏文件）不阻断整批导入，其余文件照常解析
+          const parsedList = await Promise.all(
+            files.map(async (f) => {
+              try {
+                return await parseImportFile(f.filename, f.content, f.encoding)
+              } catch (e) {
+                return { hint: '跳过文件 ' + f.filename + '：' + (e instanceof Error ? e.message : String(e)) }
+              }
+            }),
+          )
+          const snapshot = store.exportBackup()
+
+          // 聚合各文件解析结果：月度单份文件 / 周复盘单份文件 / 商品订单
+          const monthlyParts: MonthlyParseResult[] = []
+          const weeklyParts: WeeklyParseResult[] = []
+          let monthlyReport: MonthlyReport | undefined
+          let products: Product[] | undefined
+          let orders: Order[] | undefined
+          for (const p of parsedList) {
+            if (p.monthlyPart !== undefined) monthlyParts.push(p.monthlyPart)
+            if (p.monthlyReport !== undefined) monthlyReport = p.monthlyReport
+            if (p.weeklyReport !== undefined) weeklyParts.push(p.weeklyReport)
+            if (p.products !== undefined) products = p.products
+            if (p.orders !== undefined) orders = p.orders
+          }
+
+          // 商品/订单：仅当文件确实含商品/订单时才导入（月度 4 表不含商品/订单，不动既有店铺数据）
+          let productCount = store.listProducts({ page_size: 1 }).total
+          let orderCount = store.listOrders({ page_size: 1 }).total
+          if (products !== undefined || orders !== undefined) {
+            const r = store.importFromFile(products, orders)
+            productCount = r.products
+            orderCount = r.orders
+          }
+          // 月度复盘：以本次导入的月度文件从零整体重建（不继承旧周期，数据来源唯一）
+          if (monthlyParts.length > 0) {
+            store.importMonthlyReport(monthlyParts)
+          } else if (monthlyReport !== undefined) {
+            store.setMonthlyReport(monthlyReport)
+          }
+          // 周复盘：逐份合并
+          for (const w of weeklyParts) {
+            store.mergeWeeklyReport(w)
+          }
+
+          // 批量导入后预热：后台预生成两周期数据评价（不阻塞）
+          prewarmEvaluations(store, ctx)
+          sendJson(res, 200, {
+            ok: true,
+            value: {
+              products: productCount,
+              orders: orderCount,
+              files: files.length,
+              monthlyReport: store.getMonthlyReport() !== null,
+              weeklyReport: store.getWeeklyReport() !== null,
+              hint: `批量导入 ${files.length} 个文件：${parsedList.map((p) => p.hint).join('；')}`,
               snapshot,
             },
           })
@@ -241,6 +413,34 @@ export function registerShopApi(webServer: WebServerLike, store: EcommerceStore)
         }
         if (pathname === '/ecommerce-api/snapshot') {
           sendJson(res, 200, { ok: true, value: buildSnapshot(store) })
+          return
+        }
+        if (pathname === '/ecommerce-api/monthly-report') {
+          // 月度复盘（30/60 天「月复盘」数据源，来自 7月月度复盘.xlsx 导入）
+          sendJson(res, 200, { ok: true, value: store.getMonthlyReport(), revision: store.getReportRevision() })
+          return
+        }
+        if (pathname === '/ecommerce-api/weekly-report') {
+          // 周复盘（7 天「周复盘」数据源，来自「周数据」三份「商品排名导出」导入）
+          sendJson(res, 200, { ok: true, value: store.getWeeklyReport(), revision: store.getReportRevision() })
+          return
+        }
+        if (pathname === '/ecommerce-api/evaluation') {
+          // 数据评价（月复盘/周复盘）：AI 对导入数据从销售额/产品/推广/退款四角度做一句 40~80 字评价。
+          // 非阻塞：首次请求即时返回规则占位（pending=true），后台生成 AI 后写回缓存，客户端轮询升级为 AI。
+          const cycle = query.get('cycle') === '7d' ? '7d' : '30d'
+          const revision = store.getReportRevision()
+          const cacheKey = cycle + ':' + revision
+          const summary = buildEvaluationSummary(cycle, store.getMonthlyReport(), store.getWeeklyReport())
+          if (summary === null) {
+            sendJson(res, 200, { ok: true, value: { cycle, evaluation: '', source: 'rule', pending: false } })
+            return
+          }
+          const entry = ensureEvaluation(cacheKey, cycle, summary, ctx)
+          sendJson(res, 200, {
+            ok: true,
+            value: { cycle, evaluation: entry.text, source: entry.source, pending: entry.pending },
+          })
           return
         }
         if (pathname === '/ecommerce-api/actions') {
@@ -267,6 +467,17 @@ export function registerShopApi(webServer: WebServerLike, store: EcommerceStore)
         if (pathname === '/ecommerce-api/dashboard' && req.method === 'GET') {
           // 独立仪表盘模板页（HTML，内联样式/SVG，零外部依赖）
           const html = renderDashboard(store)
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            ...CORS_HEADERS,
+          })
+          res.end(html)
+          return
+        }
+        if (pathname === '/ecommerce-api/data-center' && req.method === 'GET') {
+          // 电商数据中台（对接「电商数据中台.html」修改版，全屏面板 iframe 加载）
+          const html = renderDataCenter(store)
           res.writeHead(200, {
             'content-type': 'text/html; charset=utf-8',
             'cache-control': 'no-store',
@@ -317,106 +528,6 @@ export function registerShopApi(webServer: WebServerLike, store: EcommerceStore)
             ok: true,
             value: store.listProducts({ category, page_size: 100 }),
           })
-          return
-        }
-        if (pathname === '/ecommerce-api/products/all' && req.method === 'GET') {
-          // 全量商品列表（商品管理表格：不分页，含全部字段）
-          const items = store.listProducts({ page_size: 10000 }).items
-          sendJson(res, 200, { ok: true, value: { total: items.length, items } })
-          return
-        }
-        if (pathname === '/ecommerce-api/product/create' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          try {
-            const price = Number(body.price)
-            const stock = Number(body.stock)
-            if (!body.name || String(body.name).trim() === '') throw new Error('商品名称不能为空')
-            if (!Number.isFinite(price) || price <= 0) throw new Error('售价必须大于 0')
-            if (!Number.isFinite(stock) || stock < 0) throw new Error('库存不能为负')
-            const product = await store.createProduct({
-              name: String(body.name).trim(),
-              price,
-              stock,
-              category: String(body.category ?? '未分类'),
-              status: body.status === 'off_sale' ? 'off_sale' : 'on_sale',
-            })
-            sendJson(res, 200, { ok: true, value: product })
-          } catch (err) {
-            sendJson(res, 400, {
-              ok: false,
-              error: { code: 'CREATE_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        if (pathname === '/ecommerce-api/product/update' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          try {
-            const sku = String(body.sku ?? '')
-            const patch: Record<string, unknown> = {}
-            if (body.name !== undefined) patch.name = String(body.name).trim()
-            if (body.category !== undefined) patch.category = String(body.category)
-            if (body.status !== undefined) patch.status = body.status
-            if (body.price !== undefined) {
-              const price = Number(body.price)
-              if (!Number.isFinite(price) || price <= 0) throw new Error('售价必须大于 0')
-              patch.price = price
-            }
-            if (body.stock !== undefined) {
-              const stock = Number(body.stock)
-              if (!Number.isFinite(stock) || stock < 0) throw new Error('库存不能为负')
-              patch.stock = stock
-            }
-            const product = await store.updateProduct(sku, patch)
-            sendJson(res, 200, { ok: true, value: product })
-          } catch (err) {
-            sendJson(res, 400, {
-              ok: false,
-              error: { code: 'UPDATE_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        if (pathname === '/ecommerce-api/product/delete' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          try {
-            await store.deleteProduct(String(body.sku ?? ''))
-            sendJson(res, 200, { ok: true, value: { deleted: true, sku: body.sku } })
-          } catch (err) {
-            sendJson(res, 400, {
-              ok: false,
-              error: { code: 'DELETE_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        if (pathname === '/ecommerce-api/product/stock' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          try {
-            const product = await store.adjustStock(String(body.sku ?? ''), Number(body.delta ?? 0))
-            sendJson(res, 200, { ok: true, value: product })
-          } catch (err) {
-            sendJson(res, 400, {
-              ok: false,
-              error: { code: 'STOCK_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        if (pathname === '/ecommerce-api/product/status' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          try {
-            const product = await store.setProductStatus(
-              String(body.sku ?? ''),
-              body.status === 'off_sale' ? 'off_sale' : 'on_sale',
-            )
-            sendJson(res, 200, { ok: true, value: product })
-          } catch (err) {
-            sendJson(res, 400, {
-              ok: false,
-              error: { code: 'STATUS_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
           return
         }
         if (pathname === '/ecommerce-api/export' && req.method === 'GET') {

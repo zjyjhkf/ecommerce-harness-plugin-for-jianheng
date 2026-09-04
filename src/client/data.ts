@@ -165,6 +165,12 @@ export function formatTime(iso: string): string {
 export interface ImportResult {
   products: number
   orders: number
+  /** 本次导入的文件数（批量导入时 >1） */
+  files?: number
+  /** 是否已重建月度复盘（30 天面板数据源） */
+  monthlyReport?: boolean
+  /** 是否已有周复盘 */
+  weeklyReport?: boolean
   hint: string
   snapshot?: string
 }
@@ -202,6 +208,47 @@ export async function importLocalFile(file: File): Promise<ImportResult> {
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       cache: 'no-store',
       body: JSON.stringify({ filename: file.name, content, encoding }),
+    })
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<ImportResult> | null
+  if (!res.ok || body === null || body.ok !== true || body.value === undefined) {
+    const message = body?.error?.message ?? `HTTP ${res.status}`
+    throw new Error(message)
+  }
+  return body.value
+}
+
+/** 把多个本地文件一次性批量上传到 /ecommerce-api/import-batch（30 天周期的 4 份 Excel
+ *  在同一请求内解析并整体重建月度复盘，保证分析结果完全来自这些文件）。 */
+export async function importLocalFiles(files: File[]): Promise<ImportResult> {
+  const items = await Promise.all(
+    files.map(async (file) => {
+      const ext = (file.name.split('.').pop() ?? '').toLowerCase()
+      const isText = ['csv', 'txt', 'json', 'sql'].includes(ext)
+      let content: string
+      let encoding: 'utf8' | 'base64'
+      if (isText) {
+        content = await file.text()
+        encoding = 'utf8'
+      } else {
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        content = toBase64(bytes)
+        encoding = 'base64'
+      }
+      return { filename: file.name, content, encoding }
+    }),
+  )
+  const base = resolveApiBase()
+  const url = (base ? base : '') + '/ecommerce-api/import-batch'
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ files: items }),
     })
   } catch (err) {
     throw new Error(err instanceof Error ? err.message : String(err))
@@ -270,46 +317,11 @@ export function dashboardUrl(): string {
   return (base ? base : '') + '/ecommerce-api/dashboard'
 }
 
-/* ────────────────────────── 商品 CRUD（增删改查） ────────────────────────── */
-
-/** 全量商品列表（商品管理表格用） */
-export async function fetchAllProducts(): Promise<ProductRow[]> {
-  const page = await call<{ total: number; items: ProductRow[] }>('/ecommerce-api/products/all')
-  return page.items
-}
-
-/** 新增商品 */
-export async function createProduct(input: {
-  name: string
-  price: number
-  stock: number
-  category: string
-  status?: 'on_sale' | 'off_sale'
-}): Promise<ProductRow> {
-  return post<ProductRow>('/ecommerce-api/product/create', input as unknown as Record<string, unknown>)
-}
-
-/** 修改商品 */
-export async function updateProduct(
-  sku: string,
-  patch: Partial<Pick<ProductRow, 'name' | 'price' | 'stock' | 'category' | 'status'>>,
-): Promise<ProductRow> {
-  return post<ProductRow>('/ecommerce-api/product/update', { sku, ...patch } as unknown as Record<string, unknown>)
-}
-
-/** 删除商品 */
-export async function deleteProduct(sku: string): Promise<{ deleted: boolean }> {
-  return post<{ deleted: boolean }>('/ecommerce-api/product/delete', { sku })
-}
-
-/** 调整库存（delta 正为入库，负为出库） */
-export async function adjustStock(sku: string, delta: number): Promise<ProductRow> {
-  return post<ProductRow>('/ecommerce-api/product/stock', { sku, delta })
-}
-
-/** 上下架切换 */
-export async function setProductStatus(sku: string, status: 'on_sale' | 'off_sale'): Promise<ProductRow> {
-  return post<ProductRow>('/ecommerce-api/product/status', { sku, status })
+/** 电商数据中台页面地址（全屏面板 iframe 加载「电商数据中台.html」修改版）。
+ *  带 ?v= 版本号强制 iframe 每次发版后走全新 URL，绕过桌面端 WebView 对旧 HTML 的激进缓存。 */
+export function dataCenterUrl(): string {
+  const base = resolveApiBase()
+  return (base ? base : '') + '/ecommerce-api/data-center?v=20260904-r18'
 }
 
 /** 导出数据（CSV 或 JSON）——触发浏览器下载 */
@@ -318,30 +330,4 @@ export function exportData(type: 'csv' | 'json' = 'csv', scope: 'products' | 'or
   const base = resolveApiBase()
   const url = (base ? base : '') + `/ecommerce-api/export?type=${type}&scope=${scope}`
   window.open(url, '_blank')
-}
-
-/** 生成「点击商品 → 会话框分析指令」（市场营销视角） */
-export function analysisPromptOf(product: ProductRow): string {
-  const statusLabel = product.status === 'on_sale' ? '在售' : '下架'
-  return [
-    `请基于以下商品信息，以市场营销视角对该产品进行系统化分析，并给出可执行的营销建议：`,
-    ``,
-    `【商品基础信息】`,
-    `- 商品名称：${product.name}`,
-    `- SKU：${product.sku}`,
-    `- 商品分类：${product.category}`,
-    `- 售价：¥${product.price}`,
-    `- 当前库存：${product.stock} 件`,
-    `- 上架状态：${statusLabel}`,
-    ``,
-    `请从以下 6 个维度分析：`,
-    `1) 目标客户画像（年龄段/性别/消费场景/购买力）`,
-    `2) 市场竞争与差异化定位（同品类对比、卖点提炼）`,
-    `3) 定价策略评估（与品类均价对比、利润空间、性价比）`,
-    `4) 库存与供应链健康度（动销预测、断货/积压风险、补货建议）`,
-    `5) 营销渠道建议（适合哪些投放平台、投放素材方向）`,
-    `6) 促销与上架时机（大促节点、搭配销售、引流策略）`,
-    ``,
-    `输出格式：先给出 6 个维度的结构化分析（每项 2-4 句），最后给一份"本月可执行营销行动清单"（含优先级 P0/P1/P2）。`,
-  ].join('\n')
 }

@@ -71,20 +71,24 @@ const CSS = `
   box-shadow: 0 0 0 2px var(--dsw-alias-bg-base, #fff);
 }
 
-/* ── 面板容器（fixed 右侧，叠加式，不占官方 sidebar） ──
-   默认非全屏：数据展示面积 ≈ 全屏面板的 35%（35vw 宽 × 满高）。
+/* ── 面板容器（停靠右侧，推送会话列，不覆盖会话框） ──
+   挂在 shell.overlay 层（host 绝对定位 inset:0），面板以 absolute 停靠在右缘，
+   同时通过下方推送规则把中间会话列向右让出同等宽度，两者并排、互不遮挡。
+   默认非全屏：数据展示面积 ≈ 全屏面板的 35%（clamp(320px, 35vw, 640px)）。
    开启容器查询，内部模块随面板宽度按比例缩放，避免拥挤/缺漏。 */
+:has(> [data-shell-overlay]) {
+  /* 面板宽度统一取值：停靠面板与「推送会话列」共享，避免两处漂移。 */
+  --esd-panel-width: clamp(320px, 35vw, 640px);
+}
+
 .esd-panel {
   pointer-events: auto;
-  position: fixed;
+  position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 35vw;
-  min-width: 320px;
-  max-width: 640px;
-  height: 100vh;
-  z-index: 9500;
+  width: var(--esd-panel-width, clamp(320px, 35vw, 640px));
+  z-index: 1;
   display: flex;
   flex-direction: column;
   background: var(--dsw-alias-bg-base, #ffffff);
@@ -97,6 +101,15 @@ const CSS = `
 @keyframes esd-slide-in {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
+/* 面板打开（非全屏）时，把中间会话列向右让出面板宽度，面板停靠在让出的空间内。
+   AppFrame 三列 grid 的直接子节点顺序固定为 sidebarCol / centerCol / detailsCol /
+   overlayLayer（React Fragment 不产生 DOM 节点），故 centerCol 恒为第 2 个子元素。
+   会话内容按 max-width 居中，向右 padding 后整体左移，不再被面板遮挡。 */
+:has(> [data-shell-overlay]):has(.esd-panel:not(.esd-panel-fullscreen)) > :nth-child(2) {
+  padding-right: var(--esd-panel-width, clamp(320px, 35vw, 640px));
+  transition: padding-right var(--ds-transition-duration-slow, 200ms) var(--ds-ease-in-out, ease);
 }
 
 .esd-header {
@@ -490,7 +503,24 @@ const CSS = `
   max-height: none !important;
   border-radius: 0 !important;
   z-index: 9999 !important;
-  overflow-y: auto !important;
+  overflow: hidden !important;
+}
+
+/* === 全屏「电商数据中台」iframe（替换修改版 HTML 面板） === */
+.esd-dc-frame {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #e8f3f1;
+}
+.esd-dc-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #e8f3f1;
 }
 
 /* === BI 数据看板（统一字号阶梯 + 横条形 bar） === */
@@ -743,6 +773,86 @@ const CSS = `
 /* 全屏头部 Logo 间距微调（与参考图一致：左上为品牌徽标） */
 .esd-panel-fullscreen .esd-header { padding: 14px 16px; }
 .esd-panel-fullscreen .esd-header-logo { flex: none; }
+
+/* === 技能模块横向按键条（7 个 skill，对话框下方 / 面板头部下方） === */
+.esd-skillbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+}
+.esd-skillbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary, #999);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex: none;
+}
+.esd-skillbar-logo { display: inline-flex; align-items: center; flex: none; }
+.esd-skillbar-name { display: inline-flex; align-items: center; }
+.esd-skill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-default, #e5e7eb);
+  background: var(--dsw-alias-bg-elevated, #ffffff);
+  color: var(--dsw-alias-label-primary, #1c1c1e);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s, transform .12s ease;
+}
+.esd-skill-btn:hover {
+  background: var(--esd-accent-soft, rgba(43,184,163,.10));
+  border-color: var(--esd-accent, #2bb8a3);
+  color: var(--esd-accent-strong, #16a085);
+  transform: translateY(-1px);
+}
+.esd-skill-btn:active {
+  background: var(--esd-accent, #2bb8a3);
+  border-color: var(--esd-accent, #2bb8a3);
+  color: #ffffff;
+}
+.esd-skill-icon-svg { display: inline-flex; align-items: center; flex: none; color: var(--esd-accent, #2bb8a3); }
+.esd-skill-label { font-weight: 500; }
+
+/* dock 形态：紧凑 + 可横向滚动，不撑爆 composer 下方横条 */
+.esd-skillbar-dock {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px 6px;
+  gap: 6px;
+}
+.esd-skillbar-dock::-webkit-scrollbar { height: 4px; }
+.esd-skillbar-dock::-webkit-scrollbar-thumb { background: rgba(128,128,128,.25); border-radius: 2px; }
+.esd-skillbar-dock .esd-skill-btn { height: 26px; padding: 0 10px; font-size: 11px; }
+
+/* dock 技能条随侧边栏开关显隐：body 打可逆的 esd-cockpit-open 标记（由 cockpit-bus
+   syncDockVisibility 在打开时添加、关闭时移除）。打开侧边栏「呼出」技能条，关闭后
+   「归位」回初始隐藏状态。 */
+body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
+
+/* === 可点击视图（点击 → 会话框弹出对应数值） === */
+.esd-clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.esd-clickable:hover {
+  background: var(--esd-accent-soft, rgba(43,184,163,.10));
+  box-shadow: inset 0 0 0 1px var(--esd-accent-soft-2, rgba(43,184,163,.22));
+}
 `;
 
 let injected = false

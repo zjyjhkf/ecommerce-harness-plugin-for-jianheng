@@ -65,13 +65,7 @@ test('注册完整性：全部业务工具就位', async () => {
     'order_ship',
     'order_stats',
     'order_update_status',
-    'product_create',
-    'product_delete',
     'product_list',
-    'product_off_sale',
-    'product_on_sale',
-    'product_stock_adjust',
-    'product_update',
     'stats_category',
     'stats_overview',
     'stats_top_products',
@@ -110,26 +104,6 @@ test('product_list 执行：筛选委托正确', async () => {
   }
   assert.equal(result.total, 5)
   assert.equal(result.items.length, 5)
-})
-
-test('product_create 执行：创建并返回新商品', async () => {
-  const ctx = makeCtx()
-  const store = await makeStore()
-  registerProductTools(ctx as never, store)
-
-  const tool = ctx.registered.find((t) => t.name === 'product_create')
-  assert.ok(tool)
-  const result = await tool.execute({
-    name: '新商品 A',
-    price: 66,
-    stock: 8,
-    category: '服饰',
-  } as never) as { sku: string; name: string }
-  assert.match(result.sku, /^SKU-\d{4}$/)
-  assert.equal(result.name, '新商品 A')
-
-  const listed = store.listProducts({ keyword: '新商品' })
-  assert.equal(listed.total, 1)
 })
 
 test('order_list 执行：状态筛选与排序', async () => {

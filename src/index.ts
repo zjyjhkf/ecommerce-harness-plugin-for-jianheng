@@ -84,7 +84,7 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
   if (webServer === undefined) {
     console.warn('[ecommerce-analyst] webServer 服务不可用，跳过店铺工作台 API 注册')
   } else {
-    const disposeApi = registerShopApi(webServer, store)
+    const disposeApi = registerShopApi(webServer, store, ctx)
     ctx.effect(() => disposeApi, 'ecommerce: shop api routes')
     // 把 API base 注入 index.html（客户端无需猜测端口）
     const disposeBase = injectApiBase(webServer)

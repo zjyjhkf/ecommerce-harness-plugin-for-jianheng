@@ -35,53 +35,12 @@ test('init：企业数据种子初始化（26 商品 / 480 订单）', async () 
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('商品 CRUD：新增 → 查询 → 修改 → 删除', async () => {
-  const { store, dir } = await initStore()
-
-  const created = await store.createProduct({
-    name: '测试商品',
-    price: 99.99,
-    stock: 10,
-    category: '测试类目',
-  })
-  assert.match(created.sku, /^SKU-\d{4}$/)
-  assert.equal(created.status, 'on_sale')
-
-  const found = store.getProduct(created.sku)
-  assert.ok(found)
-  assert.equal(found.price, 99.99)
-
-  await store.updateProduct(created.sku, { price: 89.5, stock: 5 })
-  const updated = store.getProduct(created.sku)
-  assert.equal(updated?.price, 89.5)
-  assert.equal(updated?.stock, 5)
-
-  await store.deleteProduct(created.sku)
-  assert.equal(store.getProduct(created.sku), undefined)
-  rmSync(dir, { recursive: true, force: true })
-})
-
 test('商品筛选：分类 / 状态 / 价格区间 / 关键词', async () => {
   const { store, dir } = await initStore()
   assert.equal(store.listProducts({ category: '数码配件' }).total, 5)
   assert.equal(store.listProducts({ status: 'off_sale' }).total, 3)
   assert.equal(store.listProducts({ min_price: 100, max_price: 200 }).total, 11)
   assert.equal(store.listProducts({ keyword: '面膜' }).total, 1)
-  rmSync(dir, { recursive: true, force: true })
-})
-
-test('库存调整：入库/出库/负数校验/售罄自动下架', async () => {
-  const { store, dir } = await initStore()
-  const sku = 'SKU-0002' // 高腰阔腿牛仔裤，库存 1
-
-  const afterIn = await store.adjustStock(sku, 10, '入库')
-  assert.equal(afterIn.stock, 11)
-
-  await assert.rejects(() => store.adjustStock(sku, -999), /库存不足/)
-
-  const zeroed = await store.adjustStock(sku, -11, '售罄')
-  assert.equal(zeroed.stock, 0)
-  assert.equal(zeroed.status, 'off_sale')
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -153,9 +112,12 @@ test('补货建议：基于近 30 天销量 × 1.5 安全系数', async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('持久化：写操作落盘，重载后数据不丢失', async () => {
+test('持久化：导入写操作落盘，重载后数据不丢失', async () => {
   const { store, dir } = await initStore()
-  await store.createProduct({ name: '持久化商品', price: 1, stock: 1, category: '测试' })
+  store.importFromFile(
+    [{ sku: 'PERSIST-1', name: '持久化商品', price: 1, stock: 1, category: '测试', status: 'on_sale' }] as never,
+    undefined,
+  )
   assert.ok(existsSync(join(dir, 'store.json')))
 
   const reload = new EcommerceStore(new MockAdapter(), {
@@ -177,7 +139,8 @@ test('备份导出/导入：格式正确且可恢复', async () => {
   assert.equal(parsed.products.length, 26)
   assert.equal(parsed.orders.length, 480)
 
-  await store.deleteProduct('SKU-0001')
+  store.importData([], [])
+  assert.equal(store.listProducts({ page_size: 10000 }).total, 0)
   const result = store.importBackup(backup)
   assert.equal(result.products, 26)
   assert.ok(store.getProduct('SKU-0001'))

@@ -48,18 +48,6 @@ export class MockAdapter implements PlatformAdapter {
     )
   }
 
-  async updateProduct(_sku: string, _patch: Partial<Product>): Promise<Product> {
-    return this.writeDenied('修改商品')
-  }
-
-  async createProduct(_product: Product): Promise<Product> {
-    return this.writeDenied('新增商品')
-  }
-
-  async deleteProduct(_sku: string): Promise<void> {
-    this.writeDenied('删除商品')
-  }
-
   async updateOrderStatus(
     _orderId: string,
     _status: OrderStatus,

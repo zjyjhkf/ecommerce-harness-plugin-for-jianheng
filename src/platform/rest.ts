@@ -99,26 +99,6 @@ export class RestAdapter implements PlatformAdapter {
     return data.orders ?? []
   }
 
-  async updateProduct(sku: string, patch: Partial<Product>): Promise<Product> {
-    const data = await this.request<{ product: Product }>(`/products/${sku}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    })
-    return data.product
-  }
-
-  async createProduct(product: Product): Promise<Product> {
-    const data = await this.request<{ product: Product }>('/products', {
-      method: 'POST',
-      body: JSON.stringify(product),
-    })
-    return data.product
-  }
-
-  async deleteProduct(sku: string): Promise<void> {
-    await this.request<unknown>(`/products/${sku}`, { method: 'DELETE' })
-  }
-
   async updateOrderStatus(
     orderId: string,
     status: OrderStatus,

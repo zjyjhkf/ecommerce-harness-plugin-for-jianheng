@@ -1,92 +1,16 @@
 /**
  * v0.8 测试集：
- *  - analysisPromptOf 升级为 6 维度市场营销视角分析（包含商品全部信息）
+ *  - analysisPromptOf 已随「单个商品增删改查/上下架」功能一并删除
  *  - BI 看板尺寸调整：趋势图/类目占比 bar 的 CSS 数值校验
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { analysisPromptOf } from '../src/client/data.ts'
 
 const SRC = resolve(import.meta.dirname, '..', 'src')
 const STYLES = readFileSync(resolve(SRC, 'client', 'styles.ts'), 'utf8')
 const BI_DASH = readFileSync(resolve(SRC, 'client', 'BiDashboard.tsx'), 'utf8')
-
-/* === analysisPromptOf 内容覆盖 === */
-
-test('v0.8 [analysisPromptOf] 包含「市场营销视角」关键词', () => {
-  const prompt = analysisPromptOf({
-    sku: 'TEST-001',
-    name: '便携充电宝',
-    category: '数码配件',
-    price: 99.9,
-    stock: 200,
-    status: 'on_sale',
-  })
-  assert.match(prompt, /市场营销视角/, '应明确提及「市场营销视角」')
-})
-
-test('v0.8 [analysisPromptOf] 包含商品的所有信息字段（SKU/名称/分类/售价/库存/状态）', () => {
-  const prompt = analysisPromptOf({
-    sku: 'TEST-001',
-    name: '便携充电宝 20000mAh',
-    category: '数码配件',
-    price: 99.9,
-    stock: 200,
-    status: 'on_sale',
-  })
-  assert.match(prompt, /TEST-001/, '包含 SKU')
-  assert.match(prompt, /便携充电宝 20000mAh/, '包含商品名称')
-  assert.match(prompt, /数码配件/, '包含分类')
-  assert.match(prompt, /¥99\.9/, '包含售价')
-  assert.match(prompt, /200 件/, '包含库存')
-  assert.match(prompt, /在售/, '包含状态')
-})
-
-test('v0.8 [analysisPromptOf] 包含 6 维度分析框架', () => {
-  const prompt = analysisPromptOf({
-    sku: 'A',
-    name: 'B',
-    category: 'C',
-    price: 1,
-    stock: 0,
-    status: 'on_sale',
-  })
-  // 6 维度关键词检查
-  assert.match(prompt, /1\) 目标客户画像/)
-  assert.match(prompt, /2\) 市场竞争与差异化定位/)
-  assert.match(prompt, /3\) 定价策略评估/)
-  assert.match(prompt, /4\) 库存与供应链健康度/)
-  assert.match(prompt, /5\) 营销渠道建议/)
-  assert.match(prompt, /6\) 促销与上架时机/)
-})
-
-test('v0.8 [analysisPromptOf] 包含可执行营销行动清单（P0/P1/P2 优先级）', () => {
-  const prompt = analysisPromptOf({
-    sku: 'A',
-    name: 'B',
-    category: 'C',
-    price: 1,
-    stock: 0,
-    status: 'on_sale',
-  })
-  assert.match(prompt, /可执行营销行动清单/)
-  assert.match(prompt, /P0\/P1\/P2/)
-})
-
-test('v0.8 [analysisPromptOf] 下架商品映射为「下架」中文状态', () => {
-  const prompt = analysisPromptOf({
-    sku: 'A',
-    name: 'B',
-    category: 'C',
-    price: 1,
-    stock: 0,
-    status: 'off_sale',
-  })
-  assert.match(prompt, /下架/, '下架状态应展示为中文')
-  assert.doesNotMatch(prompt, /在售/, '不应误标「在售」')
-})
 
 /* === BI 看板尺寸调整 === */
 

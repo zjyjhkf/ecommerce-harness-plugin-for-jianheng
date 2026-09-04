@@ -11,11 +11,14 @@
  */
 import * as React from 'react'
 import { ShopDeskPanel, ShopDeskTab } from './ShopDeskPanel.tsx'
+import { SkillBar } from './SkillBar.tsx'
+import { skillTagOf, type SkillModule } from './skills.ts'
 import { injectStyles } from './styles.ts'
 import { BrandMark } from './brand.tsx'
 import {
   isCockpitOpen,
   registerConversationSender,
+  sendToConversation,
   setClientContext,
   subscribeCockpit,
   toggleCockpit,
@@ -67,6 +70,23 @@ function DataFooterLauncher(): React.ReactElement {
 /** 会话发送服务（点击商品生成分析指令时注入到 cockpit-bus） */
 interface ConversationLike {
   send?(text: string): unknown
+}
+
+/** 会话输入区（conversation.input.dock）横置技能条。
+ *  选 conversation.input.dock 而非 conversation.composer.dock：后者是 composer 卡片下方的
+ *  footer（stats 带），在「新建会话（hero/blank 态）」下不渲染；input.dock 在有无历史时都会渲染。
+ *  显隐由可逆的 body 类 `esd-cockpit-open` 控制：cockpit-bus 在侧边栏打开时添加、
+ *  关闭时移除，CSS 据此显示/隐藏（`body:not(.esd-cockpit-open) .esd-skillbar-dock`）。
+ *  因此启动前不显示，点击插件 logo 打开侧边栏后显示；关闭侧边栏后技能条「归位」
+ *  回初始隐藏状态。
+ *  点击任一技能 → 会话框生成短链接（仅技能中文名，颜色与其他内容区分）。 */
+function ComposerDockSkillBar(): React.ReactElement {
+  return React.createElement(SkillBar, {
+    variant: 'dock',
+    onInvoke: (skill: SkillModule): void => {
+      void sendToConversation(skillTagOf(skill))
+    },
+  })
 }
 
 /**
@@ -131,6 +151,20 @@ export function apply(ctx: ClientContext): void {
         label: '数据查看',
       },
       ShopDeskPanel,
+    ),
+  )
+
+  /* 会话输入区横置技能条（conversation.input.dock）：7 个 skill 模块横置排列，点击即调用。
+   *  input.dock 在空白/新建会话（hero 态）也会渲染，composer.dock（卡片下方 footer）不会。 */
+  ctx.slots.inject('conversation.input.dock', () =>
+    ctx.slots.register(
+      {
+        name: 'conversation.input.dock',
+        id: 'ecommerce-skill-dock',
+        order: 50,
+        label: '技能分析',
+      },
+      ComposerDockSkillBar,
     ),
   )
 }

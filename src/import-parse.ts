@@ -7,7 +7,9 @@
  *
  * 所有解析结果统一输出 { products, orders } 领域数组，由 Store 校验后写入。
  */
-import type { Order, Product } from './types.ts'
+import type { MonthlyReport, Order, Product } from './types.ts'
+import { parseMonthlyReportExcel, parseMonthlyReportJson, type MonthlyParseResult } from './monthly-report.ts'
+import { parseWeeklyRankExcel, type WeeklyParseResult } from './weekly-report.ts'
 
 export const PRODUCT_COLUMNS: Record<string, string> = {
   sku: 'sku',
@@ -492,17 +494,21 @@ export async function parseExcelBuffer(
     if (rows.length > 0) result.orders = buildOrders(rows)
   }
   if (productSheet && orderSheet && productSheet === orderSheet) {
-    const rows = sheetToRows(workbook, productSheet)
-    if (rows.length > 0) {
-      const firstRow = rows[0] as Record<string, unknown>
-      const isOrder = Object.keys(firstRow ?? {}).some((k) => /order|buyer|amount/.test(k))
-      if (isOrder) result.orders = buildOrders(rows)
-      else result.products = buildProducts(rows)
+    // 无明确商品/订单 sheet：尝试把首个工作表按商品解析（识别不到列名时静默跳过，
+    // 不抛「找不到工作表」——可能是月度复盘等非商品/订单结构，交由月度复盘解析器处理）
+    try {
+      const rows = sheetToRows(xlsx.utils, workbook, productSheet, false)
+      if (rows.length > 0) {
+        const firstRow = rows[0] as Record<string, unknown>
+        const isOrder = Object.keys(firstRow ?? {}).some((k) => /order|buyer|amount/.test(k))
+        if (isOrder) result.orders = buildOrders(rows)
+        else result.products = buildProducts(rows)
+      }
+    } catch {
+      // 列名不可识别 → 保持空结果
     }
   }
-  if (!result.products && !result.orders) {
-    throw new Error('Excel 中没有可识别的商品/订单工作表（表头需含 sku/商品/售价 或 订单号/买家/金额）')
-  }
+  // 无商品/订单时不再抛错（返回空对象，由月度复盘解析器继续）
   return result
 }
 
@@ -734,6 +740,11 @@ export async function parsePdfBuffer(
 export interface ParsedImport {
   products?: Product[]
   orders?: Order[]
+  /** xlsx 单份月度文件（「商品排名导出」排名文件或「利润表」），由 Store 合并成完整 MonthlyReport */
+  monthlyPart?: MonthlyParseResult
+  /** JSON 完整月报（整体替换） */
+  monthlyReport?: MonthlyReport
+  weeklyReport?: WeeklyParseResult
   hint: string
 }
 
@@ -753,13 +764,46 @@ export async function parseImportFile(
     }
     case 'json': {
       const r = parseJsonFile(decode())
-      return { ...r, hint: 'JSON 导入：' + (r.products?.length ?? 0) + ' 件商品 / ' + (r.orders?.length ?? 0) + ' 笔订单' }
+      // 月度复盘 JSON（{monthlyReport:{...}} 或整体结构）单独识别
+      let monthlyReport: MonthlyReport | null = null
+      try {
+        monthlyReport = parseMonthlyReportJson(JSON.parse(decode()))
+      } catch { /* 非月度复盘结构 */ }
+      return {
+        ...r,
+        monthlyReport: monthlyReport ?? undefined,
+        hint:
+          'JSON 导入：' + (r.products?.length ?? 0) + ' 件商品 / ' + (r.orders?.length ?? 0) + ' 笔订单' +
+          (monthlyReport ? ' / 月度复盘已识别' : ''),
+      }
     }
     case 'xlsx':
     case 'xls': {
       const buf = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
-      const r = await parseExcelBuffer(buf)
-      return { ...r, hint: 'Excel 导入：' + (r.products?.length ?? 0) + ' 件商品 / ' + (r.orders?.length ?? 0) + ' 笔订单' }
+      // 月度 xlsx（「月度表」三份「商品排名导出」+ 一份「利润表」）优先独立识别
+      let monthlyPart: MonthlyParseResult | null = null
+      try { monthlyPart = await parseMonthlyReportExcel(buf) } catch { /* 非月度 */ }
+      // 周复盘 xlsx（「商品排名导出」单 sheet，7 天跨度；整月跨度已由月度解析器接住）
+      let weeklyReport: WeeklyParseResult | null = null
+      try { weeklyReport = await parseWeeklyRankExcel(buf) } catch { /* 非周排名 */ }
+      // 商品/订单解析：失败不阻断（可能是纯月度/周度报表表）
+      let products: Product[] | undefined
+      let orders: Order[] | undefined
+      try {
+        const r = await parseExcelBuffer(buf)
+        products = r.products
+        orders = r.orders
+      } catch { /* 无商品/订单结构 */ }
+      return {
+        products,
+        orders,
+        monthlyPart: monthlyPart ?? undefined,
+        weeklyReport: weeklyReport ?? undefined,
+        hint:
+          'Excel 导入：' + (products?.length ?? 0) + ' 件商品 / ' + (orders?.length ?? 0) + ' 笔订单' +
+          (monthlyPart ? ' / 月度已识别（' + monthlyPart.kind + '）' : '') +
+          (weeklyReport ? ' / 周排名已识别（' + weeklyReport.kind + '）' : ''),
+      }
     }
     case 'sql': {
       const r = parseSqlText(decode())
@@ -767,10 +811,17 @@ export async function parseImportFile(
     }
     case 'pdf': {
       const buf = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
-      const r = await parsePdfBuffer(buf)
-      return { ...r, hint: 'PDF 导入：' + (r.products?.length ?? 0) + ' 件商品 / ' + (r.orders?.length ?? 0) + ' 笔订单' }
+      try {
+        const r = await parsePdfBuffer(buf)
+        return { ...r, hint: 'PDF 导入：' + (r.products?.length ?? 0) + ' 件商品 / ' + (r.orders?.length ?? 0) + ' 笔订单' }
+      } catch (e) {
+        // PDF 解析库未部署/扫描件等：不抛出、不阻断批量导入，返回可读提示
+        return { hint: 'PDF 导入失败：' + (e instanceof Error ? e.message : String(e)) }
+      }
     }
     default:
-      throw new Error('暂不支持的文件类型：.' + ext + '（支持 csv/txt/json/xlsx/xls/sql/pdf）')
+      // 未知/不支持的文件类型（如粘贴的截图 .png、Excel 锁文件等）：不抛出、不阻断，
+      // 跳过并提示，确保「同类 Excel + 误带杂项文件」也能正常解析出数据面板。
+      return { hint: '已跳过不支持的文件：.' + ext + '（仅解析 csv/txt/json/xlsx/xls/sql/pdf）' }
   }
 }

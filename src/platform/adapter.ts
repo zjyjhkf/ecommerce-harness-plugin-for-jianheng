@@ -23,10 +23,7 @@ export interface PlatformAdapter {
   listProducts(filter: ProductFilter): Promise<Product[]>
   listOrders(filter: OrderFilter): Promise<Order[]>
 
-  /** 以下写操作仅在 readOnly=false 的适配器上实现；mock 适配器抛错提示 */
-  updateProduct(sku: string, patch: Partial<Product>): Promise<Product>
-  createProduct(product: Product): Promise<Product>
-  deleteProduct(sku: string): Promise<void>
+  /** 订单写操作仅在 readOnly=false 的适配器上实现；mock 适配器抛错提示 */
   updateOrderStatus(
     orderId: string,
     status: OrderStatus,

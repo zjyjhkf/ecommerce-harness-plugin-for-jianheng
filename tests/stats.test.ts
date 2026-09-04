@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { fromCents, toCents } from '../src/types.ts'
 
 async function makeStore(): Promise<EcommerceStore> {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-stats-'))
@@ -75,13 +76,8 @@ test('categoryDistribution：占比合计 100%，按销售额降序', async () =
   assert.equal(apparel.ratio, 23.6)
 })
 
-test('金额精度：浮点运算使用整数分位，无精度丢失', async () => {
-  const store = await makeStore()
-  const created = await store.createProduct({
-    name: '精度测试',
-    price: 0.1 + 0.2, // 0.30000000000000004
-    stock: 1,
-    category: '测试',
-  })
-  assert.equal(created.price, 0.3)
+test('金额精度：toCents/fromCents 使用整数分位，无精度丢失', () => {
+  const cents = toCents(0.1 + 0.2) // 0.30000000000000004 → 30 分
+  assert.equal(cents, 30)
+  assert.equal(fromCents(cents), 0.3)
 })

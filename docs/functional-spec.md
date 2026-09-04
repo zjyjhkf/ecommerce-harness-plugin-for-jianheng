@@ -34,7 +34,7 @@
 
 | # | 功能域 | 具体能力 | 来源依据 |
 |---|---|---|---|
-| F1 | 商品管理 | 商品信息查询、**商品分类**、**数据筛选**、**商品增删改查** | 用户确认 + 视频标题 |
+| F1 | 商品管理 | 商品信息查询、**商品分类**、**数据筛选**（商品数据由导入/平台 API 决定，无手动增删改查） | 用户确认 + 视频标题 |
 | F2 | 订单处理 | 订单查询（按状态/时间/金额筛选）、订单统计、发货状态更新、售后标记 | 用户确认 + 电商场景最佳实践 |
 | F3 | 销售数据分析 | 销售额/订单量统计、时间趋势、TOP 商品排行、类目分布 | 视频标题「数据分析」定位 |
 | F4 | 库存预警 | 低库存自动提醒、补货建议 | 用户确认 |
@@ -62,7 +62,7 @@
 | C3 | **实时数据 vs 演示可用性**：无凭证时插件应能开箱演示 | 中 | 双数据源架构：配置了平台 API 凭证 → 走真实数据；未配置 → 自动降级为内置示例数据并标注「示例模式」，保证首次使用即有完整体验 |
 | C4 | **dsh 版本快速迭代**：官方声明存在破坏性变更 | 中 | 锁定兼容基线 dsh v0.1.1-rc.2，独立成包不侵入源码仓库；升级 dsh 时仅需验证工具注册契约 |
 | C5 | **统计口径一致性**：销售额/订单量等指标在不同平台定义不同 | 中 | 统计逻辑集中在 `stats.ts` 单一模块，所有指标由订单原始数据在插件内统一计算，不依赖平台侧预聚合 |
-| C6 | **数据持久化**：工具执行产生的变更（如库存调整、发货更新）需要跨会话保留 | 中 | 本地 JSON 文件持久化 + 内存缓存；导出/导入能力（JSON 备份）；未来升级为 dsh 自带持久化服务 |
+| C6 | **数据持久化**：工具执行产生的变更（如发货、退款、状态流转）需要跨会话保留 | 中 | 本地 JSON 文件持久化 + 内存缓存；导出/导入能力（JSON 备份）；未来升级为 dsh 自带持久化服务 |
 | C7 | **侧边栏 UI**：dsh Web 客户端侧边栏插槽尚在演进 | 低 | 首版以 **对话流业务卡片**（`ConversationNodeDefinition`，官方稳定扩展点）承载交互式数据展示；侧边栏插槽随 dsh 官方文档明确后迭代接入 |
 
 ### 2.3 技术栈
@@ -97,12 +97,12 @@
 ┌──────────────────────┐  ┌─────────────────────────────┐
 │  工具层（本插件）      │  │  UI 层（本插件）              │
 │  products / orders   │  │  对话流业务卡片               │
-│  stats / alerts      │  │  （分类、筛选、增删改查交互）    │
+│  stats / alerts      │  │  （分类、筛选交互）    │
 └───────────┬──────────┘  └─────────────┬───────────────┘
             ▼                           │
 ┌───────────────────────────────────────┴──┐
 │              数据层（本插件）               │
-│  Store：统一领域模型 + CRUD + 统计           │
+│  Store：统一领域模型 + 统计 + 持久化           │
 ├──────────────────┬───────────────────────┤
 │  PlatformAdapter │  本地持久化（JSON）     │
 │  ├─ MockAdapter  │  导出/导入备份          │
@@ -114,7 +114,7 @@
 
 | 模块 | 工具组 | 说明 |
 |---|---|---|
-| 商品管理 | `product_*` | 查询/筛选/新增/修改/删除/分类/库存调整 |
+| 商品查询 | `product_*` | 查询/筛选/分类（只读，无手动增删改查） |
 | 订单处理 | `order_*` | 查询/统计/状态更新/发货/售后 |
 | 销售数据分析 | `stats_*` | 总览/趋势/TOP排行/类目分布 |
 | 库存预警 | `inventory_*` | 低库存清单/补货建议 |
@@ -133,7 +133,7 @@ ecommerce-analyst-plugin/
 ├── src/
 │   ├── index.ts          # 插件入口（注册工具 + UI）
 │   ├── types.ts          # 领域类型（Product/Order/Stats）
-│   ├── store.ts          # 数据仓库（CRUD + 统计 + 持久化）
+│   ├── store.ts          # 数据仓库（统计 + 持久化）
 │   ├── config.ts         # 插件配置项（Schema）
 │   ├── platform/
 │   │   ├── adapter.ts    # PlatformAdapter 接口
@@ -156,18 +156,13 @@ ecommerce-analyst-plugin/
 
 ## 4. 功能模块规范
 
-### 4.1 模块一：商品管理（F1）
+### 4.1 模块一：商品查询（F1）
 
-**目标**：让用户通过自然语言完成商品信息的全生命周期管理。
+**目标**：让用户通过自然语言查询/筛选商品；商品数据完全由「导入」或「平台 API」决定，不提供手动增删改查（早期设计的单个商品增删改查/上下架功能已删除，避免与导入数据冲突）。
 
 | 工具名 | 参数 | 返回 | 说明 |
 |---|---|---|---|
-| `product_list` | `category?`（按分类筛选）、`keyword?`（名称/ID 模糊搜索）、`status?`（on_sale/off_sale）、`min_price?`/`max_price?`、`page?`/`page_size?` | `{ total, items: Product[] }` | 商品查询与多维筛选，支持分页 |
-| `product_create` | `name`、`price`、`stock`、`category`、`status?` | `Product` | 新增商品（生成唯一 SKU） |
-| `product_update` | `sku`、`name?`、`price?`、`stock?`、`category?`、`status?` | `Product` | 修改商品信息 |
-| `product_delete` | `sku` | `{ deleted: boolean }` | 删除商品 |
-| `product_stock_adjust` | `sku`、`delta`（正加负减）、`reason?` | `Product` | 库存调整（入库/出库/盘点） |
-| `product_on_sale` / `product_off_sale` | `sku` | `Product` | 上下架操作 |
+| `product_list` | `category?`（按分类筛选）、`keyword?`（名称/ID 模糊搜索）、`status?`（on_sale/off_sale）、`min_price?`/`max_price?`、`page?`/`page_size?` | `{ total, items: Product[] }` | 商品查询与多维筛选，支持分页（只读） |
 
 **交互要求**：商品列表结果渲染为业务卡片，支持按分类标签展开、按状态/价格筛选（满足「侧边栏展开交互」等价能力）。
 
@@ -257,7 +252,6 @@ interface PlatformAdapter {
   readonly name: string                 // 平台名，如 'mock' | 'taobao' | 'pdd'
   listProducts(filter: ProductFilter): Promise<Product[]>
   listOrders(filter: OrderFilter): Promise<Order[]>
-  updateProduct(sku: string, patch: Partial<Product>): Promise<Product>
   updateOrderStatus(orderId: string, status: OrderStatus, meta?: OrderMeta): Promise<Order>
 }
 ```
@@ -266,7 +260,7 @@ interface PlatformAdapter {
 
 | 适配器 | 用途 | 启用条件 |
 |---|---|---|
-| `MockAdapter` | 开箱演示（内置 5 商品 + 12 订单，含低库存与售后异常条目） | 默认 |
+| `MockAdapter` | 开箱演示（内置 26 商品 + 480 订单，含低库存与售后异常条目） | 默认 |
 | `RestAdapter` | 对接电商平台开放平台 REST API | 配置 `ecommerceAnalyst.platform.*` |
 
 ### 6.3 配置项（dsh Config）
@@ -304,7 +298,7 @@ ecommerceAnalyst:
 
 | 测试面 | 用例 | 验收标准 |
 |---|---|---|
-| 数据层 CRUD | 商品增删改查、库存调整、上下架 | 全部通过，删除不可恢复（返回确认） |
+| 报表导入 | 月度 4 份 / 周度 3 份 Excel 解析与周期隔离 | 只导入 7 日数据则 30 天面板为空；同格式不同内容正确展示 |
 | 状态机 | 订单合法/非法流转 | 合法流转成功，非法流转返回明确错误 |
 | 统计口径 | overview/trend/top/category 在固定数据集上计算 | 与手工核算结果一致（误差 < 0.01） |
 | 库存预警 | 阈值边界（stock == threshold） | 边界值正确命中预警 |
@@ -319,7 +313,7 @@ ecommerceAnalyst:
 | 版本 | 内容 | 状态 |
 |---|---|---|
 | v0.1.0 | 本版：4 大模块工具集 + 示例数据 + 本地持久化 + 测试 | ✅ 本文档对应 |
-| v0.2.0 | 对话流业务卡片 UI（分类/筛选/增删改查交互） | 待开发 |
+| v0.2.0 | 对话流业务卡片 UI（分类/筛选交互） | 待开发 |
 | v0.3.0 | 接入第一个真实电商平台适配器（需用户提供平台与凭证） | 待开发 |
 | v0.4.0 | 侧边栏插槽（随 dsh 官方文档演进） | 待开发 |
 

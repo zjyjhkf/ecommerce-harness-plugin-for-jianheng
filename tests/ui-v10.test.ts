@@ -8,7 +8,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  openNewConversation,
   registerConversationSender,
+  resetLinkWarnSessionForTest,
   sendToConversation,
   setClientContext,
 } from '../src/client/cockpit-bus.ts'
@@ -78,4 +80,71 @@ test('v0.10 [cockpit-bus] 四层 fallback 不会抛出未捕获异常', () => {
     assert.equal(typeof r.sent, 'boolean')
   })
   setClientContext(null)
+})
+
+test('v0.11 [cockpit-bus] openNewConversation 首次在当前会话分组新建会话并发送，后续点击复用不新建', async () => {
+  resetLinkWarnSessionForTest()
+  // 伪造 sessions + workspaces 服务：当前会话 cur-session 位于分组 ws-1（cwd=C:/shop）
+  const byId: Record<string, { cwd?: string }> = { 'cur-session': { cwd: 'C:/shop' } }
+  const created: Array<Record<string, string>> = []
+  const opened: string[] = []
+  const sent: string[] = []
+  const sessions = {
+    list: { getSnapshot: () => ({ current: 'cur-session', byId }) },
+    create: async (opts?: { workspaceId?: string; cwd?: string }) => {
+      created.push((opts ?? {}) as Record<string, string>)
+      byId['new-session'] = { cwd: 'C:/shop' } // 模拟创建后落入列表
+      return 'new-session'
+    },
+    open: (id: string) => {
+      opened.push(id)
+    },
+    scope: () => ({ conversation: { send: async (text: string) => { sent.push(text) } } }),
+  }
+  const workspaces = {
+    list: {
+      getSnapshot: () => ({
+        items: [{ workspaceId: 'ws-1', path: 'C:/shop', sessionIds: ['cur-session'] }],
+        recentWorkspaceId: 'ws-1',
+      }),
+    },
+  }
+  setClientContext({
+    get: (name: string) => (name === 'sessions' ? sessions : name === 'workspaces' ? workspaces : undefined),
+  })
+
+  // 首次：新建 + 发送，会话落在当前分组（workspaceId=ws-1）
+  const r1 = await openNewConversation('提示词A')
+  assert.equal(r1.newSession, true)
+  assert.equal(r1.opened, true)
+  assert.equal(created.length, 1)
+  assert.deepEqual(created[0], { workspaceId: 'ws-1' })
+  assert.deepEqual(sent, ['提示词A'])
+  assert.deepEqual(opened, ['new-session'])
+
+  // 再次：复用已有会话，不新建、不重发 create
+  const r2 = await openNewConversation('提示词B')
+  assert.equal(r2.newSession, false)
+  assert.equal(r2.opened, true)
+  assert.equal(created.length, 1)
+  assert.deepEqual(sent, ['提示词A', '提示词B'])
+  assert.equal(opened.length, 2, '复用时应再次 open 以指向既有会话')
+
+  resetLinkWarnSessionForTest()
+  setClientContext(null)
+})
+
+test('v0.11 [cockpit-bus] openNewConversation 无 sessions 服务时降级到 sendToConversation', async () => {
+  resetLinkWarnSessionForTest()
+  let received = ''
+  registerConversationSender((t) => {
+    received = t
+  })
+  setClientContext({ get: () => undefined })
+  const r = await openNewConversation('降级指令')
+  assert.equal(r.newSession, false)
+  assert.equal(r.opened, true)
+  assert.equal(received, '降级指令')
+  setClientContext(null)
+  resetLinkWarnSessionForTest()
 })

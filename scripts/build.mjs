@@ -11,7 +11,7 @@
  * 用法：node scripts/build.mjs
  */
 import { createRequire } from 'node:module'
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
@@ -72,6 +72,7 @@ const bundleResult = await esbuild.build({
   target: 'es2020',
   jsx: 'transform',
   external: ['react'],
+  loader: { '.html': 'text' },
   write: false,
   logLevel: 'info',
 })
@@ -131,6 +132,16 @@ for (const name of ['cordis.patch.yml', 'README.md']) {
   }
 }
 
+/** 数据中台页面资产：全屏面板 iframe 加载 /ecommerce-api/data-center */
+try {
+  const dcDir = join(OUT, 'assets')
+  mkdirSync(dcDir, { recursive: true })
+  copyFileSync(join(repo, 'src', 'assets', 'data-center.html'), join(dcDir, 'data-center.html'))
+  console.log('[build] 已部署 assets/data-center.html')
+} catch (e) {
+  console.warn('[build] 跳过缺失数据中台资产:', e.message)
+}
+
 /** 定位 dsh 全局 node_modules。
  * 插件部署在 E:\plugins 之外，Node 从 E:\plugins\... 向上解析找不到 @deepseek-ai/*；
  * 在 OUT/node_modules 下建立 junction 指向 dsh 全局 node_modules，确保 dsh 能正常加载。
@@ -138,14 +149,16 @@ for (const name of ['cordis.patch.yml', 'README.md']) {
  * 命中「同时含 schemamastery 与 dsh-scope 的 @deepseek-ai 作用域」才认为有效。 */
 function findDshModules() {
   const roots = []
-  try {
-    roots.push(execSync('npm root -g', { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } }).trim())
-  } catch {}
+  // 优先使用用户全局 npm（dsh web 实际运行的位置）；本机若在 WorkBuddy 托管 node 下执行，
+  // npm root -g / npm config get prefix 会指向托管 node 根，必须排在最后作为兜底。
   const home = process.env.USERPROFILE || process.env.HOME || ''
   if (home) roots.push(join(home, 'AppData', 'Roaming', 'npm', 'node_modules'))
   try {
     const prefix = execSync('npm config get prefix', { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } }).trim()
-    if (prefix) roots.push(join(prefix, 'node_modules'))
+    if (prefix && prefix.toLowerCase().includes('roaming\\npm') === false) roots.push(join(prefix, 'node_modules'))
+  } catch {}
+  try {
+    roots.push(execSync('npm root -g', { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } }).trim())
   } catch {}
   for (const root of roots) {
     if (!root) continue
@@ -184,24 +197,28 @@ try {
   console.warn('[build] 创建 peer dep symlinks 失败:', e.message)
 }
 
-/** 复制插件自身运行时依赖到 OUT/node_modules（esbuild external 的非 peer 依赖）。
- * 这些包不会被 dsh 全局 node_modules 提供，必须从源码 node_modules 带进部署目录。 */
-function copyRuntimeDep(name) {
-  const src = join(repo, 'node_modules', name)
-  const dst = join(OUT, 'node_modules', name)
+/** 只复制 xlsx 运行时必需文件：主入口 xlsx.js（CJS）+ package.json + 老版编码页
+ *  cpexcel.js（xlsx.js 内 require('./dist/cpexcel.js')）。跳过 dist/*.min.*、xlsx.mjs、
+ *  图片、README、types 等非必需内容，约省 6MB。 */
+function copyXlsxEssential() {
+  const src = join(repo, 'node_modules', 'xlsx')
+  const dst = join(OUT, 'node_modules', 'xlsx')
   if (!existsSync(src)) {
-    console.warn('[build] runtime dep 未安装，跳过:', name)
+    console.warn('[build] xlsx 未安装，跳过')
     return
   }
   try { rmSync(dst, { recursive: true, force: true }) } catch {}
-  try {
-    cpSync(src, dst, { recursive: true, dereference: true })
-    console.log('[build] runtime dep copied:', name)
-  } catch (e) {
-    console.warn('[build] runtime dep copy 失败:', name, e.message)
+  mkdirSync(join(dst, 'dist'), { recursive: true })
+  for (const rel of ['xlsx.js', 'package.json']) {
+    copyFileSync(join(src, rel), join(dst, rel))
   }
+  copyFileSync(join(src, 'dist', 'cpexcel.js'), join(dst, 'dist', 'cpexcel.js'))
+  console.log('[build] runtime dep copied (essential): xlsx')
 }
-for (const name of ['xlsx', 'pdfjs-dist']) copyRuntimeDep(name)
+
+// pdfjs-dist（约 37MB）仅用于 PDF 导入，非核心功能，不再随包部署；
+// 解析器已做优雅降级，导入 PDF 时会提示改用 CSV/Excel。
+copyXlsxEssential()
 
 console.log('[build] 完成 →', OUT)
 console.log('[build] index.js', readFileSync(join(OUT, 'index.js'), 'utf8').length, 'bytes')

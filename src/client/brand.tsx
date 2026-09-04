@@ -14,6 +14,7 @@
  */
 import * as React from 'react'
 import { LOGO_SRC } from './logo.ts'
+import type { SkillIconKey } from './skills.ts'
 
 /** 浅绿色主调（与参考图一致） */
 export const ESD_ACCENT = '#2bb8a3'
@@ -175,6 +176,90 @@ export function SecIcon(props: { name: SecIconName; size?: number }): React.Reac
       focusable="false"
     >
       <SecIconPath name={props.name} />
+    </svg>
+  )
+}
+
+/* ────────────── 技能图标（与 SecIcon 同款浅绿描边，用于会话框下方技能条） ────────────── */
+
+function SkillIconPath(name: SkillIconKey): React.ReactElement {
+  switch (name) {
+    case 'traffic':
+      return (
+        <>
+          <path d="M4 19 L9 13 L13 16 L22 7" />
+          <path d="M17 7 H22 V12" />
+        </>
+      )
+    case 'competitor':
+      return (
+        <>
+          <path d="M4 8 H22" />
+          <path d="M5 8 L8 4 M5 8 L8 12" />
+          <path d="M21 8 L18 4 M21 8 L18 12" />
+        </>
+      )
+    case 'research':
+      return (
+        <>
+          <circle cx="13" cy="13" r="8" />
+          <path d="M17.5 8.5 L15.5 15.5 L8.5 17.5 L10.5 10.5 Z" />
+        </>
+      )
+    case 'keyword':
+      return (
+        <>
+          <circle cx="8.5" cy="8.5" r="3.5" />
+          <path d="M11 11 L20 20" />
+          <path d="M16 16 L20 20" />
+          <path d="M18 14 L20 16" />
+        </>
+      )
+    case 'listing':
+      return (
+        <>
+          <path d="M6 4 H20 V22 H6 Z" />
+          <path d="M10 9 H16" />
+          <path d="M10 13 H16" />
+          <path d="M10 17 H14" />
+        </>
+      )
+    case 'market':
+      return (
+        <>
+          <circle cx="13" cy="13" r="9" />
+          <circle cx="13" cy="13" r="5" />
+          <circle cx="13" cy="13" r="1.5" />
+        </>
+      )
+    case 'review':
+      return (
+        <>
+          <path d="M5 6 H21 V16 H14 L9 21 V16 H5 Z" />
+        </>
+      )
+    default:
+      return <circle cx="13" cy="13" r="8" />
+  }
+}
+
+export function SkillIcon(props: { name: SkillIconKey; size?: number }): React.ReactElement {
+  const size = props.size ?? 15
+  return (
+    <svg
+      className="esd-skill-icon-svg"
+      viewBox="0 0 26 26"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <SkillIconPath name={props.name} />
     </svg>
   )
 }
