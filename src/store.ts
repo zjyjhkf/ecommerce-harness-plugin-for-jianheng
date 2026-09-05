@@ -67,6 +67,11 @@ export class EcommerceStore {
   private monthlyReport: MonthlyReport | null = null
   /** 周复盘（「周数据」三份「商品排名导出」导入，按展示形式合并）：7 天「周复盘」视图数据源 */
   private weeklyReport: WeeklyReport | null = null
+  /** 上一期月度复盘（导入新周期时归档）：供「数据对比」用（上期 vs 本期）。随持久化保存/恢复，
+   *  插件重启或重载后归档仍在，保证「两次导入之间进程被重建」也能继续对比。 */
+  private previousMonthlyReport: MonthlyReport | null = null
+  /** 上一期周复盘（导入新周期时归档）：同上 */
+  private previousWeeklyReport: WeeklyReport | null = null
   /** 报表数据单调递增版本号：任一报表（月/周）导入或替换即 +1，供前端判断「数据是否真正变化」，
    *  避免仅靠行数/周期这类粗粒度指纹漏掉「数值变化但行数相同」的插入更新。 */
   private reportRevision = 0
@@ -87,13 +92,22 @@ export class EcommerceStore {
           orders: Order[]
           monthlyReport?: MonthlyReport | null
           weeklyReport?: WeeklyReport | null
+          previousMonthlyReport?: MonthlyReport | null
+          previousWeeklyReport?: WeeklyReport | null
+          reportRevision?: number
           meta?: { dataMode?: string; updatedAt?: string }
         }
         if (Array.isArray(data.products) && Array.isArray(data.orders)) {
           this.products = data.products
           this.orders = data.orders
-          // 报表（月/周复盘）不随持久化恢复：每次启动插件重置为空，仅当本会话导入后才填充，
-          // 杜绝「打开插件即显示上一会话遗留数据」。备份（exportBackup/importBackup）仍显式保留报表。
+          // 报表（月/周复盘 + 上一期归档）随持久化恢复：数据对比依赖「连续导入两期」的
+          // 上一期归档，若两次导入之间插件进程被重建（重启/热重载/新会话），归档会随内存丢失，
+          // 导致「导入了两期却没有对比」。持久化报表与归档后，重启仍能恢复上期完成对比。
+          this.monthlyReport = data.monthlyReport ?? null
+          this.weeklyReport = data.weeklyReport ?? null
+          this.previousMonthlyReport = data.previousMonthlyReport ?? null
+          this.previousWeeklyReport = data.previousWeeklyReport ?? null
+          if (Number.isFinite(data.reportRevision)) this.reportRevision = Number(data.reportRevision)
           const imported =
             this.adapter.name === 'rest'
               ? 'rest'
@@ -135,6 +149,11 @@ export class EcommerceStore {
           {
             products: this.products,
             orders: this.orders,
+            monthlyReport: this.monthlyReport,
+            weeklyReport: this.weeklyReport,
+            previousMonthlyReport: this.previousMonthlyReport,
+            previousWeeklyReport: this.previousWeeklyReport,
+            reportRevision: this.reportRevision,
             meta: { dataMode: this.dataMode, updatedAt: new Date().toISOString() },
           },
           null,
@@ -150,7 +169,14 @@ export class EcommerceStore {
   /** 导出 JSON 备份 */
   exportBackup(): string {
     return JSON.stringify(
-      { products: this.products, orders: this.orders, monthlyReport: this.monthlyReport, weeklyReport: this.weeklyReport },
+      {
+        products: this.products,
+        orders: this.orders,
+        monthlyReport: this.monthlyReport,
+        weeklyReport: this.weeklyReport,
+        previousMonthlyReport: this.previousMonthlyReport,
+        previousWeeklyReport: this.previousWeeklyReport,
+      },
       null,
       2,
     )
@@ -163,6 +189,8 @@ export class EcommerceStore {
       orders: Order[]
       monthlyReport?: MonthlyReport | null
       weeklyReport?: WeeklyReport | null
+      previousMonthlyReport?: MonthlyReport | null
+      previousWeeklyReport?: WeeklyReport | null
     }
     if (!Array.isArray(data.products) || !Array.isArray(data.orders)) {
       throw new Error('备份文件格式不正确：缺少 products/orders 数组')
@@ -171,6 +199,8 @@ export class EcommerceStore {
     this.orders = data.orders
     this.monthlyReport = data.monthlyReport ?? null
     this.weeklyReport = data.weeklyReport ?? null
+    this.previousMonthlyReport = data.previousMonthlyReport ?? null
+    this.previousWeeklyReport = data.previousWeeklyReport ?? null
     this.dataMode = 'imported'
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
@@ -300,16 +330,23 @@ export class EcommerceStore {
 
   // ─────────────────────────── 月度复盘 ───────────────────────────
 
-  /** 写入月度复盘（来自 JSON 完整月报导入） */
+  /** 写入月度复盘（来自 JSON 完整月报导入）。新周期写入时归档上一期。 */
   setMonthlyReport(report: MonthlyReport | null): void {
-    this.monthlyReport = report
+    this.adoptMonthly(report)
     this.reportRevision += 1
     this.save()
   }
 
-  /** 合并月度复盘章节（「月度表」4 份文件分次导入，按展示形式/利润表覆盖对应章节） */
+  /** 合并月度复盘章节（「月度表」4 份文件分次导入，按展示形式/利润表覆盖对应章节）。
+   *  合并结果周期与当前不同（新周期文件先到）时归档上一期，后续同周期文件继续补章节。 */
   mergeMonthlyReport(part: MonthlyParseResult): void {
-    this.monthlyReport = mergeMonthly(this.monthlyReport, part)
+    // ⚠ mergeMonthly 就地清空旧周期章节，归档必须先深拷贝再合并，否则上一期章节被抹掉
+    const cur = this.monthlyReport
+    if (part.period && cur !== null && cur.period !== '' && cur.period !== part.period) {
+      this.previousMonthlyReport = structuredClone(cur)
+    }
+    const incoming = mergeMonthly(this.monthlyReport, part)
+    this.monthlyReport = incoming
     this.reportRevision += 1
     this.save()
   }
@@ -325,9 +362,27 @@ export class EcommerceStore {
       report = mergeMonthly(report, part)
     }
     if (report === null) return
+    // 归档上一期：当前已有其它周期月报（导入新一期）才归档；同周期补数据（同一期重复导入）不归档
+    if (this.monthlyReport !== null && this.monthlyReport.period !== report.period) {
+      this.previousMonthlyReport = this.monthlyReport
+    }
     this.monthlyReport = report
     this.reportRevision += 1
     this.save()
+  }
+
+  /** 统一采纳月报：周期与当前不同时先把当前归档为上一期，再替换 */
+  private adoptMonthly(report: MonthlyReport | null): void {
+    if (
+      report !== null &&
+      report.period &&
+      this.monthlyReport !== null &&
+      this.monthlyReport.period !== '' &&
+      this.monthlyReport.period !== report.period
+    ) {
+      this.previousMonthlyReport = this.monthlyReport
+    }
+    this.monthlyReport = report
   }
 
   /** 读取月度复盘（无导入记录返回 null） */
@@ -335,9 +390,21 @@ export class EcommerceStore {
     return this.monthlyReport
   }
 
-  /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节） */
+  /** 读取上一期月度复盘（未连续导入第二期返回 null）：供数据对比用 */
+  getPreviousMonthlyReport(): MonthlyReport | null {
+    return this.previousMonthlyReport
+  }
+
+  /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节）。
+   *  新周期文件先到时归档上一期，后续同周期文件继续补章节（不重复归档）。 */
   mergeWeeklyReport(part: import('./weekly-report.ts').WeeklyParseResult): void {
-    this.weeklyReport = mergeWeekly(this.weeklyReport, part)
+    // ⚠ mergeWeekly 就地清空旧周期章节，归档必须先深拷贝再合并，否则上一期章节被抹掉
+    const cur = this.weeklyReport
+    if (part.period && cur !== null && cur.period !== '' && cur.period !== part.period) {
+      this.previousWeeklyReport = structuredClone(cur)
+    }
+    const incoming = mergeWeekly(this.weeklyReport, part)
+    this.weeklyReport = incoming
     this.reportRevision += 1
     this.save()
   }
@@ -345,6 +412,11 @@ export class EcommerceStore {
   /** 读取周复盘（无导入记录返回 null） */
   getWeeklyReport(): WeeklyReport | null {
     return this.weeklyReport
+  }
+
+  /** 读取上一期周复盘（未连续导入第二期返回 null）：供数据对比用 */
+  getPreviousWeeklyReport(): WeeklyReport | null {
+    return this.previousWeeklyReport
   }
 
   /** 报表数据版本号（单调递增），供 /ecommerce-api/*-report 接口返回给前端做变更检测 */

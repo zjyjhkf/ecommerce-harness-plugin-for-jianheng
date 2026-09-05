@@ -29,6 +29,7 @@ import { registerExcelTools } from './tools/excel.ts'
 import { registerQaTool } from './tools/qa.ts'
 import { registerExportCsvTool } from './tools/export-csv.ts'
 import { registerModeTools } from './tools/mode.ts'
+import { registerCompareTools } from './tools/compare.ts'
 import { registerPluginSkills } from './skills.ts'
 import { qaRuleDescription } from './qa-engine.ts'
 
@@ -74,6 +75,7 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
   registerQaTool(ctx, store)
   registerExportCsvTool(ctx, store)
   registerModeTools(ctx, store)
+  registerCompareTools(ctx, store)
 
   // 技能层：把仓库 skills/*/SKILL.md 注册进 dsh 技能目录（/name 可调用 + 模型可自动调用）。
   // ctx.skills 为可选服务，缺失（老版本 dsh）时跳过，不影响插件其余功能。

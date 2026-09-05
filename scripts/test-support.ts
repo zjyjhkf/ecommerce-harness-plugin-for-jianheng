@@ -88,8 +88,12 @@ function scaleCell(v: unknown, factor: number): unknown {
   return String(val) + (m[2] ? '%' : '')
 }
 
-/** 月度/周度「商品排名导出」xlsx：改 日期/店铺 元数据 + 名称加后缀 + 数值缩放 */
-export function mutateRankBuffer(buf: Buffer, g: GroupOpts): Buffer {
+/**
+ * 月度/周度「商品排名导出」xlsx：改 日期/店铺 元数据 + 名称加后缀 + 数值缩放。
+ * keepIds=true（数据对比测试用）：保留身份列（链接ID/链接编码/货品编号/商家编码）不变，
+ * 只缩放数值列——同对象两期可比；缺省 false 沿用全列缩放（隔离测试用）。
+ */
+export function mutateRankBuffer(buf: Buffer, g: GroupOpts, keepIds = false): Buffer {
   const wb = xlsx.read(buf, { type: 'buffer', cellDates: true })
   const name = wb.SheetNames[0]
   const ws = wb.Sheets[name]
@@ -106,9 +110,11 @@ export function mutateRankBuffer(buf: Buffer, g: GroupOpts): Buffer {
   }
   const head = rows[subIdx - 1] ?? []
   const suffixCols = new Set<number>()
+  const keepCols = new Set<number>() // keepIds 下保留原值的身份列（避免数值 ID 被缩放破坏可比键）
   for (let j = 0; j < head.length; j++) {
     const h = String(head[j] ?? '').trim()
     if (['店铺', '链接名称', '系统货品名称', '系统规格名称'].includes(h)) suffixCols.add(j)
+    else if (keepIds && /链接ID|链接编码|商家编码|货品编号|编码|编号/.test(h)) keepCols.add(j)
   }
   for (let r = subIdx + 1; r < rows.length; r++) {
     const row = rows[r]
@@ -118,7 +124,7 @@ export function mutateRankBuffer(buf: Buffer, g: GroupOpts): Buffer {
       if (v !== undefined && String(v).trim() !== '') row[j] = String(v) + g.suffix
     }
     for (let j = 0; j < row.length; j++) {
-      if (suffixCols.has(j)) continue
+      if (suffixCols.has(j) || keepCols.has(j)) continue
       row[j] = scaleCell(row[j], g.factor)
     }
   }
@@ -126,8 +132,8 @@ export function mutateRankBuffer(buf: Buffer, g: GroupOpts): Buffer {
   return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
-/** 利润表 xlsx：店铺名加后缀 + 全部数值缩放 */
-export function mutateProfitBuffer(buf: Buffer, g: GroupOpts): Buffer {
+/** 利润表 xlsx：店铺名加后缀 + 全部数值缩放。keepIds=true：保留店铺名（对比测试用），只缩放数值 */
+export function mutateProfitBuffer(buf: Buffer, g: GroupOpts, keepIds = false): Buffer {
   const wb = xlsx.read(buf, { type: 'buffer', cellDates: true })
   const name = wb.SheetNames.find((n) => String(n).includes('利润表')) ?? wb.SheetNames[0]
   const ws = wb.Sheets[name]
@@ -135,9 +141,11 @@ export function mutateProfitBuffer(buf: Buffer, g: GroupOpts): Buffer {
   const headerIdx = rows.findIndex((r) => String(r[0] ?? '').trim() === '核算项目名称')
   if (headerIdx < 0) throw new Error('利润表未找到「核算项目名称」表头')
   const header = rows[headerIdx]
-  for (let c = 2; c < header.length; c++) {
-    const s = String(header[c] ?? '').trim()
-    if (s && s !== '合计') header[c] = s + g.suffix
+  if (!keepIds) {
+    for (let c = 2; c < header.length; c++) {
+      const s = String(header[c] ?? '').trim()
+      if (s && s !== '合计') header[c] = s + g.suffix
+    }
   }
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r]
@@ -148,8 +156,8 @@ export function mutateProfitBuffer(buf: Buffer, g: GroupOpts): Buffer {
   return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
-export function mutateMonthly(buf: Buffer, key: 'links' | 'products' | 'skus' | 'profit', g: GroupOpts): Buffer {
-  return key === 'profit' ? mutateProfitBuffer(buf, g) : mutateRankBuffer(buf, g)
+export function mutateMonthly(buf: Buffer, key: 'links' | 'products' | 'skus' | 'profit', g: GroupOpts, keepIds = false): Buffer {
+  return key === 'profit' ? mutateProfitBuffer(buf, g, keepIds) : mutateRankBuffer(buf, g, keepIds)
 }
 
 /* ───────────────────────── 临时 Store ───────────────────────── */
@@ -203,6 +211,7 @@ export function renderPanels(
   weeklyReport: unknown,
   cycle: string,
   views: string[],
+  compare?: unknown,
 ): RenderResult {
   const html = readFileSync(SRC_DC, 'utf8')
   // 文件含两个 <script>：echarts 库 + 应用脚本；取最后一个（应用脚本）
@@ -242,7 +251,7 @@ export function renderPanels(
     },
     graphic: { LinearGradient: class {} },
   }
-  const bridge: Record<string, unknown> = { monthlyReport, weeklyReport, cycle }
+  const bridge: Record<string, unknown> = { monthlyReport, weeklyReport, cycle, compare }
   const ctx = createContext({
     document: documentShim,
     window: { parent: {}, addEventListener: () => {}, __ECOM_API_BASE__: '' },
@@ -266,7 +275,7 @@ export function renderPanels(
   }
   // 注入模拟数据（APP_DATA/cycle 为词法 const/let，不能直接写在 ctx 上，需经桥对象在上下文内赋值）
   // refreshMonthLabels() 对应真实 loadRealData 拉取报告后的月份标签刷新（否则 ML_CURR 停留在默认「7月」）
-  runInContext('APP_DATA.monthlyReport = __bridge.monthlyReport; APP_DATA.weeklyReport = __bridge.weeklyReport; cycle = __bridge.cycle; weeklyTab = "platformLinks"; refreshMonthLabels();', ctx)
+  runInContext('APP_DATA.monthlyReport = __bridge.monthlyReport; APP_DATA.weeklyReport = __bridge.weeklyReport; cycle = __bridge.cycle; weeklyTab = "platformLinks"; comparePayload = __bridge.compare || null; compareSelCycle = __bridge.cycle; refreshMonthLabels();', ctx)
   const timings: Record<string, number> = {}
   let firstError: Error | null = null
   for (const v of views) {

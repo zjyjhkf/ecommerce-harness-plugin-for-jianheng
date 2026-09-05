@@ -6916,6 +6916,11 @@ var EcommerceStore = class {
   monthlyReport = null;
   /** 周复盘（「周数据」三份「商品排名导出」导入，按展示形式合并）：7 天「周复盘」视图数据源 */
   weeklyReport = null;
+  /** 上一期月度复盘（导入新周期时归档）：供「数据对比」用（上期 vs 本期）。随持久化保存/恢复，
+   *  插件重启或重载后归档仍在，保证「两次导入之间进程被重建」也能继续对比。 */
+  previousMonthlyReport = null;
+  /** 上一期周复盘（导入新周期时归档）：同上 */
+  previousWeeklyReport = null;
   /** 报表数据单调递增版本号：任一报表（月/周）导入或替换即 +1，供前端判断「数据是否真正变化」，
    *  避免仅靠行数/周期这类粗粒度指纹漏掉「数值变化但行数相同」的插入更新。 */
   reportRevision = 0;
@@ -6933,6 +6938,11 @@ var EcommerceStore = class {
         if (Array.isArray(data.products) && Array.isArray(data.orders)) {
           this.products = data.products;
           this.orders = data.orders;
+          this.monthlyReport = data.monthlyReport ?? null;
+          this.weeklyReport = data.weeklyReport ?? null;
+          this.previousMonthlyReport = data.previousMonthlyReport ?? null;
+          this.previousWeeklyReport = data.previousWeeklyReport ?? null;
+          if (Number.isFinite(data.reportRevision)) this.reportRevision = Number(data.reportRevision);
           const imported = this.adapter.name === "rest" ? "rest" : data.meta?.dataMode === "imported" ? "imported" : "demo";
           this.dataMode = imported;
           this.productsSource = imported === "demo" ? "demo" : "imported";
@@ -6965,6 +6975,11 @@ var EcommerceStore = class {
           {
             products: this.products,
             orders: this.orders,
+            monthlyReport: this.monthlyReport,
+            weeklyReport: this.weeklyReport,
+            previousMonthlyReport: this.previousMonthlyReport,
+            previousWeeklyReport: this.previousWeeklyReport,
+            reportRevision: this.reportRevision,
             meta: { dataMode: this.dataMode, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
           },
           null,
@@ -6979,7 +6994,14 @@ var EcommerceStore = class {
   /** 导出 JSON 备份 */
   exportBackup() {
     return JSON.stringify(
-      { products: this.products, orders: this.orders, monthlyReport: this.monthlyReport, weeklyReport: this.weeklyReport },
+      {
+        products: this.products,
+        orders: this.orders,
+        monthlyReport: this.monthlyReport,
+        weeklyReport: this.weeklyReport,
+        previousMonthlyReport: this.previousMonthlyReport,
+        previousWeeklyReport: this.previousWeeklyReport
+      },
       null,
       2
     );
@@ -6994,6 +7016,8 @@ var EcommerceStore = class {
     this.orders = data.orders;
     this.monthlyReport = data.monthlyReport ?? null;
     this.weeklyReport = data.weeklyReport ?? null;
+    this.previousMonthlyReport = data.previousMonthlyReport ?? null;
+    this.previousWeeklyReport = data.previousWeeklyReport ?? null;
     this.dataMode = "imported";
     this.productsSource = "imported";
     this.ordersSource = "imported";
@@ -7112,15 +7136,21 @@ var EcommerceStore = class {
     return { products: this.products.length, orders: this.orders.length, derivedProducts };
   }
   // ─────────────────────────── 月度复盘 ───────────────────────────
-  /** 写入月度复盘（来自 JSON 完整月报导入） */
+  /** 写入月度复盘（来自 JSON 完整月报导入）。新周期写入时归档上一期。 */
   setMonthlyReport(report) {
-    this.monthlyReport = report;
+    this.adoptMonthly(report);
     this.reportRevision += 1;
     this.save();
   }
-  /** 合并月度复盘章节（「月度表」4 份文件分次导入，按展示形式/利润表覆盖对应章节） */
+  /** 合并月度复盘章节（「月度表」4 份文件分次导入，按展示形式/利润表覆盖对应章节）。
+   *  合并结果周期与当前不同（新周期文件先到）时归档上一期，后续同周期文件继续补章节。 */
   mergeMonthlyReport(part) {
-    this.monthlyReport = mergeMonthly(this.monthlyReport, part);
+    const cur = this.monthlyReport;
+    if (part.period && cur !== null && cur.period !== "" && cur.period !== part.period) {
+      this.previousMonthlyReport = structuredClone(cur);
+    }
+    const incoming = mergeMonthly(this.monthlyReport, part);
+    this.monthlyReport = incoming;
     this.reportRevision += 1;
     this.save();
   }
@@ -7135,23 +7165,47 @@ var EcommerceStore = class {
       report = mergeMonthly(report, part);
     }
     if (report === null) return;
+    if (this.monthlyReport !== null && this.monthlyReport.period !== report.period) {
+      this.previousMonthlyReport = this.monthlyReport;
+    }
     this.monthlyReport = report;
     this.reportRevision += 1;
     this.save();
+  }
+  /** 统一采纳月报：周期与当前不同时先把当前归档为上一期，再替换 */
+  adoptMonthly(report) {
+    if (report !== null && report.period && this.monthlyReport !== null && this.monthlyReport.period !== "" && this.monthlyReport.period !== report.period) {
+      this.previousMonthlyReport = this.monthlyReport;
+    }
+    this.monthlyReport = report;
   }
   /** 读取月度复盘（无导入记录返回 null） */
   getMonthlyReport() {
     return this.monthlyReport;
   }
-  /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节） */
+  /** 读取上一期月度复盘（未连续导入第二期返回 null）：供数据对比用 */
+  getPreviousMonthlyReport() {
+    return this.previousMonthlyReport;
+  }
+  /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节）。
+   *  新周期文件先到时归档上一期，后续同周期文件继续补章节（不重复归档）。 */
   mergeWeeklyReport(part) {
-    this.weeklyReport = mergeWeekly(this.weeklyReport, part);
+    const cur = this.weeklyReport;
+    if (part.period && cur !== null && cur.period !== "" && cur.period !== part.period) {
+      this.previousWeeklyReport = structuredClone(cur);
+    }
+    const incoming = mergeWeekly(this.weeklyReport, part);
+    this.weeklyReport = incoming;
     this.reportRevision += 1;
     this.save();
   }
   /** 读取周复盘（无导入记录返回 null） */
   getWeeklyReport() {
     return this.weeklyReport;
+  }
+  /** 读取上一期周复盘（未连续导入第二期返回 null）：供数据对比用 */
+  getPreviousWeeklyReport() {
+    return this.previousWeeklyReport;
   }
   /** 报表数据版本号（单调递增），供 /ecommerce-api/*-report 接口返回给前端做变更检测 */
   getReportRevision() {
@@ -9080,19 +9134,19 @@ function buildEvaluationSummary(cycle, monthlyReport, weeklyReport) {
   };
 }
 function ruleBasedEvaluation(s) {
-  const periodLabel = s.cycle === "7d" ? "\u672C\u5468" : "\u672C\u6708";
+  const periodLabel2 = s.cycle === "7d" ? "\u672C\u5468" : "\u672C\u6708";
   const issues = [];
   if (s.feeRatio > 20) issues.push("\u63A8\u5E7F\u8D39\u6BD4\u504F\u9AD8");
   if (s.refundRate > 10) issues.push("\u9000\u6B3E\u7387\u504F\u9AD8");
   if (s.topShare > 40) issues.push("\u5934\u90E8\u5546\u54C1\u5360\u6BD4\u8FC7\u9AD8");
   const verdict = issues.length ? issues.join("\u3001") + "\uFF0C\u5EFA\u8BAE\u4F18\u5316\u5BF9\u5E94\u73AF\u8282" : "\u9500\u552E\u4E0E\u8D39\u6548\u6574\u4F53\u5E73\u7A33";
-  const text = `${periodLabel}\u9500\u552E\u989D${fmtMoney(s.totalSales)}\uFF0C\u5728\u9500\u5546\u54C1${s.itemCount}\u4E2A\uFF0C\u8D39\u6BD4${s.feeRatio.toFixed(1)}%\uFF0C\u9000\u6B3E\u7387${s.refundRate.toFixed(1)}%\uFF1B${verdict}\u3002`;
+  const text = `${periodLabel2}\u9500\u552E\u989D${fmtMoney(s.totalSales)}\uFF0C\u5728\u9500\u5546\u54C1${s.itemCount}\u4E2A\uFF0C\u8D39\u6BD4${s.feeRatio.toFixed(1)}%\uFF0C\u9000\u6B3E\u7387${s.refundRate.toFixed(1)}%\uFF1B${verdict}\u3002`;
   return text.length > 80 ? text.slice(0, 80) : text;
 }
 function evaluationPrompt(s) {
-  const periodLabel = s.cycle === "7d" ? "\u672C\u5468" : "\u672C\u6708";
+  const periodLabel2 = s.cycle === "7d" ? "\u672C\u5468" : "\u672C\u6708";
   return [
-    `\u8BF7\u57FA\u4E8E\u4EE5\u4E0B${periodLabel}\u7535\u5546\u7ECF\u8425\u6570\u636E\uFF0C\u4ECE\u300C\u9500\u552E\u989D\u3001\u4EA7\u54C1\u3001\u63A8\u5E7F\u3001\u9000\u6B3E\u300D\u56DB\u4E2A\u89D2\u5EA6\u505A\u4E00\u53E5\u603B\u4F53\u6570\u636E\u8BC4\u4EF7\u3002`,
+    `\u8BF7\u57FA\u4E8E\u4EE5\u4E0B${periodLabel2}\u7535\u5546\u7ECF\u8425\u6570\u636E\uFF0C\u4ECE\u300C\u9500\u552E\u989D\u3001\u4EA7\u54C1\u3001\u63A8\u5E7F\u3001\u9000\u6B3E\u300D\u56DB\u4E2A\u89D2\u5EA6\u505A\u4E00\u53E5\u603B\u4F53\u6570\u636E\u8BC4\u4EF7\u3002`,
     `- \u5468\u671F\uFF1A${s.period}`,
     `- \u9500\u552E\u989D\uFF1A${fmtMoney(s.totalSales)}\uFF08\u51C0\u9500 ${fmtMoney(s.totalNet)}\uFF09`,
     `- \u4EA7\u54C1\uFF1A\u5728\u9500\u5546\u54C1 ${s.itemCount} \u4E2A\uFF0C\u5934\u90E8\u5546\u54C1\u300C${s.topItem}\u300D\u51C0\u9500\u5360\u6BD4 ${s.topShare.toFixed(1)}%`,
@@ -9140,6 +9194,319 @@ async function callLlmForEvaluation(ctx, prompt) {
     console.error("[ecommerce-analyst] AI \u6570\u636E\u8BC4\u4EF7\u751F\u6210\u5931\u8D25\uFF1A", err);
     return null;
   }
+}
+
+// src/compare.ts
+var COMPARE_KIND_LABELS = {
+  platformLinks: "\u5E73\u53F0\u8D27\u54C1\uFF08\u94FE\u63A5\uFF09",
+  systemProducts: "\u7CFB\u7EDF\u8D27\u54C1",
+  systemSkus: "\u7CFB\u7EDF\u89C4\u683C",
+  storeProfit: "\u5E97\u94FA\u5229\u6DA6"
+};
+var COMPARE_KIND_ORDER = [
+  "platformLinks",
+  "systemProducts",
+  "systemSkus",
+  "storeProfit"
+];
+var metric = (id, label, unit, wavg = false, weight = "sales") => ({
+  id,
+  label,
+  unit,
+  wavg,
+  weight
+});
+var COMPARE_METRICS = {
+  platformLinks: [
+    metric("sales", "\u9500\u552E\u989D", "money"),
+    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
+    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
+    metric("salesCount", "\u9500\u552E\u4EF6\u6570", "number"),
+    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
+    metric("refundAmount", "\u9000\u6B3E\u91D1\u989D", "money"),
+    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
+    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
+    metric("views", "\u6D4F\u89C8\u91CF", "number"),
+    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "salesCount")
+  ],
+  systemProducts: [
+    metric("sales", "\u9500\u552E\u989D", "money"),
+    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
+    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
+    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
+    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
+    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
+    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "sales")
+  ],
+  systemSkus: [
+    metric("sales", "\u9500\u552E\u989D", "money"),
+    metric("salesCount", "\u9500\u552E\u4EF6\u6570", "number"),
+    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
+    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
+    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
+    metric("refundAmount", "\u9000\u6B3E\u91D1\u989D", "money"),
+    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
+    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
+    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "salesCount")
+  ],
+  storeProfit: [
+    metric("sales", "\u9500\u552E\u6536\u5165", "money"),
+    metric("positiveSales", "\u6B63\u5411\u9500\u552E\u6536\u5165", "money"),
+    metric("refund", "\u9000\u6B3E", "money"),
+    metric("grossProfit", "\u6BDB\u5229", "money"),
+    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
+    metric("promoCost", "\u8FD0\u8425\u63A8\u5E7F\u8D39", "money"),
+    metric("logisticsCost", "\u4ED3\u5E93\u7269\u6D41\u8D39", "money"),
+    metric("feeRatio", "\u8D39\u6BD4", "pct", true)
+  ]
+};
+function listCompareMetrics(kind) {
+  return COMPARE_METRICS[kind] ?? [];
+}
+function compareKindLabel(kind) {
+  return COMPARE_KIND_LABELS[kind] ?? kind;
+}
+function chapterRows(report, kind) {
+  if (report === null || typeof report !== "object") return void 0;
+  if (kind === "storeProfit") {
+    return report.storeProfit;
+  }
+  const arr = report[kind];
+  return Array.isArray(arr) ? arr : void 0;
+}
+function keyOf(kind, row) {
+  const s = (v) => String(v ?? "").trim();
+  if (kind === "platformLinks") {
+    const id = s(row.linkId);
+    if (id) return "id:" + id;
+    return "nm:" + s(row.linkName) + "|" + s(row.shop);
+  }
+  if (kind === "systemProducts") {
+    const code = s(row.code);
+    if (code) return "code:" + code;
+    return "nm:" + s(row.name);
+  }
+  if (kind === "systemSkus") {
+    const code = s(row.code);
+    if (code) return "code:" + code;
+    return "nm:" + s(row.name) + "|" + s(row.specName);
+  }
+  return "nm:" + s(row.store);
+}
+function labelOf(kind, row) {
+  const s = (v) => String(v ?? "").trim();
+  if (kind === "platformLinks") return s(row.linkName) || s(row.linkId);
+  if (kind === "systemProducts") return s(row.name);
+  if (kind === "systemSkus") return s(row.name) ? s(row.name) + (s(row.specName) ? " \xB7 " + s(row.specName) : "") : s(row.specName);
+  return s(row.store);
+}
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function normalize(kind, rows, def) {
+  const out = /* @__PURE__ */ new Map();
+  for (const raw of rows ?? []) {
+    if (raw === null || typeof raw !== "object") continue;
+    const row = raw;
+    const present = (...fields) => fields.some((f) => String(f ?? "").trim() !== "");
+    if (kind === "platformLinks" && !present(row.linkId, row.linkName, row.shop)) continue;
+    if (kind === "systemProducts" && !present(row.code, row.name)) continue;
+    if (kind === "systemSkus" && !present(row.code, row.name, row.specName)) continue;
+    if (kind === "storeProfit" && !present(row.store)) continue;
+    const key = keyOf(kind, row);
+    const value = num(row[def.id]);
+    const weightField = def.weight ?? "sales";
+    const weight = num(row[weightField]);
+    const cur = out.get(key);
+    if (cur) {
+      cur.value += value;
+      cur.weight += weight;
+    } else {
+      out.set(key, { key, label: labelOf(kind, row) || key, value, weight });
+    }
+  }
+  return [...out.values()];
+}
+function aggregate(def, entries) {
+  if (def.wavg) {
+    const w = entries.reduce((s, e) => s + e.weight, 0);
+    if (w <= 0) return 0;
+    return entries.reduce((s, e) => s + e.value * e.weight, 0) / w;
+  }
+  return entries.reduce((s, e) => s + e.value, 0);
+}
+function rankOf(values) {
+  const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+  const rank = new Array(values.length);
+  order.forEach((o, pos) => {
+    rank[o.i] = pos + 1;
+  });
+  return rank;
+}
+function buildCompare(input) {
+  const { cycle, kind, metricId, prevReport, currReport } = input;
+  const defs = COMPARE_METRICS[kind];
+  if (!defs) return null;
+  const def = defs.find((m) => m.id === metricId) ?? defs[0];
+  if (!def) return null;
+  const prevRows = chapterRows(prevReport, kind);
+  const currRows = chapterRows(currReport, kind);
+  if (!Array.isArray(prevRows) || !Array.isArray(currRows)) return null;
+  if (prevRows.length === 0 && currRows.length === 0) return null;
+  const prevEntries = normalize(kind, prevRows, def);
+  const currEntries = normalize(kind, currRows, def);
+  if (prevEntries.length === 0 && currEntries.length === 0) return null;
+  const prevMap = new Map(prevEntries.map((e) => [e.key, e]));
+  const currMap = new Map(currEntries.map((e) => [e.key, e]));
+  const rankOfEntries = (entries) => {
+    const values = entries.map((e) => e.value);
+    const ranks = rankOf(values);
+    const map = /* @__PURE__ */ new Map();
+    entries.forEach((e, i) => map.set(e.key, ranks[i]));
+    return map;
+  };
+  const prevRank = rankOfEntries(prevEntries);
+  const currRank = rankOfEntries(currEntries);
+  const rows = [];
+  let matched = 0;
+  let added = 0;
+  let removed = 0;
+  let rankUp = 0;
+  let rankDown = 0;
+  const allKeys = /* @__PURE__ */ new Set([...prevMap.keys(), ...currMap.keys()]);
+  for (const key of allKeys) {
+    const p = prevMap.get(key);
+    const c = currMap.get(key);
+    let state;
+    let prevV;
+    let currV;
+    if (p && c) {
+      state = "shared";
+      matched++;
+      prevV = p.value;
+      currV = c.value;
+      const rp = prevRank.get(key);
+      const rc = currRank.get(key);
+      if (rp !== void 0 && rc !== void 0 && rp !== rc) {
+        if (rc < rp) rankUp++;
+        else rankDown++;
+      }
+    } else if (c) {
+      state = "added";
+      added++;
+      prevV = null;
+      currV = c.value;
+    } else {
+      state = "removed";
+      removed++;
+      prevV = p.value;
+      currV = null;
+    }
+    const a = prevV ?? 0;
+    const b = currV ?? 0;
+    const delta2 = b - a;
+    const deltaPct2 = def.unit === "pct" || a === 0 ? null : delta2 / a * 100;
+    rows.push({
+      key,
+      label: (p ?? c).label,
+      prev: prevV,
+      curr: currV,
+      delta: delta2,
+      deltaPct: deltaPct2,
+      rankPrev: p ? prevRank.get(key) ?? null : null,
+      rankCurr: c ? currRank.get(key) ?? null : null,
+      rankShift: p && c ? (prevRank.get(key) ?? 0) - (currRank.get(key) ?? 0) : null,
+      state
+    });
+  }
+  const prevTotal = aggregate(def, prevEntries);
+  const currTotal = aggregate(def, currEntries);
+  const delta = currTotal - prevTotal;
+  const deltaPct = def.unit === "pct" || prevTotal === 0 ? null : delta / prevTotal * 100;
+  const limit = Math.max(1, Math.min(input.limit ?? 100, 1e3));
+  const sorted = rows.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta)).slice(0, limit);
+  const prevPeriod = periodLabel(prevReport);
+  const currPeriod = periodLabel(currReport);
+  return {
+    cycle,
+    kind,
+    kindLabel: compareKindLabel(kind),
+    metric: def.id,
+    metricLabel: def.label,
+    unit: def.unit,
+    prevPeriod,
+    currPeriod,
+    summary: { prevTotal, currTotal, delta, deltaPct, matched, added, removed, rankUp, rankDown },
+    rows: sorted
+  };
+}
+function periodLabel(report) {
+  if (report === null || typeof report !== "object") return "";
+  const rep = report;
+  return String(rep.period ?? rep.month ?? "");
+}
+function pickCompareKind(cycle, prevReport, currReport) {
+  const kinds = cycle === "7d" ? COMPARE_KIND_ORDER.filter((k) => k !== "storeProfit") : COMPARE_KIND_ORDER;
+  for (const k of kinds) {
+    const p = chapterRows(prevReport, k);
+    const c = chapterRows(currReport, k);
+    if (Array.isArray(p) && Array.isArray(c) && p.length > 0 && c.length > 0) return k;
+  }
+  for (const k of kinds) {
+    const p = chapterRows(prevReport, k);
+    const c = chapterRows(currReport, k);
+    if (Array.isArray(p) && p.length > 0 && Array.isArray(c) && c.length > 0) continue;
+    if (Array.isArray(p) && p.length > 0 || Array.isArray(c) && c.length > 0) return k;
+  }
+  return kinds[0];
+}
+function reportKindsAvail(cycle, prevReport, currReport) {
+  const kinds = cycle === "7d" ? COMPARE_KIND_ORDER.filter((k) => k !== "storeProfit") : COMPARE_KIND_ORDER;
+  return kinds.map((k) => {
+    const p = chapterRows(prevReport, k);
+    const c = chapterRows(currReport, k);
+    return {
+      kind: k,
+      label: compareKindLabel(k),
+      prev: Array.isArray(p) ? p.length : 0,
+      curr: Array.isArray(c) ? c.length : 0
+    };
+  });
+}
+
+// src/compare-payload.ts
+var CYCLES = ["30d", "7d"];
+var KINDS = ["platformLinks", "systemProducts", "systemSkus", "storeProfit"];
+function isCompareCycle(v) {
+  return CYCLES.indexOf(v) !== -1;
+}
+function isCompareKind(v) {
+  return KINDS.indexOf(v) !== -1;
+}
+function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
+  const prevReport = cycle === "7d" ? store.getPreviousWeeklyReport() : store.getPreviousMonthlyReport();
+  const currReport = cycle === "7d" ? store.getWeeklyReport() : store.getMonthlyReport();
+  const kinds = reportKindsAvail(cycle, prevReport, currReport);
+  const effectiveKind = kind !== void 0 && isCompareKind(kind) ? kind : pickCompareKind(cycle, prevReport, currReport);
+  const defs = listCompareMetrics(effectiveKind);
+  const def = defs.find((m) => m.id === metricId) ?? defs[0];
+  const result = buildCompare({
+    cycle,
+    kind: effectiveKind,
+    metricId: def ? def.id : "sales",
+    prevReport,
+    currReport,
+    limit
+  });
+  return {
+    hasPrev: prevReport !== null,
+    prevPeriod: prevReport && prevReport.period || "",
+    currPeriod: currReport && currReport.period || "",
+    kinds,
+    metrics: defs.map((m) => ({ id: m.id, label: m.label, unit: m.unit })),
+    result
+  };
 }
 
 // src/shop-api.ts
@@ -9420,6 +9787,16 @@ function registerShopApi(webServer, store, ctx = {}) {
           sendJson(res, 200, { ok: true, value: store.getWeeklyReport(), revision: store.getReportRevision() });
           return;
         }
+        if (pathname === "/ecommerce-api/compare") {
+          const rawCycle = String(query.get("cycle") ?? "30d");
+          const cycle = isCompareCycle(rawCycle) ? rawCycle : "30d";
+          const kind = query.get("kind") ?? void 0;
+          const metric2 = query.get("metric") ?? void 0;
+          const limit = Math.min(Math.max(Number(query.get("limit") ?? 100) || 100, 1), 1e3);
+          const payload = buildComparePayload(store, cycle, kind, metric2, limit);
+          sendJson(res, 200, { ok: true, value: payload, revision: store.getReportRevision() });
+          return;
+        }
         if (pathname === "/ecommerce-api/evaluation") {
           const cycle = query.get("cycle") === "7d" ? "7d" : "30d";
           const revision = store.getReportRevision();
@@ -9626,23 +10003,23 @@ function buildBrief(store) {
   const cats = store.categoryDistribution();
   const t = store.todayActions();
   const suggest = store.restockSuggestions();
-  const money2 = (v) => "\xA5" + v.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money3 = (v) => "\xA5" + v.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const lines = [];
   lines.push(`# \u{1F4CA} \u7535\u5546\u7ECF\u8425\u7B80\u62A5\uFF08${today}\uFF09`);
   lines.push("");
   lines.push("## \u4E00\u3001\u7ECF\u8425\u603B\u89C8");
   lines.push(
-    `- \u9500\u552E\u989D **${money2(o.revenue)}**\uFF08${o.orders} \u5355\uFF09\uFF5C \u5BA2\u5355\u4EF7 ${money2(o.avg_order_value)} \uFF5C \u9000\u6B3E\u7387 ${o.refund_rate}%`
+    `- \u9500\u552E\u989D **${money3(o.revenue)}**\uFF08${o.orders} \u5355\uFF09\uFF5C \u5BA2\u5355\u4EF7 ${money3(o.avg_order_value)} \uFF5C \u9000\u6B3E\u7387 ${o.refund_rate}%`
   );
   if (o.top_selling_sku) {
     lines.push(`- \u7545\u9500\u5546\u54C1\uFF1A${o.top_selling_sku}\uFF08${nameBySku.get(o.top_selling_sku) ?? o.top_selling_sku}\uFF09`);
   }
   lines.push("");
   lines.push("## \u4E8C\u3001\u9500\u552E\u6392\u884C TOP3");
-  top3.forEach((p, i) => lines.push(`${i + 1}. ${p.name}\uFF08${p.sku}\uFF09${money2(p.revenue)} / ${p.units} \u4EF6`));
+  top3.forEach((p, i) => lines.push(`${i + 1}. ${p.name}\uFF08${p.sku}\uFF09${money3(p.revenue)} / ${p.units} \u4EF6`));
   lines.push("");
   lines.push("## \u4E09\u3001\u7C7B\u76EE\u5360\u6BD4");
-  for (const c of cats) lines.push(`- ${c.category} ${c.ratio}%\uFF08${money2(c.revenue)}\uFF09`);
+  for (const c of cats) lines.push(`- ${c.category} ${c.ratio}%\uFF08${money3(c.revenue)}\uFF09`);
   lines.push("");
   lines.push("## \u56DB\u3001\u4ECA\u65E5\u5F85\u529E");
   lines.push(
@@ -9769,7 +10146,7 @@ ${renderErrors(v.errors)}`
 import { defineTool as defineTool7 } from "@deepseek-ai/dsh-tools";
 
 // src/qa-engine.ts
-function normalize(q) {
+function normalize2(q) {
   return q.toLowerCase().replace(/[\s，。？！、；：""''（）()【】《》,.?!;:'"\[\]{}|\/\\-—_]+/g, "");
 }
 var money = (v) => `\xA5${v.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -9881,7 +10258,7 @@ var RULES = [
   }
 ];
 function answerQuestion(store, question) {
-  const q = normalize(question);
+  const q = normalize2(question);
   if (!q) {
     return { matched: false, answer: "\u95EE\u9898\u4E3A\u7A7A\uFF0C\u8BF7\u63CF\u8FF0\u4F60\u60F3\u4E86\u89E3\u7684\u5E97\u94FA\u7ECF\u8425\u4FE1\u606F\u3002" };
   }
@@ -10109,6 +10486,92 @@ function modeText(mode) {
   }
 }
 
+// src/tools/compare.ts
+import { defineTool as defineTool10 } from "@deepseek-ai/dsh-tools";
+var money2 = (v) => "\xA5" + v.toLocaleString("zh-CN", { maximumFractionDigits: v >= 1e4 ? 0 : 2 });
+function fmtValue(v, unit) {
+  if (unit === "pct") return v.toFixed(2) + "%";
+  if (unit === "number") return Math.round(v).toLocaleString("zh-CN");
+  return money2(v);
+}
+function fmtDelta(result, delta) {
+  const base = (delta >= 0 ? "+" : "") + fmtValue(delta, result.unit);
+  const suffix = result.unit === "pct" ? "pp" : "";
+  return base + suffix;
+}
+function formatCompareText(result, limit = 20) {
+  const s = result.summary;
+  const L = [];
+  L.push(`\u3010${result.cycle === "7d" ? "\u5468" : "\u6708"}\u5EA6\u6570\u636E\u5BF9\u6BD4 \xB7 ${result.kindLabel}\xB7${result.metricLabel}\u3011`);
+  L.push(`\u4E0A\u671F ${result.prevPeriod || "\u2014"}\uFF08\u4E0A\u671F\uFF09  vs  \u672C\u671F ${result.currPeriod || "\u2014"}`);
+  L.push(`\u6574\u4F53\uFF1A${fmtValue(s.prevTotal, result.unit)} \u2192 ${fmtValue(s.currTotal, result.unit)}\uFF08${fmtDelta(result, s.delta)}${s.deltaPct !== null ? "\uFF0C" + (s.deltaPct >= 0 ? "+" : "") + s.deltaPct.toFixed(1) + "%" : ""}\uFF09`);
+  L.push(`\u5BF9\u6BD4\u5BF9\u8C61\uFF1A\u4E24\u671F\u90FD\u5728 ${s.matched} \xB7 \u672C\u671F\u65B0\u589E ${s.added} \xB7 \u672C\u671F\u9000\u51FA ${s.removed} \xB7 \u540D\u6B21\u4E0A\u5347/\u4E0B\u964D ${s.rankUp}/${s.rankDown}`);
+  const rows = result.rows.slice(0, limit);
+  const head = ["#", "\u540D\u79F0", "\u4E0A\u671F", "\u672C\u671F", "\u589E\u51CF", "\u540D\u6B21"].join(" | ");
+  L.push("\u660E\u7EC6\uFF08\u6309\u53D8\u5316\u5E45\u5EA6\u6392\u5E8F\uFF09\uFF1A");
+  L.push(head);
+  rows.forEach((r, i) => {
+    const name2 = r.label || r.key;
+    const pv = r.prev === null ? "\u2014" : fmtValue(r.prev, result.unit);
+    const cv = r.curr === null ? "\u2014" : fmtValue(r.curr, result.unit);
+    const dv = r.state === "added" ? "\u65B0\u4E0A\u699C" : r.state === "removed" ? "\u9000\u51FA" : fmtDelta(result, r.delta) + (r.deltaPct !== null ? " (" + (r.deltaPct >= 0 ? "+" : "") + r.deltaPct.toFixed(1) + "%)" : "");
+    const rk = r.state === "added" ? "\u65B0" : r.state === "removed" ? "\u9000" : (r.rankPrev ?? 0) + "\u2192" + (r.rankCurr ?? 0) + (r.rankShift && r.rankShift !== 0 ? r.rankShift > 0 ? " \u2191" + r.rankShift : " \u2193" + Math.abs(r.rankShift) : "");
+    L.push(`${i + 1} | ${name2} | ${pv} | ${cv} | ${dv} | ${rk}`);
+  });
+  if (s.removed > 0) L.push("\uFF08\u63D0\u793A\uFF1A\u300C\u9000\u51FA\u300D\u884C\u672C\u671F\u5DF2\u65E0\u9500\u552E/\u6392\u540D\uFF0C\u591A\u4E3A\u4E0B\u67B6\u6216\u65E0\u6210\u4EA4\uFF09");
+  L.push("\u8BF4\u660E\uFF1A\u6307\u6807\u6309" + (result.unit === "pct" ? "\u9500\u552E\u989D\u52A0\u6743" : "\u6C47\u603B") + "\u53E3\u5F84\u5BF9\u6BD4\uFF1B\u6570\u636E\u6765\u81EA\u5DF2\u5BFC\u5165 Excel \u7684\u4E24\u671F\u590D\u76D8\u3002");
+  return L.join("\n");
+}
+function registerCompareTools(ctx, store) {
+  ctx.tools.register(defineTool10({
+    name: "ecommerce_compare",
+    description: "\u6570\u636E\u5BF9\u6BD4\uFF08\u5BFC\u5165\u4E24\u671F\u540E\uFF09\uFF1A\u5BF9\u6BD4\u4E0A\u4E00\u671F\u4E0E\u672C\u671F\uFF08\u6708\u5EA630d \u6216 \u5468\u5EA67d\uFF09\u67D0\u5C42\u7EA7\uFF08\u94FE\u63A5/\u8D27\u54C1/SKU/\u5E97\u94FA\u5229\u6DA6\uFF09\u67D0\u6307\u6807\uFF08\u9500\u552E\u989D/\u51C0\u9500/\u6BDB\u5229/\u63A8\u5E7F\u8D39/\u9000\u6B3E\u7387/\u6BDB\u5229\u7387/\u5BA2\u5355\u4EF7\u7B49\uFF09\u7684\u589E\u51CF\u4E0E\u6392\u884C\u4F4D\u79FB\u3002\u9700\u5148\u8FDE\u7EED\u5BFC\u5165\u4E24\u4E2A\u5468\u671F\u624D\u4F1A\u751F\u6548\u3002",
+    parameters: {
+      cycle: { type: "string", enum: ["30d", "7d"], description: "\u5468\u671F\uFF1A30d=\u6708\u5EA6\u590D\u76D8 / 7d=\u5468\u590D\u76D8\uFF0C\u9ED8\u8BA4 30d" },
+      kind: {
+        type: "string",
+        enum: ["platformLinks", "systemProducts", "systemSkus", "storeProfit"],
+        description: "\u5BF9\u6BD4\u5C42\u7EA7\uFF1AplatformLinks=\u94FE\u63A5 / systemProducts=\u7CFB\u7EDF\u8D27\u54C1 / systemSkus=\u7CFB\u7EDF\u89C4\u683C / storeProfit=\u5E97\u94FA\u5229\u6DA6\uFF1B\u7F3A\u7701\u81EA\u52A8\u9009\u62E9"
+      },
+      metric: {
+        type: "string",
+        description: "\u5BF9\u6BD4\u6307\u6807\uFF1Asales/netSales/grossProfit/salesCount/grossMargin/refundAmount/refundRate/adSpend/avgPrice/views \u7B49\uFF0C\u9ED8\u8BA4\u9500\u552E\u989D"
+      },
+      limit: { type: "number", description: "\u8FD4\u56DE\u660E\u7EC6\u6761\u6570\uFF0C\u9ED8\u8BA4 20\uFF0C\u6700\u5927 100" }
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true, properties: {} },
+      render: (_args, value) => {
+        const v = value;
+        return [{
+          type: "text",
+          text: v.ok ? v.result ? formatCompareText(v.result) : v.message : v.message
+        }];
+      }
+    },
+    async execute(args) {
+      const cycle = args.cycle === "30d" || args.cycle === "7d" ? args.cycle : "30d";
+      const kind = args.kind !== void 0 && isCompareKind(args.kind) ? args.kind : void 0;
+      const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
+      const payload = buildComparePayload(store, cycle, kind, args.metric, limit);
+      const label = payload.result ? `${payload.result.kindLabel}\xB7${payload.result.metricLabel}` : "";
+      if (!payload.hasPrev) {
+        return asJsonObject({
+          ok: false,
+          message: "\u6682\u65E0\u4E0A\u4E00\u671F\u6570\u636E\u53EF\u5BF9\u6BD4\uFF1A\u8BF7\u5148\u5728\u300C\u5E97\u94FA\u5DE5\u4F5C\u53F0\u300D\u8FDE\u7EED\u5BFC\u5165\u4E24\u671F" + (cycle === "7d" ? "\u5468" : "\u6708") + "\u5EA6\u590D\u76D8 Excel\uFF08\u5F53\u524D\u671F\u4E0E\u4E0A\u4E00\u671F\uFF09\uFF0C\u518D\u8C03\u7528\u672C\u5DE5\u5177\u3002"
+        });
+      }
+      if (!payload.result || !payload.result.rows.length) {
+        return asJsonObject({
+          ok: false,
+          message: `\u5DF2\u5BFC\u5165\u4E24\u671F\uFF0C\u4F46\u6240\u9009\u5C42\u7EA7\u300C${label || "\u8BE5\u5C42\u7EA7"}\u300D\u5728\u5F53\u524D\u5468\u671F\u5185\u4E24\u4FA7\u7F3A\u5C11\u53EF\u6BD4\u6570\u636E\uFF08\u65B0\u589E/\u9000\u51FA\u5747\u65E0\uFF09\uFF0C\u8BF7\u6362\u4E00\u4E2A\u5C42\u7EA7\u6216\u5468\u671F\u518D\u8BD5\u3002`
+        });
+      }
+      return asJsonObject({ ok: true, ...payload.result });
+    }
+  }));
+}
+
 // src/skills.ts
 import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync } from "node:fs";
 import { dirname as dirname3, join as join2 } from "node:path";
@@ -10246,6 +10709,7 @@ async function apply(ctx, config = {}) {
   registerQaTool(ctx, store);
   registerExportCsvTool(ctx, store);
   registerModeTools(ctx, store);
+  registerCompareTools(ctx, store);
   const disposeSkills = registerPluginSkills(ctx);
   if (disposeSkills === void 0) {
     console.warn("[ecommerce-analyst] skills \u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u8DF3\u8FC7\u6280\u80FD\u76EE\u5F55\u6CE8\u518C\uFF08/name \u8C03\u7528\u4E0D\u53EF\u7528\uFF09");

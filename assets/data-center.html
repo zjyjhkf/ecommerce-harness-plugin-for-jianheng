@@ -93,6 +93,8 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
 .pt-btn{padding:6px 14px;border:1px solid var(--card-border);border-radius:6px;background:var(--card-bg);color:var(--muted);cursor:pointer;font-size:12px;transition:.2s}
 .pt-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .pt-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
+.pt-btn:disabled{opacity:.4;cursor:not-allowed}
+.pt-btn:disabled:hover{border-color:var(--card-border);color:var(--muted)}
 .pt-label{color:var(--muted);font-size:11px;align-self:center;margin-right:4px}
 /* 各视图内周期切换条隐藏：统一由顶部「周期」下拉控制（筛选仅周期+平台） */
 #salesPeriodToggle,#productPeriodToggle,#linkPeriodToggle,#newProductPeriodToggle,#promoPeriodToggle,#refundPeriodToggle,#reviewPeriodToggle{display:none}
@@ -246,6 +248,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
     <div class="menu-item" data-view="promo" onclick="switchView('promo')" style="--ic:#ffdcc5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> 推广分析</div>
     <div class="menu-item" data-view="refund" onclick="switchView('refund')" style="--ic:#ffd1d4"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 12 a7.2 7.2 0 1 1 2.1 5.1"/><path d="M4.3 7.6 V12.3 H9"/></svg> 退款分析</div>
     <div class="menu-item" data-view="review" onclick="switchView('review')" style="--ic:#e9dcff"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6.5 3 H14 L18 7 V21 H6.5 Z"/><path d="M14 3 V7 H18"/><path d="M9.5 12 H15 M9.5 15.5 H15"/></svg> <span id="reviewMenuLabel">周复盘</span></div>
+    <div class="menu-item" data-view="compare" onclick="switchView('compare')" style="--ic:#fff3bf"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 V12 M10 20 V5 M16 20 V9 M21.5 20 H2.5"/><path d="M12.5 5 L10 7.5 L12.5 10 L15 7.5 Z" fill="currentColor" stroke="none"/></svg> 数据对比</div>
   </div>
   <div class="sidebar-section" id="weeklyLevelNav" style="display:none;border-top:1px solid rgba(255,255,255,.12);padding:8px 0 2px;margin-top:6px">
     <div style="padding:0 16px 6px;font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.5px">周数据层级（下钻）</div>
@@ -420,6 +423,32 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
   <div class="view-content" id="view-review">
     <div class="period-toggle" id="reviewPeriodToggle"></div>
     <div id="reviewContent"></div>
+  </div>
+
+  <!-- ===== COMPARE VIEW (上期 vs 本期：连续导入两期后对比） ===== -->
+  <div class="view-content" id="view-compare">
+    <div class="insight-bar" id="compareInsight" style="display:none"></div>
+    <div class="period-toggle" id="compareKindToggle" style="display:none"></div>
+    <div class="period-toggle" id="compareMetricToggle" style="display:none"></div>
+    <div class="kpi-grid" id="compareKpi" style="display:none"></div>
+    <div class="chart-row full" id="compareChartRow" style="display:none">
+      <div class="chart-box">
+        <div class="chart-title" id="compareBarTitle">上期 vs 本期 对比</div>
+        <div class="chart-container" id="compareBar" style="height:320px"></div>
+      </div>
+    </div>
+    <div class="chart-row full" id="compareTableRow" style="display:none">
+      <div class="chart-box">
+        <div class="chart-title" id="compareTableTitle">对比明细（按变化幅度排序） <span class="badge" id="compareTableCount"></span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="compareTable">
+            <thead><tr id="compareThead"></tr></thead>
+            <tbody id="compareTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="compareEmpty"></div>
   </div>
 </div>
 
@@ -741,7 +770,7 @@ function switchView(view){
   document.querySelectorAll('.menu-item').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+view).classList.add('active');
   document.querySelector(`.menu-item[data-view="${view}"]`).classList.add('active');
-  const titles={sales:'经营总览',product:'产品概览',link:'商品明细',newproduct:'SKU 规格',promo:'推广分析',refund:'退款分析',review:(cycle==='7d'?'周复盘':'月复盘')};
+  const titles={sales:'经营总览',product:'产品概览',link:'商品明细',newproduct:'SKU 规格',promo:'推广分析',refund:'退款分析',review:(cycle==='7d'?'周复盘':'月复盘'),compare:'数据对比'};
   document.getElementById('pageTitle').textContent = titles[view] || '';
   setTimeout(()=>renderView(view),50);
 }
@@ -2549,6 +2578,194 @@ function renderOverviewBar(){
   ].join('');
   animateOvMoney(bar);
 }
+// ===================== 数据对比视图（上期 vs 本期：连续导入两期后） =====================
+// 服务端 /ecommerce-api/compare?cycle=30d|7d&kind&metric 返回 {value: ComparePayload}，
+// value = { hasPrev, prevPeriod, currPeriod, kinds:[{kind,label,prev,curr}], metrics:[{id,label,unit}], result }
+let compareKind = '';       // 选中层级（''=自动，服务端选两期都有的层）
+let compareMetric = '';     // 选中指标（''=该层级默认：销售额）
+let compareSelCycle = cycle; // 记住刚用的周期；切周期后重置层级/指标（周度无「店铺利润」）
+let comparePayload = null;  // 最近一次 /compare 返回的 value
+let compareLoading = false;
+let compareError = '';
+const CMP_KIND_NAME = { platformLinks:'商品（链接）', systemProducts:'系统货品', systemSkus:'系统规格', storeProfit:'店铺' };
+// 上升=变差的指标：增减颜色需反向（费率/退款类）；其余默认上升绿色
+const CMP_BAD_UP = { refundRate:1, refundAmount:1, refund:1, feeRatio:1, returnRate:1 };
+
+function cmpSigned(n){ return n > 0 ? '+' : (n < 0 ? '-' : ''); }
+function cmpMoneyStr(v){ const n = Number(v) || 0; const s = n < 0 ? '-' : ''; const a = Math.abs(n); return s + (a >= 10000 ? '¥' + (a / 10000).toFixed(1) + '万' : '¥' + Math.round(a).toLocaleString()); }
+function cmpVal(v, unit){ if (v === null || v === undefined || Number.isNaN(Number(v))) return '—'; const n = Number(v); if (unit === 'pct') return n.toFixed(2) + '%'; if (unit === 'number') return Math.round(n).toLocaleString(); return cmpMoneyStr(n); }
+function cmpDeltaStr(d, unit){ if (d === null || d === undefined || Number.isNaN(Number(d))) return '—'; const n = Number(d); const s = cmpSigned(n); const a = Math.abs(n); if (unit === 'pct') return s + a.toFixed(2) + 'pp'; if (unit === 'number') return s + Math.round(a).toLocaleString(); return s + cmpMoneyStr(a); }
+function cmpDeltaCls(metric, d){ if (!d) return ''; const bad = CMP_BAD_UP[metric] === 1; const up = d > 0; return (bad ? !up : up) ? 'trend-up' : 'trend-down'; }
+function cmpBarAxisVal(v, unit){
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '';
+  const n = Number(v), a = Math.abs(n), s = n < 0 ? '-' : '';
+  if (unit === 'pct') return n.toFixed(1) + '%';
+  if (unit === 'number') return Math.round(n).toLocaleString();
+  if (a >= 100000000) return s + (a / 100000000).toFixed(1) + '亿';
+  if (a >= 10000) return s + (a / 10000).toFixed(1) + '万';
+  return s + String(Math.round(a));
+}
+
+/** 切换层级：清空指标回到默认，立刻刷新（指标目录随层级变） */
+function switchCompareKind(kind){
+  compareKind = kind;
+  compareMetric = '';
+  compareRender();
+}
+function switchCompareMetric(metric){
+  compareMetric = metric;
+  compareRender();
+}
+/** 主入口（renderView 的 compare 分支）：重置周期状态 → 渲染 → 拉取最新 */
+async function renderCompare(){
+  if (compareSelCycle !== cycle) {
+    compareSelCycle = cycle;
+    compareKind = '';
+    compareMetric = '';
+    comparePayload = null;
+    compareError = '';
+  }
+  compareFrame();
+  compareRefresh();
+}
+/** 渲染当前缓存 payload（可能为 null → 加载/空态） */
+function compareFrame(){
+  renderCompareKindBar();
+  renderCompareMetricBar();
+  renderCompareBody();
+}
+/** 拉取服务端对比数据（按当前周期 + 层级 + 指标），完成后重渲染 */
+async function compareRefresh(){
+  if (compareLoading) return;
+  if (!__API_READY) { compareFrame(); return; }
+  compareLoading = true;
+  try {
+    const q = new URLSearchParams({ cycle: cycle, limit: '120' });
+    if (compareKind) q.set('kind', compareKind);
+    if (compareMetric) q.set('metric', compareMetric);
+    const j = await fetch(API_BASE + '/ecommerce-api/compare?' + q.toString(), { cache: 'no-store' }).then(r => r.json()).catch(() => undefined);
+    if (j && j.ok) comparePayload = j.value || null;
+    else if (j && j.value === null) comparePayload = null;
+    else compareError = '对比接口暂不可用，请稍后重试。';
+  } catch (e) { compareError = '对比数据拉取失败。'; } finally { compareLoading = false; compareFrame(); }
+}
+
+function renderCompareKindBar(){
+  const el = document.getElementById('compareKindToggle'); if (!el) return;
+  const payload = comparePayload;
+  if (!payload || !payload.kinds || !payload.kinds.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  const activeKind = compareKind || (payload.result ? payload.result.kind : '');
+  el.innerHTML = '<span class="pt-label">层级：</span>' + payload.kinds.map(function(k){
+    const both = k.prev > 0 && k.curr > 0;
+    const active = k.kind === activeKind;
+    const canClick = payload.hasPrev && both;
+    const inner = k.label + '<span style="opacity:.5;font-size:10px;margin-left:4px">' + k.prev + '→' + k.curr + '</span>';
+    return '<button class="pt-btn' + (active ? ' active' : '') + '"' + (canClick ? ' onclick="switchCompareKind(\'' + k.kind + '\')"' : ' disabled') + ' title="' + k.label + '：上期 ' + k.prev + ' 行 / 本期 ' + k.curr + ' 行">' + inner + '</button>';
+  }).join('');
+}
+function renderCompareMetricBar(){
+  const el = document.getElementById('compareMetricToggle'); if (!el) return;
+  const payload = comparePayload;
+  if (!payload || !payload.metrics || !payload.metrics.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  const active = compareMetric || (payload.result ? payload.result.metric : payload.metrics[0].id);
+  el.innerHTML = '<span class="pt-label">指标：</span>' + payload.metrics.map(function(m){
+    return '<button class="pt-btn' + (m.id === active ? ' active' : '') + '" onclick="switchCompareMetric(\'' + m.id + '\')">' + m.label + '</button>';
+  }).join('') + '<span class="pt-label" style="margin-left:6px">上期 ' + (payload.prevPeriod || '—') + ' → 本期 ' + (payload.currPeriod || '—') + '</span>';
+}
+function compareBodyEmpty(html){
+  const kpi = document.getElementById('compareKpi'); if (kpi) { kpi.style.display = 'none'; kpi.innerHTML = ''; }
+  const cr = document.getElementById('compareChartRow'); if (cr) cr.style.display = 'none';
+  const tr = document.getElementById('compareTableRow'); if (tr) tr.style.display = 'none';
+  const ins = document.getElementById('compareInsight'); if (ins) { ins.style.display = ''; ins.innerHTML = '<span class="insight-title">数据对比：</span>' + html; }
+  const empty = document.getElementById('compareEmpty'); if (empty) empty.innerHTML = '';
+}
+function renderCompareBody(){
+  const payload = comparePayload;
+  if (!payload) {
+    compareBodyEmpty(compareError || (compareLoading ? '正在读取对比数据…' : (__API_READY ? '读取中，请稍候…' : '未连接数据接口：请启动店铺工作台并先导入月度/周度复盘。')));
+    return;
+  }
+  const cycName = cycle === '7d' ? '周' : '月';
+  if (!payload.hasPrev) {
+    compareBodyEmpty('当前已导入本期（' + (payload.currPeriod || cycName + '度') + '），需再导入上一' + cycName + '度复盘数据，才能进行「上期 vs 本期」对比。');
+    return;
+  }
+  const result = payload.result;
+  if (!result) {
+    compareBodyEmpty('本期与上期均无（' + payload.prevPeriod + ' / ' + payload.currPeriod + '）可比对象，请在层级/指标中选择两期都有的维度查看。');
+    return;
+  }
+  const s = result.summary;
+  const ins = document.getElementById('compareInsight');
+  if (ins) { ins.style.display = ''; ins.innerHTML = '<span class="insight-title">' + result.kindLabel + ' · ' + result.metricLabel + '：</span>' + payload.prevPeriod + '（上期） vs ' + payload.currPeriod + '（本期） · 匹配 ' + s.matched + ' / 新增 ' + s.added + ' / 退出 ' + s.removed + ' · 名次上升 ' + s.rankUp + ' / 下降 ' + s.rankDown; }
+  // KPI：上期/本期/增减/对象变动
+  const kpi = document.getElementById('compareKpi');
+  if (kpi) {
+    kpi.style.display = '';
+    const deltaUp = s.delta >= 0;
+    const dCls = (CMP_BAD_UP[result.metric] === 1 ? !deltaUp : deltaUp) ? 'trend-up' : 'trend-down';
+    kpi.innerHTML =
+      '<div class="kpi-card blue"><div class="kpi-label">' + result.metricLabel + ' · 上期</div><div class="kpi-value">' + cmpVal(s.prevTotal, result.unit) + '</div><div class="kpi-sub">' + payload.prevPeriod + ' · ' + s.matched + ' 个可比对象</div></div>' +
+      '<div class="kpi-card green"><div class="kpi-label">' + result.metricLabel + ' · 本期</div><div class="kpi-value">' + cmpVal(s.currTotal, result.unit) + '</div><div class="kpi-sub">' + payload.currPeriod + ' · ' + (s.added ? '新增 ' + s.added + ' 个' : '无新增') + '</div></div>' +
+      '<div class="kpi-card orange"><div class="kpi-label">整体增减</div><div class="kpi-value ' + dCls + '">' + cmpDeltaStr(s.delta, result.unit) + '</div><div class="kpi-sub">' + (s.deltaPct !== null ? '相对上期 ' + cmpSigned(s.deltaPct) + s.deltaPct.toFixed(1) + '%' : (result.unit === 'pct' ? '百分点变化' : '')) + '</div></div>' +
+      '<div class="kpi-card purple"><div class="kpi-label">对象变动</div><div class="kpi-value">' + s.matched + ' 匹配</div><div class="kpi-sub">名次 ↑' + s.rankUp + ' / ↓' + s.rankDown + '</div></div>';
+  }
+  // 明细排行表（服务端已按 |增减| 降序截取前 120 行）
+  renderCompareTable(result);
+  // 对比条形图：匹配对象中按变化幅度取 Top10（两期都有值才画）
+  renderCompareChart(result);
+}
+function renderCompareTable(result){
+  const tr = document.getElementById('compareTableRow'); if (!tr) return;
+  const thead = document.getElementById('compareThead'); const tbody = document.getElementById('compareTbody'); const badge = document.getElementById('compareTableCount');
+  tr.style.display = '';
+  const kindName = CMP_KIND_NAME[result.kind] || '对象';
+  if (thead) thead.innerHTML = '<th>#</th><th>' + kindName + '</th><th>上期</th><th>本期</th><th>增减</th><th>增减率</th><th>名次(上→本)</th>';
+  const html = result.rows.map(function(r, i){
+    const tag = r.state === 'added' ? '<span class="abn-tag" style="background:rgba(26,158,99,.15);color:var(--green)">新上榜</span>' : (r.state === 'removed' ? '<span class="abn-tag">已退出</span>' : '');
+    const dCls = cmpDeltaCls(result.metric, r.delta);
+    const deltaHtml = r.state === 'added' ? '<span class="trend-up">+ ' + cmpVal(r.curr, result.unit) + '</span>' : (r.state === 'removed' ? '<span class="trend-down">− ' + cmpVal(r.prev, result.unit) + '</span>' : '<span class="' + dCls + '">' + cmpDeltaStr(r.delta, result.unit) + '</span>');
+    const pctHtml = r.deltaPct !== null && r.deltaPct !== undefined ? '<span class="' + cmpDeltaCls(result.metric, r.deltaPct) + '">' + cmpSigned(r.deltaPct) + r.deltaPct.toFixed(1) + '%</span>' : '—';
+    let rankHtml;
+    if (r.state === 'added') rankHtml = '<span class="trend-up">新入榜</span>';
+    else if (r.state === 'removed') rankHtml = '<span class="trend-down">退出榜</span>';
+    else if (r.rankShift) rankHtml = r.rankPrev + '→' + r.rankCurr + (r.rankShift > 0 ? ' <span class="trend-up">▲' + r.rankShift + '</span>' : ' <span class="trend-down">▼' + Math.abs(r.rankShift) + '</span>');
+    else rankHtml = r.rankPrev + '→' + r.rankCurr;
+    const name = String(r.label || r.key);
+    return '<tr><td>' + (i + 1) + '</td><td title="' + escAttr(name) + '">' + escAttr(name.length > 22 ? name.slice(0, 22) + '…' : name) + ' ' + tag + '</td><td>' + cmpVal(r.prev, result.unit) + '</td><td>' + cmpVal(r.curr, result.unit) + '</td><td>' + deltaHtml + '</td><td>' + pctHtml + '</td><td>' + rankHtml + '</td></tr>';
+  }).join('');
+  if (tbody) tbody.innerHTML = html || '<tr><td colspan="7" style="color:var(--muted);text-align:center">本期/上期无匹配对象，暂无明细。</td></tr>';
+  if (badge) badge.textContent = result.metricLabel + ' · ' + result.rows.length + ' 行';
+}
+function renderCompareChart(result){
+  const cr = document.getElementById('compareChartRow'); if (!cr) return;
+  const title = document.getElementById('compareBarTitle');
+  if (title) title.innerHTML = result.kindLabel + ' · ' + result.metricLabel + ' 变化 TOP10 <span class="badge">' + payloadPeriodShort(result) + '</span>';
+  const rows = result.rows.filter(function(r){ return r.prev !== null && r.curr !== null && r.delta !== 0; }).sort(function(a,b){ return Math.abs(b.delta) - Math.abs(a.delta); }).slice(0,10).reverse();
+  if (!rows.length) { cr.style.display = ''; getChart('compareBar')?.setOption({ title:{ text:'无变化对象', left:'center', top:'center', textStyle:{ color:'#6b8d94', fontSize:12 } }, series: [] }); return; }
+  cr.style.display = '';
+  registerChartClick('compareBar', function(params){
+    const i = (params && typeof params.dataIndex === 'number') ? params.dataIndex : -1;
+    if (i < 0 || !rows[i]) return null;
+    const r = rows[i];
+    return { label: '数据对比 · ' + result.kindLabel + ' · ' + result.metricLabel, value: r.label + '：上期 ' + cmpVal(r.prev, result.unit) + ' → 本期 ' + cmpVal(r.curr, result.unit) + '（' + cmpDeltaStr(r.delta, result.unit) + '）' };
+  });
+  getChart('compareBar')?.setOption({
+    tooltip: { trigger:'axis', axisPointer:{ type:'shadow' } },
+    legend: { data:['上期','本期'], top:0, textStyle:{ color:'#5f8087', fontSize:10 } },
+    grid: { left: 120, right: 70, bottom: 20, top: 35 },
+    xAxis: { type:'value', axisLabel:{ color:'#5f8087', formatter:function(v){ return cmpBarAxisVal(v, result.unit); } }, splitLine:{ lineStyle:{ color:'#e8f0ee' } } },
+    yAxis: { type:'category', data: rows.map(function(r){ return String(r.label).slice(0, 12); }), axisLabel:{ color:'#5f8087', fontSize: 9 } },
+    series: [
+      { name:'上期', type:'bar', barWidth:'32%', data: rows.map(function(r){ return r.prev; }), itemStyle:{ color:'#c9d8d4' } },
+      { name:'本期', type:'bar', barWidth:'32%', data: rows.map(function(r){ return r.curr; }), itemStyle:{ color: new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#0d8a78'},{offset:1,color:'#17a08c'}]), borderRadius:[0,4,4,0] }, label:{ show:true, position:'right', color:'#16343b', fontSize:9, formatter:function(p){ return cmpBarAxisVal(p.value, result.unit); } } }
+    ]
+  });
+}
+function payloadPeriodShort(result){ return (result.prevPeriod || '上期') + ' → ' + (result.currPeriod || '本期'); }
+
 function renderView(view){
   renderOverviewBar();
   // 全局洞察条：销售视图由 renderSalesPeriod 更新；其它视图给模块上下文说明，避免停留「加载中」
@@ -2556,13 +2773,16 @@ function renderView(view){
     const ctx = {
       product:'产品概览', link:'商品明细', newproduct:'SKU 规格',
       promo:'推广分析', refund:'退款分析', review:(cycle==='7d' ? '周复盘（周数据）' : (APP_DATA.monthlyReport?'月度复盘（导入数据）':'复盘')),
+      compare:'数据对比',
     };
     const base = APP_DATA.real ? '（已接入店铺真实数据，导入月度复盘见「复盘」模块）' : '';
     document.getElementById('insightBar').innerHTML =
       '<span class="insight-title">' + (ctx[view] || '数据模块') + '：</span>当前模块' +
-      (view === 'review'
-        ? (cycle === '7d' ? '展示导入的周复盘分析（数据 100% 来自周数据表）' : (APP_DATA.monthlyReport ? '展示导入的月度复盘分析与评级' : '数据展示'))
-        : '数据展示') + base;
+      (view === 'compare'
+        ? (cycle === '7d' ? '连续导入两期周数据后，对比上一周与本周同层级数据的增减与排行（同周期才可比）' : (APP_DATA.monthlyReport ? '连续导入两期月度复盘后，对比上一期与本期同层级数据的增减与排行（同周期才可比）' : '数据展示'))
+        : (view === 'review'
+          ? (cycle === '7d' ? '展示导入的周复盘分析（数据 100% 来自周数据表）' : (APP_DATA.monthlyReport ? '展示导入的月度复盘分析与评级' : '数据展示'))
+          : '数据展示')) + base;
   }
   switch(view){
     case 'sales': renderSales(); break;
@@ -2572,6 +2792,7 @@ function renderView(view){
     case 'promo': renderPromo(); break;
     case 'refund': renderRefund(); break;
     case 'review': renderReview(); break;
+    case 'compare': renderCompare(); break;
   }
 }
 

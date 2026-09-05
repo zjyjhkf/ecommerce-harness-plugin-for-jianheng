@@ -23,6 +23,7 @@ import type { WeeklyParseResult } from './weekly-report.ts'
 import type { MonthlyReport, Order, Product, TrendPoint } from './types.ts'
 import { buildEvaluationSummary, callLlmForEvaluation, evaluationPrompt, ruleBasedEvaluation } from './data-evaluation.ts'
 import type { EvaluationSummary } from './data-evaluation.ts'
+import { buildComparePayload, isCompareCycle } from './compare-payload.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -424,6 +425,18 @@ export function registerShopApi(
         if (pathname === '/ecommerce-api/weekly-report') {
           // 周复盘（7 天「周复盘」数据源，来自「周数据」三份「商品排名导出」导入）
           sendJson(res, 200, { ok: true, value: store.getWeeklyReport(), revision: store.getReportRevision() })
+          return
+        }
+        if (pathname === '/ecommerce-api/compare') {
+          // 数据对比（连续导入两期后）：上期 vs 本期某层级某指标的增减与排行位移。
+          // 30d=月度复盘对比、7d=周复盘对比；kind/metric/limit 缺省自动选择。
+          const rawCycle = String(query.get('cycle') ?? '30d')
+          const cycle = isCompareCycle(rawCycle) ? rawCycle : '30d'
+          const kind = query.get('kind') ?? undefined
+          const metric = query.get('metric') ?? undefined
+          const limit = Math.min(Math.max(Number(query.get('limit') ?? 100) || 100, 1), 1000)
+          const payload = buildComparePayload(store, cycle, kind, metric, limit)
+          sendJson(res, 200, { ok: true, value: payload, revision: store.getReportRevision() })
           return
         }
         if (pathname === '/ecommerce-api/evaluation') {
