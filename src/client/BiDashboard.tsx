@@ -184,6 +184,11 @@ export function BiDashboardSection(props: { snapshot: ShopSnapshot; onValue: (te
   const s = props.snapshot
   return (
     <div className="esd-bi">
+      {/* 口径提示：本看板为实时经营数据；复盘数据（月度/周度）需导入 Excel 报表后在数据中台查看 */}
+      <div className="esd-overview-hint" style={{ marginTop: 0 }}>
+        本看板展示<strong>实时经营数据</strong>（订单 / 商品，与工具口径一致）；
+        <strong>复盘数据</strong>（月度 / 周度）需导入 Excel 报表后在「电商数据中台」查看。
+      </div>
       <BiKpiGrid snapshot={s} onValue={props.onValue} />
       <div className="esd-bi-grid">
         <div className="esd-bi-card">

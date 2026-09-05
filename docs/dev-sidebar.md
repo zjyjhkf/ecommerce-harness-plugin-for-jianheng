@@ -23,11 +23,10 @@
 ### 构建与部署
 | 文件 | 说明 |
 |---|---|
-| `scripts/build.mjs` | **新增**：esbuild 打包服务端 `index.js`（ESM，external `@deepseek-ai/*`、`node:*`）与客户端 `client.js`（CJS，external `react`，`window.__ModuleLoader__.load` 包裹），并写出部署 `package.json` |
+| `scripts/build.mjs` | esbuild 打包服务端 `index.js`（ESM，external `@deepseek-ai/*`、`node:*`）与客户端 `client.js`（CJS，external `react`，`window.__ModuleLoader__.load` 包裹）；**默认输出仓库根**（`index.js` / `client.js` / `assets/` 随仓库提交，git 安装开箱即用），不再另写部署 `package.json` |
 | `scripts/verify-snapshot.mts` | **新增**：验收数据校验脚本（对照企业数据口径） |
-| `package.json` | 源码清单增加 `build` 脚本 |
-| `E:\plugins\ecommerce-analyst-plugin\package.json` | 部署清单：`exports["./client"]` + `dsh.client { platform: 'web', inject: [] }` |
-| `E:\plugins\ecommerce-analyst-plugin\client.js` | **新增**：客户端 bundle（与 index.js 并列） |
+| `package.json`（仓库根，即部署清单） | 源码清单增加 `build` 脚本；部署声明 `exports["./client"]` + `dsh.client { platform: 'web', inject: [] }` + `dsh.bundle` 均在此文件 |
+| `client.js`（仓库根） | **新增**：客户端 bundle（与 index.js 并列，默认构建产物直接入库） |
 
 ## 二、挂载方案（不破坏官方侧边栏）
 
@@ -87,19 +86,29 @@ mount / 打开 / 60s 定时 / 手动刷新
   客户端优先使用（无需猜测端口），其次页面 origin，最后相对路径。
 - **新增 `ecommerce_import_excel`**：CSV/JSON 表格数据整体导入（Excel 导出 CSV 直接可用），
   导入后面板与统计工具立即反映（同一 Store）。
-## 六、构建与部署（已执行）
+## 六、构建与部署
 
 ```bash
 cd deepseek-harness-master/ecommerce-analyst-plugin
-node scripts/build.mjs        # 产出 index.js + client.js + package.json → E:\plugins\ecommerce-analyst-plugin\
+npm install                # esbuild 来自 devDependencies
+npm run build              # = node scripts/build.mjs
+# 产出 index.js + client.js + assets/data-center.html → 仓库根（随仓库提交）
 ```
 
-- 客户端 bundle：`external: react`（宿主 module table 提供），零外部运行时依赖、无 CDN/字体。
-- 部署 `package.json` 声明 `dsh.client.platform: "web"` 与 `./client` export，
-  宿主 client-modules 自动发现该包、将 `client.js` 编入 `window.__DSH_BOOT__` 并从 `/plugins/ecommerce-analyst-plugin/client.js` 提供。
-- Profile 注册（无需改动）：`C:\Users\31253\.dsh\profiles\web\package.json` 已含
-  `ecommerce-analyst-plugin: link:E:/plugins/ecommerce-analyst-plugin`（dependencies + bundles），链接目录即部署目录，新文件自动可见。
-- 改动前已备份：`E:\plugins\ecommerce-analyst-plugin.bak-<timestamp>`。
+- **默认构建输出仓库根**：产物 `index.js` / `client.js` / `assets/` 直接写入仓库并提交入库；
+  其他用户 `dsh plugin --profile web add git+<仓库地址>` 安装后开箱即用，pnpm 安装 git 依赖时不执行任何构建。
+- 仓库根 `package.json` 即部署清单（含 `dsh.client.platform: "web"`、`./client` export 与 `dsh.bundle` 声明），
+  默认构建**不再向输出目录另写/复制 `package.json`**；`cordis.patch.yml`、`README.md` 也在仓库根，无需复制。
+- 客户端 bundle：`external: react`（宿主 module table 提供），零外部运行时依赖、无 CDN/字体；
+  宿主 client-modules 按根清单自动发现该包、将 `client.js` 编入 `window.__DSH_BOOT__` 提供。
+- **构建到仓库外（可选）**：仅当显式设置 `ECOM_PLUGIN_OUT=<仓库外目录>` 时才把根清单与
+  `cordis.patch.yml` / `README.md` 复制到该目录，并复制 xlsx 运行时文件到其 `node_modules`：
+  `ECOM_PLUGIN_OUT=/你的/plugins/ecommerce-analyst-plugin npm run build`（路径按本机替换）。
+- **peer junction（默认关闭）**：`ECOM_LINK_PEERS=1` **且** `ECOM_PLUGIN_OUT` 指向仓库外目录时，
+  才会在其 `node_modules` 下建立 `@deepseek-ai/*` 等 peer junction（服务于仓库外部署且向上解析不到 peer 的本机场景）；
+  `OUT=仓库根` 时绝不执行，防止误删真实 `node_modules`。
+- Profile 注册（无需改动）：把仓库根（或 `ECOM_PLUGIN_OUT` 部署目录）链接/安装进你本机 dsh profile
+  （`<你的用户目录>/.dsh/profiles/web/package.json` 的 dependencies + bundles）即可，链接目录即部署目录，新文件自动可见。
 
 ## 七、如何验证（重启 DSH Desktop Hub 后）
 

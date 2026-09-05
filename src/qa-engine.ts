@@ -17,7 +17,6 @@
  */
 import type { EcommerceStore } from './store.ts'
 import { todayStr } from './store.ts'
-import type { JsonValue } from '@deepseek-ai/dsh-tools'
 
 /** 问答命中结果（确定性输出，模型直接引用 answer 即可） */
 export interface QaResult {
@@ -25,7 +24,8 @@ export interface QaResult {
   rule?: string
   rule_title?: string
   answer?: string
-  data?: Record<string, JsonValue>
+  /** 规则命中附带结构化数据（JSON.stringify 序列化给模型；工具层 asJsonObject 不要求 JsonValue 窄类型） */
+  data?: Record<string, unknown>
   chart?: 'line' | 'donut' | 'bar' | null
 }
 
@@ -47,7 +47,7 @@ const RULES: Array<{
   id: string
   title: string
   keywords: string[]
-  run: (store: EcommerceStore) => { answer: string; data: Record<string, JsonValue>; chart?: 'line' | 'donut' | 'bar' | null }
+  run: (store: EcommerceStore) => { answer: string; data: Record<string, unknown>; chart?: 'line' | 'donut' | 'bar' | null }
 }> = [
   {
     id: 'today_sales',

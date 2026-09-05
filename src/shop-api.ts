@@ -120,7 +120,9 @@ export function injectApiBase(webServer: WebServerLike): (() => void) | undefine
   return webServer.tapIndex((html: string) => {
     const tag = base
       ? `<script>window.__ECOM_API_BASE__ = ${JSON.stringify(base)};</script>`
-      : '<script>window.__ECOM_API_BASE__ = null;</script>'
+      // 无 port 时注入空串（'' 是合法的「同源相对 fetch」值）；绝不能注入 null 字面量，
+      // 以免下游 truthy 判断误伤（iframe 页面由 renderDataCenter 自行注入，见 data-center.ts）
+      : '<script>window.__ECOM_API_BASE__ = "";</script>'
     if (html.includes('__ECOM_API_BASE__')) return html
     return html.replace('</head>', tag + '</head>')
   })
@@ -221,10 +223,10 @@ const evaluationCache = new Map<string, { text: string; source: 'ai' | 'rule'; p
 /** 正在生成中的 cacheKey（防止并发重复调用 LLM） */
 const evaluationPending = new Set<string>()
 
-/** 后台生成一句 AI 评价并写回缓存；AI 不可用/不足 40 字时回退规则模板。 */
+/** 后台生成一句 AI 评价并写回缓存；AI 不可用/不足 40 字时回退规则模板。
+ *  cycle 已隐含在 cacheKey（cycle:revision）与 summary 中，无需单独传参。 */
 async function generateEvaluation(
   cacheKey: string,
-  cycle: '30d' | '7d',
   summary: EvaluationSummary,
   ctx: { get?(name: string): unknown },
 ): Promise<void> {
@@ -252,7 +254,6 @@ async function generateEvaluation(
  */
 function ensureEvaluation(
   cacheKey: string,
-  cycle: '30d' | '7d',
   summary: EvaluationSummary,
   ctx: { get?(name: string): unknown },
 ): { text: string; source: 'ai' | 'rule'; pending: boolean } {
@@ -261,7 +262,7 @@ function ensureEvaluation(
   if (!cached) {
     evaluationCache.set(cacheKey, { text: ruleBasedEvaluation(summary), source: 'rule', pending: true })
   }
-  void generateEvaluation(cacheKey, cycle, summary, ctx)
+  void generateEvaluation(cacheKey, summary, ctx)
   return evaluationCache.get(cacheKey)!
 }
 
@@ -273,7 +274,7 @@ function prewarmEvaluations(store: EcommerceStore, ctx: { get?(name: string): un
   for (const cycle of ['30d', '7d'] as const) {
     const summary = buildEvaluationSummary(cycle, monthlyReport, weeklyReport)
     if (summary === null) continue
-    void generateEvaluation(cycle + ':' + revision, cycle, summary, ctx)
+    void generateEvaluation(cycle + ':' + revision, summary, ctx)
   }
 }
 
@@ -436,7 +437,7 @@ export function registerShopApi(
             sendJson(res, 200, { ok: true, value: { cycle, evaluation: '', source: 'rule', pending: false } })
             return
           }
-          const entry = ensureEvaluation(cacheKey, cycle, summary, ctx)
+          const entry = ensureEvaluation(cacheKey, summary, ctx)
           sendJson(res, 200, {
             ok: true,
             value: { cycle, evaluation: entry.text, source: entry.source, pending: entry.pending },
@@ -477,7 +478,8 @@ export function registerShopApi(
         }
         if (pathname === '/ecommerce-api/data-center' && req.method === 'GET') {
           // 电商数据中台（对接「电商数据中台.html」修改版，全屏面板 iframe 加载）
-          const html = renderDataCenter(store)
+          // 传入 req：renderDataCenter 依据 host/referer 向 iframe 页面自身注入 __ECOM_API_BASE__
+          const html = renderDataCenter(store, req)
           res.writeHead(200, {
             'content-type': 'text/html; charset=utf-8',
             'cache-control': 'no-store',

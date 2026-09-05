@@ -16,7 +16,7 @@
  * 本工作台通过 WorkBuddy 资料库能力（library skill）搭建、存储和部署
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Config, defaultConfig, type Config as ConfigShape } from './config.ts'
+import { defaultConfig, type Config as ConfigShape } from './config.ts'
 import { EcommerceStore, todayStr } from './store.ts'
 import { createAdapter } from './platform/adapter.ts'
 import { registerProductTools } from './tools/products.ts'

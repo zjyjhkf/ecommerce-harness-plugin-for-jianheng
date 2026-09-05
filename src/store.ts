@@ -55,7 +55,6 @@ export class EcommerceStore {
   private products: Product[] = []
   private orders: Order[] = []
   private cfg: StoreConfig
-  private nextSku = 1
   /** 数据来源模式：demo=演示数据（种子）/ imported=导入数据 / rest=平台 API */
   dataMode: 'demo' | 'imported' | 'rest' = 'demo'
   /** 商品/订单各自的数据来源（demo=演示种子 / imported=用户导入或派生）：用于导入时
@@ -104,7 +103,6 @@ export class EcommerceStore {
           this.dataMode = imported
           this.productsSource = imported === 'demo' ? 'demo' : 'imported'
           this.ordersSource = imported === 'demo' ? 'demo' : 'imported'
-          this.recomputeCounters()
           return
         }
       } catch {
@@ -120,17 +118,11 @@ export class EcommerceStore {
     this.dataMode = this.adapter.name === 'rest' ? 'rest' : 'demo'
     this.productsSource = 'demo'
     this.ordersSource = 'demo'
-    this.recomputeCounters()
     this.save()
   }
 
-  private recomputeCounters(): void {
-    const maxSku = this.products.reduce(
-      (max, p) => Math.max(max, Number(p.sku.replace(/\D/g, '')) || 0),
-      0,
-    )
-    this.nextSku = maxSku + 1
-  }
+  // v0.3 起商品增删改查已移除（数据由导入整体维护），SKU 计数器成为死代码：
+  // 原 recomputeCounters()/nextSku 已删除，数据重载后不再需要刷新计数器。
 
   // ─────────────────────────── 持久化 ───────────────────────────
 
@@ -184,7 +176,6 @@ export class EcommerceStore {
     this.ordersSource = 'imported'
     this.reportRevision += 1
     this.captureImported()
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length }
   }
@@ -224,7 +215,6 @@ export class EcommerceStore {
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
     this.captureImported()
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length }
   }
@@ -304,7 +294,6 @@ export class EcommerceStore {
     this.orders = finalOrders
     this.dataMode = 'imported'
     this.captureImported()
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length, derivedProducts }
   }
@@ -394,7 +383,6 @@ export class EcommerceStore {
     this.dataMode = 'demo'
     this.productsSource = 'demo'
     this.ordersSource = 'demo'
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length, snapshot }
   }
@@ -409,7 +397,6 @@ export class EcommerceStore {
     this.dataMode = 'imported'
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length }
   }
@@ -428,7 +415,6 @@ export class EcommerceStore {
     this.dataMode = 'rest'
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
-    this.recomputeCounters()
     this.save()
     return { products: this.products.length, orders: this.orders.length }
   }

@@ -420,7 +420,8 @@ export async function parseStoreProfitExcel(
   }
 
   const acc = storeCols.map(({ store }) => {
-    const row: Record<string, number> = { store }
+    // store 为字符串列，数值指标稍后按行写入；先以 unknown 容纳混合初值，再断言为行类型
+    const row: Record<string, unknown> = { store }
     return row as unknown as MonthlyStoreProfit & { store: string }
   })
   const isRate = (k: string): boolean => k === 'grossMargin'

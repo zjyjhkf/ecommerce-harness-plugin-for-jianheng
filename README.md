@@ -31,6 +31,8 @@ pnpm install
 ```
 
 > 插件的运行时依赖仅 `xlsx`（Excel 解析，构建/导入时使用）与 `pdfjs-dist`（PDF 导入，可选，缺省自动降级）。
+>
+> **独立 clone**（不在 dsh 仓库 workspace 内）：仅加载已入库产物无需安装；若要自行**构建或跑测试**，需先在插件目录执行 `npm install`——`esbuild`/`tsx` 在 devDependencies 中，缺了无法构建。
 
 ### 3. 加载插件（开发/演示，推荐）
 
@@ -50,20 +52,37 @@ pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
 
 > 首次启动即内置企业演示数据（26 商品 + 480 订单：总览 ¥154,699 / 359 单 / 客单价 ¥430.92 / 退款率 10.6%，含逾期 43 笔、待发货 55 笔、低库存 8 件），开箱即可演示。
 
-### 4. 构建部署（生产 bundle，可选）
+### 4. 构建部署（生产 bundle）
+
+**产物已随仓库提交，git 安装可直接加载，无需构建。** 通过 `git clone` 或
+
+```sh
+dsh plugin --profile web add git+https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git
+```
+
+获取本仓库后，`index.js` / `client.js` / `assets/data-center.html` 已在仓库根就位，加载阶段不执行任何构建。只有**改动 `src/` 源码后**才需要重新构建：
 
 ```sh
 cd ecommerce-analyst-plugin
-node scripts/build.mjs
+npm i              # 独立 clone 首次构建需要（esbuild 在 devDependencies）
+npm run build      # 即 node scripts/build.mjs
 ```
 
-产出服务端 `index.js` + 客户端 `client.js` + `package.json` + `cordis.patch.yml` + `assets/data-center.html`。
+> **默认输出目录 = 仓库根本身**：`index.js`（服务端 bundle）+ `client.js`（客户端 bundle）+ `assets/data-center.html` 直接写入仓库根并随仓库提交；仓库根 `package.json` 即部署清单（含 `dsh.bundle`/`dsh.client` 声明），`cordis.patch.yml` 也在仓库根，默认构建不向别处复制任何清单。
 
-> 输出目录默认 `E:\plugins\ecommerce-analyst-plugin`，可用环境变量覆盖：
-> ```sh
-> ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin node scripts/build.mjs
-> ```
-> 构建脚本会为 `@deepseek-ai/*` 建立 node_modules 链接并复制 xlsx 运行时依赖；若脚本内硬编码的 esbuild 回退路径在你的机器上不存在，请先 `pnpm add -D esbuild` 或设置 `ESBUILD_REQUIRE` 指向 esbuild 入口。
+如需构建到仓库外目录（如独立的插件部署位），显式设置 `ECOM_PLUGIN_OUT`，**仅这种模式下**才会把 `package.json` / `cordis.patch.yml` / `README.md` 复制到输出目录，并把 `xlsx` 运行时必需文件复制到 `OUT/node_modules`：
+
+```sh
+ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
+```
+
+可选环境变量：
+
+| 变量 | 作用 |
+|---|---|
+| `ECOM_PLUGIN_OUT` | 覆盖输出目录（默认 = 仓库根）。仅当指向仓库外目录时触发上述复制行为 |
+| `ESBUILD_REQUIRE` | 指定 esbuild 包入口（esbuild 定位：此变量优先，其次本仓库 `node_modules`；两者都没有则直接报错，提示 `npm install -D esbuild`） |
+| `ECOM_LINK_PEERS=1` | 在 `OUT/node_modules` 下为 `@deepseek-ai/*` 等 peer 包建立 junction。仅当 `ECOM_PLUGIN_OUT` 指向仓库外目录时才生效；**默认跳过**（防止误删真实 node_modules） |
 
 ---
 

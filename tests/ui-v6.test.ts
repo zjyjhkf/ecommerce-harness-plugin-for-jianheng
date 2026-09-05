@@ -19,7 +19,8 @@ import { MockAdapter } from '../src/platform/mock.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { importLocalFile as _ } from '../src/import-parse.ts'
+// 注：曾在此 import { importLocalFile }（该 API 位于 client/data.ts 且 _ 从未使用），v0.3 起删除，
+// 桌面端导入入口由 parseImportFile（src/import-parse.ts）承担。
 
 const SRC = resolve(import.meta.dirname, '..', 'src')
 const CLIENT_INDEX = readFileSync(resolve(SRC, 'client', 'index.tsx'), 'utf8')

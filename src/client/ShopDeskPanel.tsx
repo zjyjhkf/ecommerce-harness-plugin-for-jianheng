@@ -783,6 +783,21 @@ export function ShopDeskPanel(): React.ReactElement {
               </div>
             ) : null}
 
+            {/* 与标签页形态保持一致：BI 看板同样渲染（数据同源 d.snapshot，实时经营数据） */}
+            {d.loading && d.snapshot === null ? (
+              <div className="esd-loading">正在加载店铺数据…</div>
+            ) : null}
+            {d.snapshot !== null ? (
+              <div className="esd-body">
+                <BiDashboardSection snapshot={d.snapshot} onValue={d.emitValue} />
+              </div>
+            ) : null}
+
+            {/* 复盘数据口径提示：iframe 内容父页面无法直接感知，仅以文案引导 */}
+            <div className="esd-overview-hint" style={{ margin: 0, padding: '8px 12px 2px', flex: 'none' }}>
+              下方「电商数据中台」展示复盘数据（月度 / 周度），需先导入对应 Excel 报表；未导入时为空属正常。上方 BI 看板与标签页同源，为实时经营数据（订单 / 商品）。
+            </div>
+
             <div className="esd-dc-frame">
               <iframe
                 ref={d.dcIframeRef}

@@ -21,7 +21,7 @@ import { MockAdapter } from '../src/platform/mock.ts'
 import { parseImportFile } from '../src/import-parse.ts'
 import { parseMonthlyRankExcel } from '../src/monthly-report.ts'
 import { parseWeeklyRankExcel } from '../src/weekly-report.ts'
-import { registerShopApi } from '../src/shop-api.ts'
+import { registerShopApi, type WebServerLike } from '../src/shop-api.ts'
 
 /** 构造一份最小「商品排名导出」xlsx（平台货品层级），日期跨度由 period 决定 */
 function buildRankXlsx(period: string, showForm = '平台货品'): Buffer {
@@ -158,10 +158,11 @@ async function call(handler: (req: unknown, res: unknown) => void | Promise<void
 test('周期隔离（端到端）：只插入 7 日周文件，30 天月报面板保持为空', async () => {
   const { store, dir } = makeTempStore()
   let handler: ((req: unknown, res: unknown) => void | Promise<void>) | null = null
-  const webServer = {
+  const webServer: WebServerLike = {
     port: 0,
-    register(r: { handler: (req: unknown, res: unknown) => void | Promise<void> }): () => void {
-      handler = r.handler
+    register(r) {
+      // 断言放宽为 (req: unknown, res: unknown)：测试桩用 FakeReq/FakeRes 驱动真实 handler
+      handler = r.handler as (req: unknown, res: unknown) => void | Promise<void>
       return () => {}
     },
     tapIndex(): () => void { return () => {} },
@@ -174,8 +175,9 @@ test('周期隔离（端到端）：只插入 7 日周文件，30 天月报面�
   const res = await call(handler!, 'POST', '/ecommerce-api/import-batch', { files })
   assert.equal(res.status, 200, 'import-batch 返回 200')
   assert.equal(res.json?.ok, true, 'import-batch ok:true')
-  assert.equal(res.json?.value?.weeklyReport, true, '周报已写入')
-  assert.equal(res.json?.value?.monthlyReport, false, '只插入 7 日数据时，月报不应存在（隔离）')
+  const value1 = res.json?.value as { weeklyReport?: boolean; monthlyReport?: boolean } | undefined
+  assert.equal(value1?.weeklyReport, true, '周报已写入')
+  assert.equal(value1?.monthlyReport, false, '只插入 7 日数据时，月报不应存在（隔离）')
 
   // 数据层双重确认：周报存在、月报为空
   assert.ok(store.getWeeklyReport(), 'store 周报非空')
@@ -188,10 +190,11 @@ test('周期隔离（端到端）：只插入 7 日周文件，30 天月报面�
 test('周期隔离（端到端）：只插入整月文件，7 天周报面板保持为空', async () => {
   const { store, dir } = makeTempStore()
   let handler: ((req: unknown, res: unknown) => void | Promise<void>) | null = null
-  const webServer = {
+  const webServer: WebServerLike = {
     port: 0,
-    register(r: { handler: (req: unknown, res: unknown) => void | Promise<void> }): () => void {
-      handler = r.handler
+    register(r) {
+      // 断言放宽为 (req: unknown, res: unknown)：测试桩用 FakeReq/FakeRes 驱动真实 handler
+      handler = r.handler as (req: unknown, res: unknown) => void | Promise<void>
       return () => {}
     },
     tapIndex(): () => void { return () => {} },
@@ -200,8 +203,9 @@ test('周期隔离（端到端）：只插入整月文件，7 天周报面板保
   const files = [{ filename: '月-商品排名导出.xlsx', content: MONTH_BUF.toString('base64'), encoding: 'base64' }]
   const res = await call(handler!, 'POST', '/ecommerce-api/import-batch', { files })
   assert.equal(res.status, 200)
-  assert.equal(res.json?.value?.monthlyReport, true, '月报已写入')
-  assert.equal(res.json?.value?.weeklyReport, false, '只插入整月数据时，周报不应存在（隔离）')
+  const value2 = res.json?.value as { weeklyReport?: boolean; monthlyReport?: boolean } | undefined
+  assert.equal(value2?.monthlyReport, true, '月报已写入')
+  assert.equal(value2?.weeklyReport, false, '只插入整月数据时，周报不应存在（隔离）')
 
   assert.ok(store.getMonthlyReport(), 'store 月报非空')
   assert.equal(store.getWeeklyReport(), null, 'store 周报应为 null')

@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
-import { registerShopApi } from '../src/shop-api.ts'
+import { registerShopApi, type WebServerLike } from '../src/shop-api.ts'
 
 type FakeReq = EventEmitter & { url: string; method: string; headers: Record<string, string>; destroy: () => void }
 type FakeRes = {
@@ -67,10 +67,11 @@ test('导出接口：JSON 返回与 Store 口径一致的商品/订单', async (
   await store.init() // 演示种子：26 商品 / 480 订单
 
   let handler: ((req: unknown, res: unknown) => void | Promise<void>) | null = null
-  const webServer = {
+  const webServer: WebServerLike = {
     port: 0,
-    register(r: { handler: (req: unknown, res: unknown) => void | Promise<void> }): () => void {
-      handler = r.handler
+    register(r) {
+      // 断言放宽为 (req: unknown, res: unknown)：测试桩用 FakeReq/FakeRes 驱动真实 handler
+      handler = r.handler as (req: unknown, res: unknown) => void | Promise<void>
       return () => {}
     },
     tapIndex(): () => void { return () => {} },
@@ -95,10 +96,11 @@ test('导出接口：CSV 带 BOM + 正确表头 + CRLF，scope 分流', async ()
   await store.init()
 
   let handler: ((req: unknown, res: unknown) => void | Promise<void>) | null = null
-  const webServer = {
+  const webServer: WebServerLike = {
     port: 0,
-    register(r: { handler: (req: unknown, res: unknown) => void | Promise<void> }): () => void {
-      handler = r.handler
+    register(r) {
+      // 断言放宽为 (req: unknown, res: unknown)：测试桩用 FakeReq/FakeRes 驱动真实 handler
+      handler = r.handler as (req: unknown, res: unknown) => void | Promise<void>
       return () => {}
     },
     tapIndex(): () => void { return () => {} },

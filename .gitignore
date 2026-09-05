@@ -1,8 +1,10 @@
 # dependencies
 node_modules/
 
-# build output (scripts/build.mjs 产物，由源码生成，不入库)
+# build output（scripts/build.mjs 默认产物 index.js / client.js / assets/ 已刻意提交入库，
+# 使 `dsh plugin add git+...` 开箱即用；dist/ 为历史遗留输出目录，仍不入库）
 dist/
+# 注意：以下规则不得匹配根目录 index.js / client.js / assets/，如需新增请先确认不会误伤已提交产物
 
 # runtime state (导入/累积数据，不入库；seed.json 为种子数据，保留入库)
 data/store.json

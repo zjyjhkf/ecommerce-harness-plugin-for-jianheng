@@ -188,18 +188,6 @@ const ORDER_STATUSES = new Set([
   'pending', 'paid', 'shipped', 'completed', 'refunded', 'cancelled',
 ])
 
-function toOrderStatus(value: unknown): Order['status'] {
-  const s = String(value ?? '').trim().toLowerCase()
-  const alias: Record<string, Order['status']> = {
-    '待付款': 'pending', '待发货': 'paid', '已付款': 'paid', '已支付': 'paid',
-    '已发货': 'shipped', '已完成': 'completed', '交易完成': 'completed',
-    '已退款': 'refunded', '退款': 'refunded', '已取消': 'cancelled', '取消': 'cancelled',
-  }
-  const mapped = alias[s] ?? s
-  if (!ORDER_STATUSES.has(mapped)) throw new Error(`订单状态非法：${String(value)}`)
-  return mapped as Order['status']
-}
-
 /** 字段级校验错误（供导入校验报告使用） */
 export interface FieldError {
   /** 数据行号（1 起始；CSV 表头为第 1 行，数据从第 2 行起） */
@@ -467,7 +455,7 @@ export function parseRowsArray(data: unknown): { products?: Product[]; orders?: 
 /** 解析 Excel 二进制（.xlsx）。xlsx 库按工作表名识别商品/订单表，表头命中即导入。 */
 export async function parseExcelBuffer(
   buffer: Buffer | Uint8Array,
-): Promise<{ products?: Product[]; orders?: Product[]; orders2?: Order[]; __order?: Order[]; ordersArr?: Order[] } & { products?: Product[]; orders?: Order[] }> {
+): Promise<{ products?: Product[]; orders?: Order[] }> {
   let xlsx: typeof import('xlsx')
   try {
     xlsx = await import('xlsx')
@@ -513,7 +501,9 @@ export async function parseExcelBuffer(
 }
 
 function sheetToRows(
-  utils: { sheet_to_json: (sheet: unknown, opts: { header: 1; defval: unknown; raw: boolean }) => unknown[][] },
+  // 用宽松函数类型承接 xlsx.utils.sheet_to_json（WorkSheet/Sheet2JSONOpts 与结构类型逆变不兼容）；
+  // 调用处仍显式传 { header: 1, defval: '', raw: false }，返回值收窄为 unknown[][]
+  utils: { sheet_to_json: (sheet: any, opts: any) => unknown[][] },
   workbook: { Sheets?: Record<string, unknown> },
   sheetName: string,
   isOrder: boolean,
@@ -611,7 +601,8 @@ function parseSqlValue(raw: string): unknown {
 export async function parsePdfBuffer(
   buffer: Buffer | Uint8Array,
 ): Promise<{ products?: Product[]; orders?: Order[] }> {
-  let getDocument: (src: { data: Uint8Array; useWorkerFetch: boolean; isEvalSupported: boolean; disableFontFace: boolean }) => Promise<{ numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str: string }> }> }> }>
+  // pdfjs 4.x：getDocument 返回加载任务（PDFDocumentLoadingTask），文档代理在 .promise 上
+  let getDocument: (src: { data: Uint8Array; useWorkerFetch: boolean; isEvalSupported: boolean; disableFontFace: boolean }) => { promise: Promise<{ numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: unknown[] }> }> }> }
   try {
     const mod = await import('pdfjs-dist/legacy/build/pdf.mjs')
     getDocument = mod.getDocument
@@ -627,7 +618,7 @@ export async function parsePdfBuffer(
   }).promise
   // 按 y 坐标把文本项归组成表格行（同一行的项按 x 排序拼接），
   // 兼容真实报表导出（每行一个 Td/TJ）与扁平流式 PDF。
-  const rowsByPage: string[][] = []
+  const rowsByPage: string[] = []
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
     const content = await page.getTextContent()

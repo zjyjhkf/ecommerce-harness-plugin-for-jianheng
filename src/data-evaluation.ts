@@ -33,7 +33,7 @@ function fmtMoney(v: number): string {
   return '¥' + Math.round(n).toLocaleString('zh-CN')
 }
 
-function sum(rows: Array<Record<string, number>>, field: string): number {
+function sum(rows: Array<Record<string, number | string>>, field: string): number {
   return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0)
 }
 
