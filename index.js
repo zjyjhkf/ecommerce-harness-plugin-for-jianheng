@@ -6237,6 +6237,11 @@ var init_rest = __esm({
   }
 });
 
+// src/index.ts
+import { mkdirSync as mkdirSync2 } from "node:fs";
+import { dirname as dirname5, join as join4 } from "node:path";
+import { tmpdir } from "node:os";
+
 // src/config.ts
 import z from "@deepseek-ai/schemastery";
 var Config = z.object({
@@ -6247,7 +6252,8 @@ var Config = z.object({
     appSecret: z.string().default("")
   }),
   storage: z.object({
-    file: z.string().default("./ecommerce-analyst-plugin/data/store.json"),
+    // file：持久化路径；相对路径按插件自身目录解析（与 dsh 启动目录无关），绝对路径原样使用
+    file: z.string().default("./data/store.json"),
     seedOnEmpty: z.boolean().default(true)
   }),
   inventory: z.object({
@@ -6256,13 +6262,36 @@ var Config = z.object({
 });
 var defaultConfig = {
   platform: { name: "mock", baseUrl: "", appKey: "", appSecret: "" },
-  storage: { file: "./ecommerce-analyst-plugin/data/store.json", seedOnEmpty: true },
+  storage: { file: "./data/store.json", seedOnEmpty: true },
   inventory: { lowStockThreshold: 10 }
 };
 
+// src/paths.ts
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+var MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+function findPluginRoot(start) {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "package.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return start;
+}
+var PLUGIN_ROOT = findPluginRoot(MODULE_DIR);
+function resolveStoreFile(raw) {
+  if (raw === "") return resolve(PLUGIN_ROOT, "data", "store.json");
+  if (isAbsolute(raw)) return raw;
+  const cleaned = raw.replace(/^\.?\/?(?:ecommerce-analyst-plugin\/)+/, "");
+  return resolve(PLUGIN_ROOT, cleaned);
+}
+
 // src/store.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync as existsSync2, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname as dirname2 } from "node:path";
 
 // src/types.ts
 var ORDER_TRANSITIONS = {
@@ -6931,7 +6960,7 @@ var EcommerceStore = class {
   }
   /** 初始化：加载持久化数据；为空时从适配器种子数据初始化 */
   async init() {
-    if (this.cfg.seedOnEmpty && existsSync(this.cfg.file)) {
+    if (this.cfg.seedOnEmpty && existsSync2(this.cfg.file)) {
       try {
         const raw = readFileSync(this.cfg.file, "utf8");
         const data = JSON.parse(raw);
@@ -6968,7 +6997,7 @@ var EcommerceStore = class {
   // ─────────────────────────── 持久化 ───────────────────────────
   save() {
     try {
-      mkdirSync(dirname(this.cfg.file), { recursive: true });
+      mkdirSync(dirname2(this.cfg.file), { recursive: true });
       writeFileSync(
         this.cfg.file,
         JSON.stringify(
@@ -8743,9 +8772,9 @@ async function parseImportFile(filename, content, encoding = "utf8") {
 
 // src/data-center.ts
 import { readFileSync as readFileSync2 } from "node:fs";
-import { dirname as dirname2, join } from "node:path";
-import { fileURLToPath } from "node:url";
-var MODULE_DIR = dirname2(fileURLToPath(import.meta.url));
+import { dirname as dirname3, join as join2 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var MODULE_DIR2 = dirname3(fileURLToPath2(import.meta.url));
 function apiBaseFromRequest(req) {
   const host = String(req?.headers?.host || "").trim();
   if (host) {
@@ -8766,7 +8795,7 @@ function apiBaseFromRequest(req) {
 function renderDataCenter(_store, req) {
   let html;
   try {
-    html = readFileSync2(join(MODULE_DIR, "assets", "data-center.html"), "utf8");
+    html = readFileSync2(join2(MODULE_DIR2, "assets", "data-center.html"), "utf8");
   } catch (err) {
     return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>\u7535\u5546\u6570\u636E\u4E2D\u53F0</title></head><body style="font-family:sans-serif;background:#e8f3f1;color:#16343b;padding:40px;line-height:1.8"><h2>\u26A0\uFE0F \u7535\u5546\u6570\u636E\u4E2D\u53F0\u52A0\u8F7D\u5931\u8D25</h2><p>' + (err instanceof Error ? String(err.message) : String(err)) + "</p><p>\u8BF7\u786E\u8BA4\u90E8\u7F72\u76EE\u5F55\u5B58\u5728 <code>assets/data-center.html</code>\uFF08\u5728\u63D2\u4EF6\u6E90\u7801\u76EE\u5F55\u8FD0\u884C <code>node scripts/build.mjs</code> \u91CD\u65B0\u6784\u5EFA\uFF09\u3002</p></body></html>";
   }
@@ -9302,7 +9331,7 @@ function injectApiBase(webServer) {
   });
 }
 function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     const chunks = [];
     let size = 0;
     req.on("data", (chunk) => {
@@ -9317,7 +9346,7 @@ function readJsonBody(req) {
     req.on("end", () => {
       try {
         const text = Buffer.concat(chunks).toString("utf8");
-        resolve(text ? JSON.parse(text) : {});
+        resolve2(text ? JSON.parse(text) : {});
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -10081,10 +10110,10 @@ function registerCompareTools(ctx, store) {
 }
 
 // src/skills.ts
-import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync } from "node:fs";
-import { dirname as dirname3, join as join2 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-var MODULE_DIR2 = dirname3(fileURLToPath2(import.meta.url));
+import { existsSync as existsSync3, readFileSync as readFileSync3, readdirSync } from "node:fs";
+import { dirname as dirname4, join as join3 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+var MODULE_DIR3 = dirname4(fileURLToPath3(import.meta.url));
 var SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 var PROVIDER_NAME = "ecommerce-analyst";
 var PROVIDER_RANK = 600;
@@ -10107,8 +10136,8 @@ function parseFrontmatter(raw) {
   return { data, body: lines.slice(close + 1).join("\n") };
 }
 function resolveSkillsDir() {
-  for (const candidate of [join2(MODULE_DIR2, "skills"), join2(MODULE_DIR2, "..", "skills")]) {
-    if (existsSync2(join2(candidate, "keyword-research", "SKILL.md"))) return candidate;
+  for (const candidate of [join3(MODULE_DIR3, "skills"), join3(MODULE_DIR3, "..", "skills")]) {
+    if (existsSync3(join3(candidate, "keyword-research", "SKILL.md"))) return candidate;
   }
   return void 0;
 }
@@ -10149,7 +10178,7 @@ function createSkillsProvider(skillsDir) {
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const md = join2(skillsDir, entry.name, "SKILL.md");
+        const md = join3(skillsDir, entry.name, "SKILL.md");
         const skill = readSkill(md);
         if (skill === void 0) continue;
         candidates.push({
@@ -10193,6 +10222,7 @@ async function apply(ctx, config = {}) {
     storage: { ...defaultConfig.storage, ...config.storage },
     inventory: { ...defaultConfig.inventory, ...config.inventory }
   };
+  resolved.storage.file = ensureWritableStoreFile(resolved.storage.file);
   const adapter = await createAdapter({
     ...resolved.platform,
     name: resolved.platform.name === "rest" ? "rest" : "mock"
@@ -10249,6 +10279,30 @@ async function apply(ctx, config = {}) {
     order: -94,
     text: () => qaRuleDescription()
   });
+}
+function ensureWritableStoreFile(raw) {
+  const target = resolveStoreFile(raw);
+  try {
+    mkdirSync2(dirname5(target), { recursive: true });
+    return target;
+  } catch (err) {
+    const fallback = join4(tmpdir(), "ecommerce-analyst-plugin", "data", "store.json");
+    console.warn(
+      `[ecommerce-analyst] \u6301\u4E45\u5316\u76EE\u5F55\u4E0D\u53EF\u5199\uFF0C\u56DE\u9000\u7CFB\u7EDF\u4E34\u65F6\u76EE\u5F55\uFF1A${target} \u2192 ${fallback}\uFF08`,
+      err instanceof Error ? err.message : String(err),
+      ")"
+    );
+    try {
+      mkdirSync2(dirname5(fallback), { recursive: true });
+      return fallback;
+    } catch (err2) {
+      console.error(
+        "[ecommerce-analyst] \u4E34\u65F6\u76EE\u5F55\u4EA6\u4E0D\u53EF\u5199\uFF0C\u6570\u636E\u5C06\u4EC5\u5B58\u5185\u5B58\uFF08\u91CD\u542F\u4E22\u5931\uFF09\uFF1A",
+        err2 instanceof Error ? err2.message : String(err2)
+      );
+      return target;
+    }
+  }
 }
 function todayPrompt(store) {
   const { shipments, overdues, lowStockCount } = store.todayActions();

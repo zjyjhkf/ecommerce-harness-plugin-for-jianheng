@@ -50,10 +50,10 @@ var React2 = __toESM(require("react"), 1);
 // src/client/data.ts
 function resolveApiBase() {
   if (typeof window === "undefined") return null;
-  const injected2 = window.__ECOM_API_BASE__;
-  if (typeof injected2 === "string" && injected2) return injected2.replace(/\/$/, "");
   const proto = window.location?.protocol;
   if (proto === "http:" || proto === "https:") return window.location.origin;
+  const injected2 = window.__ECOM_API_BASE__;
+  if (typeof injected2 === "string" && injected2) return injected2.replace(/\/$/, "");
   return null;
 }
 function toBase64(bytes) {

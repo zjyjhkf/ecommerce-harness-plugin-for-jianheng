@@ -15,8 +15,12 @@
  *
  * 本工作台通过 WorkBuddy 资料库能力（library skill）搭建、存储和部署
  */
+import { mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import { defaultConfig, type Config as ConfigShape } from './config.ts'
+import { resolveStoreFile } from './paths.ts'
 import { EcommerceStore, todayStr } from './store.ts'
 import { createAdapter } from './platform/adapter.ts'
 import { registerProductTools } from './tools/products.ts'
@@ -47,6 +51,11 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     storage: { ...defaultConfig.storage, ...config.storage },
     inventory: { ...defaultConfig.inventory, ...config.inventory },
   }
+
+  // 持久化路径：相对路径锚定到插件目录（与 dsh 启动 CWD 无关），并在此刻探测可写性。
+  // 不可写（Windows 受保护目录 / OneDrive 同步目录等）→ 明确告警并回退到系统临时目录，
+  // 保证「别人装完也能跑」，而不是导入数据时才静默 EPERM 崩溃。
+  resolved.storage.file = ensureWritableStoreFile(resolved.storage.file)
 
   // 数据层：按配置创建适配器（mock 示例模式 / rest 真实平台）
   const adapter = await createAdapter({
@@ -117,6 +126,37 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     order: -94,
     text: () => qaRuleDescription(),
   })
+}
+
+/**
+ * 把配置的持久化路径解析为绝对路径并保证可写：
+ *  - 相对路径锚定到插件目录（见 paths.ts），与 dsh 启动 CWD 无关；
+ *  - 提前 mkdir 探测可写性，不可写则回退系统临时目录并 console.warn（启动即告警，
+ *    而非导入数据时才 EPERM 崩溃）。返回最终使用的绝对路径。
+ */
+function ensureWritableStoreFile(raw: string): string {
+  const target = resolveStoreFile(raw)
+  try {
+    mkdirSync(dirname(target), { recursive: true })
+    return target
+  } catch (err) {
+    const fallback = join(tmpdir(), 'ecommerce-analyst-plugin', 'data', 'store.json')
+    console.warn(
+      `[ecommerce-analyst] 持久化目录不可写，回退系统临时目录：${target} → ${fallback}（`,
+      err instanceof Error ? err.message : String(err),
+      ')',
+    )
+    try {
+      mkdirSync(dirname(fallback), { recursive: true })
+      return fallback
+    } catch (err2) {
+      console.error(
+        '[ecommerce-analyst] 临时目录亦不可写，数据将仅存内存（重启丢失）：',
+        err2 instanceof Error ? err2.message : String(err2),
+      )
+      return target
+    }
+  }
 }
 
 /** 动态生成「今天要处理」提示（铁律 5：逾期/待办置顶，昨天没做完的自动顺延） */

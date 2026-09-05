@@ -177,6 +177,16 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 ---
 
+## 跨机器 / 跨系统部署说明（Windows / Ubuntu / 局域网）
+
+插件为纯 JS（`xlsx` / `pdfjs-dist` 无原生编译依赖），跨系统一致。两处与「换一台机器 / 非本机访问」相关的行为已在代码里做了稳健化处理，部署时可留意：
+
+- **导入数据落盘位置**：默认持久化文件是**相对插件自身目录**的 `data/store.json`（即 `<插件目录>/data/store.json`），**与你从哪个目录启动 `dsh web` 无关**，也不会因 Windows 受保护目录（Program Files / OneDrive 同步目录等）不可写而崩溃——若目标目录不可写，插件会打印 `[ecommerce-analyst] 持久化目录不可写…` 告警并自动回退到系统临时目录。如需指定位置，在配置里把 `storage.file` 填成**绝对路径**即可。该文件默认不入库（`.gitignore` 已忽略 `data/store.json`）。
+- **局域网 / 远程 / 反向代理访问**：数据中台面板的接口走**同源相对地址**（`location.origin`），不再写死 `http://127.0.0.1:端口`。因此别人用另一台机器通过 `http://<你的IP>:端口` 打开 dsh web 时，导入与中台面板同样可用；只有以 `file://` 桌面端加载本地页时才会用注入的本机地址。若在 HTTPS 反代后访问，请确保反代透传 `x-forwarded-proto: https`，否则会被浏览器按混合内容拦截。
+- **二次验证（可选）**：在非你本人的机器上 `dsh plugin add file:<插件目录>` → 重启 `dsh web` → 重复上方 1–5 步，确认导入数据在重启后仍在（落盘生效）、另一台机能打开面板（同源生效）。
+
+---
+
 ## 附带技能包（skills）：安装与联合使用
 
 仓库根目录 `skills/` 附带 7 个**跨境电商品类分析 skill**（DeepSeek Harness 标准 `.dsh` 技能格式，每个含一个 `SKILL.md`）。插件加载时会**自动把这 7 个技能注册进 dsh 的技能目录**（`ctx.skills`），装完即可 `/keyword-research` 直接调用或让模型自动调用，**无需手动复制**。**插件负责「取数」**（订单/销售/库存/中台数据），**skills 负责「决策」**（选品/竞品/关键词/Listing/广告/评论的经营判断）。

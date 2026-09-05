@@ -17,7 +17,7 @@ export interface Config {
     appSecret: string
   }
   storage: {
-    /** 本地持久化文件路径（相对仓库根或绝对路径） */
+    /** 本地持久化文件路径（相对路径按插件目录解析；也可填绝对路径） */
     file: string
     /** 空库时自动写入示例数据 */
     seedOnEmpty: boolean
@@ -37,9 +37,8 @@ export const Config = z.object({
     appSecret: z.string().default(''),
   }),
   storage: z.object({
-    file: z
-      .string()
-      .default('./ecommerce-analyst-plugin/data/store.json'),
+    // file：持久化路径；相对路径按插件自身目录解析（与 dsh 启动目录无关），绝对路径原样使用
+    file: z.string().default('./data/store.json'),
     seedOnEmpty: z.boolean().default(true),
   }),
   inventory: z.object({
@@ -49,6 +48,6 @@ export const Config = z.object({
 
 export const defaultConfig: Config = {
   platform: { name: 'mock', baseUrl: '', appKey: '', appSecret: '' },
-  storage: { file: './ecommerce-analyst-plugin/data/store.json', seedOnEmpty: true },
+  storage: { file: './data/store.json', seedOnEmpty: true },
   inventory: { lowStockThreshold: 10 },
 }

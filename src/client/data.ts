@@ -15,19 +15,24 @@ interface ApiEnvelope<T> {
 
 /**
  * 解析 /ecommerce-api 的访问基址，兼容三种形态：
- *  1. 服务端 tapIndex 注入的 window.__ECOM_API_BASE__（web 与任何经 webServer
- *     渲染的 index 页面）—— 端口由服务端权威提供；
- *  2. 页面本身由 webServer 提供（http://127.0.0.1:PORT）→ 同源相对路径；
- *  3. 兜底：相对路径（与页面同源）。
- * 桌面端若以 file:// 加载本地 index 且无注入，会优先尝试注入值；都没有则
- * 相对请求，面板会显示可读错误（可通过刷新按钮重试）。
+ *  1. 页面本身由 webServer 以 http(s) 提供（dsh web，含局域网 / 远程 / 反代访问）：
+ *     页面与 /ecommerce-api 同源 → 直接用 location.origin。**绝不采用服务端注入的
+ *     http://127.0.0.1:PORT**——非本机访问时它指向「访问者自己的机器」，会导致导入与
+ *     数据中台 iframe 全部打不开（面板空白）；
+ *  2. 桌面端以 file:// 加载本地 index：此时页面与服务端不同源，只能用 tapIndex 注入的
+ *     绝对地址（该场景下服务端与页面在同一台机器，127.0.0.1:PORT 成立）；
+ *  3. 兜底：相对路径（同源）。
+ * 面板接口异常会显示可读错误（可通过刷新按钮重试）。
  */
 function resolveApiBase(): string | null {
   if (typeof window === 'undefined') return null
+  const proto = window.location?.protocol
+  // 1) http(s) 同源：location.origin 权威且对局域网 / 远程 / 反代都正确，优先于注入值
+  if (proto === 'http:' || proto === 'https:') return window.location.origin
+  // 2) file:// 桌面端：用服务端注入的绝对地址（无则相对）
   const injected = (window as { __ECOM_API_BASE__?: unknown }).__ECOM_API_BASE__
   if (typeof injected === 'string' && injected) return injected.replace(/\/$/, '')
-  const proto = window.location?.protocol
-  if (proto === 'http:' || proto === 'https:') return window.location.origin
+  // 3) 兜底相对
   return null
 }
 
