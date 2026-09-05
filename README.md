@@ -86,6 +86,57 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 ---
 
+## 附带技能包（skills）：安装与联合使用
+
+仓库根目录 `skills/` 附带 7 个**跨境电商品类分析 skill**（DeepSeek Harness 标准 `.dsh` 技能格式，每个含一个 `SKILL.md`），与插件配套使用：**插件负责「取数」**（订单/销售/库存/中台数据），**skills 负责「决策」**（选品/竞品/关键词/Listing/广告/评论的经营判断）。
+
+### 1. 技能包内容
+
+| skill | 用途 | 典型触发问题 |
+| --- | --- | --- |
+| `market-opportunity` | 市场容量/趋势/竞争/进入门槛评估 | 「这个类目值不值得做」「怎么切入」 |
+| `competitor-analysis` | 识别核心竞品，价格/评分/评论/流量/广告 SWOT | 「竞品是谁」「对标某 ASIN/某店」 |
+| `keyword-research` | 挖词、评估搜索量/竞争度，输出埋词方案 | 「挖词/选词」「用户搜什么词」 |
+| `listing` | 标题/五点/描述/图片/A+ 优化，埋词提转化 | 「优化 Listing」「为什么转化差」 |
+| `ad-traffic` | 广告结构与流量分析，降 ACOS、预算分配 | 「广告效果」「怎么降 ACOS」 |
+| `review-insight` | 从评论挖掘好评卖点/差评痛点/改进机会 | 「评价怎么样」「评论里发现了什么」 |
+| `comprehensive-research` | 跨市场/竞品/关键词/评论/广告/Listing 的端到端综合研究 | 「帮我把这个品/店/类目系统分析一遍」 |
+
+### 2. 安装到本地 dsh
+
+把 `skills/` 下各 skill 目录合并进 dsh 的技能装载目录（不存在则自动新建）：
+
+```sh
+# Linux / macOS
+mkdir -p ~/.dsh/skills
+cp -r skills/* ~/.dsh/skills/
+
+# Windows（PowerShell）
+$dst = "$env:USERPROFILE\.dsh\skills"
+New-Item -ItemType Directory -Force -Path $dst
+Copy-Item "skills\*" $dst -Recurse -Force
+```
+
+> 或直接放入 dsh 项目内：把 `skills/` 下 7 个目录复制到 `<dsh项目根>/.dsh/skills/` 即可。重启 dsh（`pnpm dsh web`）后技能即生效。
+
+### 3. 与 ecommerce-analyst-plugin 联合使用
+
+插件与 skills 形成「数据 → 洞察 → 决策」闭环：
+
+1. **插件取数**：启动 `ecommerce-analyst-plugin` 后，用对话或「店铺工作台」完成订单/销售/库存管理，或导入月度/周度复盘 Excel，进入数据中台；
+2. **导出数据**：用 `ecommerce_export_csv` 把商品/订单导出为 UTF-8 CSV（带 BOM，Excel 可直接打开）；
+3. **喂给 skills**：把 CSV / 中台面板数据作为输入交给对应 skill，输出经营结论——
+   - `market-opportunity`：用销量/类目分布判断该细分市场是否值得进入；
+   - `competitor-analysis`：结合订单中的在售商品与价格带，做竞品对比与差异化定位；
+   - `keyword-research` / `listing`：从销售 TOP 商品提炼关键词与卖点，优化标题/五点；
+   - `ad-traffic`：用订单退款率/客单价定位广告浪费点，给出降 ACOS 建议；
+   - `review-insight`：对评论类商品做卖点/痛点挖掘，反哺选品与售后；
+   - `comprehensive-research`：汇总以上为一份可执行经营决策报告。
+
+**典型流水线**：`market-opportunity`（选类目）→ `keyword-research`（选词）→ `competitor-analysis`（看对手）→ `listing`（写页面）→ `ad-traffic`（控广告）→ `review-insight`（盯反馈）→ `comprehensive-research`（出决策报告）。
+
+---
+
 ## 功能一览
 
 | 模块 | 工具 | 说明 |
