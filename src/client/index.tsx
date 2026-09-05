@@ -17,7 +17,6 @@ import { injectStyles } from './styles.ts'
 import { BrandMark } from './brand.tsx'
 import {
   isCockpitOpen,
-  registerConversationSender,
   sendToConversation,
   setClientContext,
   subscribeCockpit,
@@ -67,11 +66,6 @@ function DataFooterLauncher(): React.ReactElement {
   )
 }
 
-/** 会话发送服务（点击商品生成分析指令时注入到 cockpit-bus） */
-interface ConversationLike {
-  send?(text: string): unknown
-}
-
 /** 会话输入区（conversation.input.dock）横置技能条。
  *  选 conversation.input.dock 而非 conversation.composer.dock：后者是 composer 卡片下方的
  *  footer（stats 带），在「新建会话（hero/blank 态）」下不渲染；input.dock 在有无历史时都会渲染。
@@ -104,16 +98,9 @@ export function apply(ctx: ClientContext): void {
     console.error('[ecommerce-analyst] 样式注入失败：', err)
   }
 
-  /* 注入会话发送能力：保存 ctx 引用，点击商品时动态获取 conversation 服务 */
+  /* 保存 cordis 根 context 引用：点击技能/商品时动态获取 sessions + conversation 服务
+   *（官方 scope-addressed 发送契约，替代旧有的启动期一次性注册 sender 与 DOM 爬取） */
   setClientContext(ctx)
-  if (typeof ctx.get === 'function') {
-    const conv = ctx.get('conversation') as ConversationLike | undefined
-    if (conv !== undefined && typeof conv.send === 'function') {
-      registerConversationSender((text: string) => {
-        void conv.send!(text)
-      })
-    }
-  }
 
   /* 唯一圆形总控入口（sidebar.footer.action）——桌面端侧边栏底部唯一开关按钮 */
   ctx.slots.inject('sidebar.footer.action', () =>

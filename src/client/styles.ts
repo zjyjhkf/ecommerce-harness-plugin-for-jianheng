@@ -853,6 +853,36 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   background: var(--esd-accent-soft, rgba(43,184,163,.10));
   box-shadow: inset 0 0 0 1px var(--esd-accent-soft-2, rgba(43,184,163,.22));
 }
+
+/* === 技能/指令发送可见反馈 toast（点击技能按钮 / 视图弹值后） === */
+#esd-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 12000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.esd-toast {
+  max-width: min(420px, 80vw);
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--dsw-shadow-lv3, 0 8px 32px rgba(0,0,0,.20));
+  color: #ffffff;
+  animation: esd-toast-in .18s ease-out;
+}
+.esd-toast-info { background: var(--esd-accent-strong, #16a085); }
+.esd-toast-error { background: var(--dsw-alias-state-error-primary, #e5484d); }
+@keyframes esd-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 `;
 
 let injected = false

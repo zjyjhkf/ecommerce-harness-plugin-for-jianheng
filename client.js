@@ -161,97 +161,142 @@ function notify(open) {
     }
   }
 }
-var conversationSender = null;
 var clientCtx = null;
 function setClientContext(ctx) {
   clientCtx = ctx;
 }
-function registerConversationSender(sender) {
-  conversationSender = sender;
-}
-function setNativeValue(el, value) {
-  const proto = Object.getPrototypeOf(el);
-  const desc = Object.getOwnPropertyDescriptor(proto, "value");
-  if (desc?.set !== void 0) {
-    desc.set.call(el, value);
-  } else {
-    el.value = value;
+function resolveCurrentSession() {
+  if (clientCtx === null || typeof clientCtx.get !== "function") {
+    return { ok: false, reason: "\u5BA2\u6237\u7AEF context \u672A\u6CE8\u5165" };
   }
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
-}
-function findComposerTextarea() {
-  if (typeof document === "undefined") return null;
-  const tas = Array.from(document.querySelectorAll("textarea"));
-  if (tas.length === 0) return null;
-  const byPlaceholder = tas.find((t) => {
-    const ph = (t.getAttribute("placeholder") ?? "").toLowerCase();
-    return ph.includes("\u63CF\u8FF0") || ph.includes("\u8F93\u5165") || ph.includes("message") || ph.includes("prompt") || ph.includes("\u95EE");
-  });
-  if (byPlaceholder !== void 0) return byPlaceholder;
-  return tas[0];
-}
-function insertIntoComposer(text) {
-  const ta = findComposerTextarea();
-  if (ta === null) return false;
+  let sessions;
   try {
-    setNativeValue(ta, text);
-    ta.focus();
-    return true;
+    sessions = clientCtx.get("sessions");
+  } catch (err) {
+    console.error("[ecommerce-analyst] \u83B7\u53D6 sessions \u670D\u52A1\u5931\u8D25\uFF1A", err);
+    return { ok: false, reason: "sessions \u670D\u52A1\u83B7\u53D6\u5931\u8D25" };
+  }
+  if (sessions === void 0 || sessions === null) return { ok: false, reason: "sessions \u670D\u52A1\u4E0D\u53EF\u7528" };
+  let currentId;
+  try {
+    currentId = sessions.list?.getSnapshot?.()?.current;
+  } catch (err) {
+    console.error("[ecommerce-analyst] \u8BFB\u53D6\u5F53\u524D\u4F1A\u8BDD\u5931\u8D25\uFF1A", err);
+    return { ok: false, reason: "\u5F53\u524D\u4F1A\u8BDD\u5FEB\u7167\u8BFB\u53D6\u5931\u8D25" };
+  }
+  if (currentId === void 0 || currentId === null || currentId === "") {
+    return { ok: false, reason: "\u65E0\u5F53\u524D\u4F1A\u8BDD" };
+  }
+  if (typeof sessions.scope !== "function") return { ok: false, reason: "sessions.scope \u4E0D\u53EF\u7528" };
+  let scoped;
+  try {
+    scoped = sessions.scope(currentId);
+  } catch (err) {
+    console.error("[ecommerce-analyst] \u83B7\u53D6\u4F1A\u8BDD scope \u5931\u8D25\uFF1A", err);
+    return { ok: false, reason: "\u4F1A\u8BDD scope \u83B7\u53D6\u5931\u8D25" };
+  }
+  if (scoped === void 0 || scoped === null) return { ok: false, reason: "\u4F1A\u8BDD scope \u4E3A\u7A7A" };
+  let conversation = null;
+  try {
+    if (typeof scoped.get === "function") {
+      conversation = scoped.get("conversation") ?? null;
+    }
+    if (conversation === null && scoped.conversation !== void 0 && scoped.conversation !== null) {
+      conversation = scoped.conversation;
+    }
+  } catch (err) {
+    console.error("[ecommerce-analyst] \u83B7\u53D6 conversation \u670D\u52A1\u5931\u8D25\uFF1A", err);
+  }
+  return { ok: true, scoped, conversation };
+}
+function showToast(message, kind = "info") {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  try {
+    let host = document.getElementById("esd-toast-host");
+    if (host === null) {
+      host = document.createElement("div");
+      host.id = "esd-toast-host";
+      document.body.appendChild(host);
+    }
+    const el = document.createElement("div");
+    el.className = "esd-toast esd-toast-" + kind;
+    el.textContent = message;
+    host.appendChild(el);
+    window.setTimeout(() => {
+      el.remove();
+    }, 3200);
   } catch {
+  }
+}
+function copyToClipboard(text) {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function") {
+      navigator.clipboard.writeText(text).catch(() => {
+      });
+    }
+  } catch {
+  }
+}
+async function sendViaCurrentSession(text) {
+  const res = resolveCurrentSession();
+  if (!res.ok) return { sent: false, reason: res.reason };
+  const conv = res.conversation;
+  if (conv === null || typeof conv.send !== "function") {
+    return { sent: false, reason: "conversation.send \u4E0D\u53EF\u7528" };
+  }
+  try {
+    await conv.send(text);
+    return { sent: true, reason: "" };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error("[ecommerce-analyst] \u6280\u80FD\u547D\u4EE4\u53D1\u9001\u5931\u8D25\uFF1A", err);
+    return { sent: false, reason };
+  }
+}
+function fillCurrentInput(text) {
+  const res = resolveCurrentSession();
+  if (!res.ok) return false;
+  const input = res.conversation?.input;
+  if (input === void 0 || input === null || typeof input.for !== "function") return false;
+  try {
+    const facade = input.for(res.scoped);
+    if (facade === void 0 || facade === null || typeof facade.setDraft !== "function") return false;
+    facade.setDraft(text);
+    if (typeof facade.notify === "function") facade.notify("info", "\u5DF2\u586B\u5165\u547D\u4EE4\uFF0C\u56DE\u8F66\u53D1\u9001");
+    showToast("\u547D\u4EE4\u5DF2\u586B\u5165\u8F93\u5165\u6846\uFF0C\u56DE\u8F66\u53D1\u9001");
+    return true;
+  } catch (err) {
+    console.error("[ecommerce-analyst] \u586B\u5165\u8F93\u5165\u6846\u5931\u8D25\uFF1A", err);
     return false;
   }
 }
-function sendViaSessionScope(text) {
-  if (clientCtx === null || typeof clientCtx.get !== "function") return false;
-  try {
-    const sessions = clientCtx.get("sessions");
-    const currentId = sessions?.list?.getSnapshot?.()?.current;
-    if (currentId !== void 0 && currentId !== null && typeof sessions?.scope === "function") {
-      const scoped = sessions.scope(currentId);
-      const conv = scoped?.conversation ?? (typeof scoped?.get === "function" ? scoped.get("conversation") : void 0);
-      if (conv !== void 0 && typeof conv.send === "function") {
-        void conv.send(text);
-        return true;
-      }
-    }
-  } catch (err) {
-    console.error("[ecommerce-analyst] session scope \u53D1\u9001\u5931\u8D25\uFF1A", err);
-  }
-  return false;
-}
-function sendToConversation(text) {
-  if (insertIntoComposer(text)) {
-    return { sent: true };
-  }
-  if (sendViaSessionScope(text)) {
-    return { sent: true };
-  }
-  if (conversationSender !== null) {
-    try {
-      conversationSender(text);
-      return { sent: true };
-    } catch (err) {
-      console.error("[ecommerce-analyst] \u53D1\u9001\u4F1A\u8BDD\u6307\u4EE4\u5931\u8D25\uFF1A", err);
-    }
-  }
-  if (typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function") {
-    navigator.clipboard.writeText(text).catch(() => {
-    });
-  }
+async function sendToConversation(text) {
+  const viaSession = await sendViaCurrentSession(text);
+  if (viaSession.sent) return { sent: true };
+  if (fillCurrentInput(text)) return { sent: true };
+  const skillId = text.startsWith("/") ? text.slice(1) : text;
+  console.error("[ecommerce-analyst] \u6280\u80FD\u547D\u4EE4\u53D1\u9001\u5931\u8D25\uFF1A", { text, reason: viaSession.reason });
+  showToast(`\u672A\u80FD\u53D1\u9001\u300C${skillId}\u300D\uFF0C\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34\u53D1\u9001`, "error");
+  copyToClipboard(text);
   return { sent: false };
 }
-function appendToConversation(text) {
-  if (typeof document !== "undefined") {
-    const ta = findComposerTextarea();
-    if (ta !== null) {
+async function appendToConversation(text) {
+  const res = resolveCurrentSession();
+  if (res.ok) {
+    const input = res.conversation?.input;
+    if (input !== void 0 && input !== null && typeof input.for === "function") {
       try {
-        const cur = ta.value ?? "";
-        const sep = cur.trim() === "" ? "" : "\n";
-        setNativeValue(ta, cur + sep + text);
-        ta.focus();
-        return { sent: true };
-      } catch {
+        const facade = input.for(res.scoped);
+        if (facade !== void 0 && facade !== null && typeof facade.setDraft === "function") {
+          const current = (typeof facade.state?.getSnapshot === "function" ? facade.state.getSnapshot().draft : void 0) ?? "";
+          const sep = current.trim() === "" ? "" : "\n";
+          facade.setDraft(current + sep + text);
+          if (typeof facade.notify === "function") facade.notify("info", "\u5DF2\u8FFD\u52A0\u5230\u8F93\u5165\u6846\uFF0C\u56DE\u8F66\u53D1\u9001");
+          showToast("\u5DF2\u8FFD\u52A0\u5230\u8F93\u5165\u6846\uFF0C\u56DE\u8F66\u53D1\u9001");
+          return { sent: true };
+        }
+      } catch (err) {
+        console.error("[ecommerce-analyst] \u8FFD\u52A0\u5230\u8F93\u5165\u6846\u5931\u8D25\uFF1A", err);
       }
     }
   }
@@ -320,8 +365,15 @@ async function sendToSession(sessions, id, text) {
   try {
     if (typeof sessions.scope !== "function") return false;
     const scoped = sessions.scope(id);
-    const conversation = scoped?.conversation;
-    if (conversation === void 0 || typeof conversation.send !== "function") return false;
+    if (scoped === void 0 || scoped === null) return false;
+    let conversation = null;
+    if (typeof scoped.get === "function") {
+      conversation = scoped.get("conversation") ?? null;
+    }
+    if (conversation === null && scoped.conversation !== void 0 && scoped.conversation !== null) {
+      conversation = scoped.conversation;
+    }
+    if (conversation === null || typeof conversation.send !== "function") return false;
     await conversation.send(text);
     return true;
   } catch (err) {
@@ -333,7 +385,7 @@ var linkWarnSessionId = null;
 async function openNewConversation(text) {
   const sessions = getSessions();
   if (sessions === null) {
-    const r2 = sendToConversation(text);
+    const r2 = await sendToConversation(text);
     return { opened: r2.sent, newSession: false };
   }
   let id = linkWarnSessionId;
@@ -352,12 +404,12 @@ async function openNewConversation(text) {
     sessions.open(id);
   }
   if (id === null) {
-    const r2 = sendToConversation(text);
+    const r2 = await sendToConversation(text);
     return { opened: r2.sent, newSession: false };
   }
   const sent = await sendToSession(sessions, id, text);
   if (sent) return { opened: true, newSession };
-  const r = sendToConversation(text);
+  const r = await sendToConversation(text);
   return { opened: r.sent, newSession };
 }
 var fullscreen = false;
@@ -633,10 +685,11 @@ function useShopDeskData() {
         const label = typeof data.label === "string" ? data.label : "";
         const value = typeof data.value === "string" ? data.value : "";
         if (label === "" || value === "") return;
-        const r = appendToConversation(valuePromptOf(label, value));
-        setImportMsg({
-          ok: r.sent,
-          text: r.sent ? `\u5DF2\u5728\u4F1A\u8BDD\u6846\u8FFD\u52A0\u300C${label}\u300D\uFF1A${value}` : "\u4F1A\u8BDD\u6846\u672A\u8FDE\u63A5\uFF0C\u5DF2\u590D\u5236\u5BF9\u5E94\u6570\u503C\u5230\u526A\u8D34\u677F"
+        void appendToConversation(valuePromptOf(label, value)).then((r) => {
+          setImportMsg({
+            ok: r.sent,
+            text: r.sent ? `\u5DF2\u5728\u4F1A\u8BDD\u6846\u8FFD\u52A0\u300C${label}\u300D\uFF1A${value}` : "\u4F1A\u8BDD\u6846\u672A\u8FDE\u63A5\uFF0C\u5DF2\u590D\u5236\u5BF9\u5E94\u6570\u503C\u5230\u526A\u8D34\u677F"
+          });
         });
         return;
       }
@@ -1672,6 +1725,36 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   background: var(--esd-accent-soft, rgba(43,184,163,.10));
   box-shadow: inset 0 0 0 1px var(--esd-accent-soft-2, rgba(43,184,163,.22));
 }
+
+/* === \u6280\u80FD/\u6307\u4EE4\u53D1\u9001\u53EF\u89C1\u53CD\u9988 toast\uFF08\u70B9\u51FB\u6280\u80FD\u6309\u94AE / \u89C6\u56FE\u5F39\u503C\u540E\uFF09 === */
+#esd-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 12000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.esd-toast {
+  max-width: min(420px, 80vw);
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--dsw-shadow-lv3, 0 8px 32px rgba(0,0,0,.20));
+  color: #ffffff;
+  animation: esd-toast-in .18s ease-out;
+}
+.esd-toast-info { background: var(--esd-accent-strong, #16a085); }
+.esd-toast-error { background: var(--dsw-alias-state-error-primary, #e5484d); }
+@keyframes esd-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 `;
 var injected = false;
 function injectStyles() {
@@ -1720,14 +1803,6 @@ function apply(ctx) {
     console.error("[ecommerce-analyst] \u6837\u5F0F\u6CE8\u5165\u5931\u8D25\uFF1A", err);
   }
   setClientContext(ctx);
-  if (typeof ctx.get === "function") {
-    const conv = ctx.get("conversation");
-    if (conv !== void 0 && typeof conv.send === "function") {
-      registerConversationSender((text) => {
-        void conv.send(text);
-      });
-    }
-  }
   ctx.slots.inject(
     "sidebar.footer.action",
     () => ctx.slots.register(

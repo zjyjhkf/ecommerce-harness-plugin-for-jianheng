@@ -104,152 +104,231 @@ function notify(open: boolean): void {
 
 /* ────────────────────────── 会话指令注入 ────────────────────────── */
 
-/** 会话发送函数（由 client/index.tsx 在 apply 时注入 dsh conversation 服务） */
-let conversationSender: ((text: string) => void) | null = null
-
-/** cordis 根 context 引用（延迟动态获取 conversation 服务，规避加载顺序问题） */
+/** cordis 根 context 引用（点击时刻动态获取 sessions/conversation 服务，规避加载顺序问题） */
 let clientCtx: { get?(name: string): unknown } | null = null
 
 /**
  * 保存 cordis 根 context。client/index.tsx 在 apply 时调用，
- * 之后点击商品时动态获取 conversation 服务（此时服务必然已就绪）。
+ * 之后点击技能/商品时动态获取 sessions + conversation 服务（此时服务必然已就绪）。
  */
 export function setClientContext(ctx: { get?(name: string): unknown } | null): void {
   clientCtx = ctx
 }
 
 /**
- * 注入会话发送能力。client/index.tsx 拿到 ctx.get('conversation') 后调用，
- * 之后 ShopDeskPanel 点击商品即可通过 sendToConversation 向会话框发送指令。
+ * dsh 会话 scope（sessions.scope(id) 返回的 AgentContext）最小形状。
+ * 它是 cordis Context：官方契约经 `scoped.get('conversation')` 取 scope-addressed
+ * conversation 服务；部分 shell 直接以 `scoped.conversation` 暴露，二者都兼容。
  */
-export function registerConversationSender(sender: (text: string) => void): void {
-  conversationSender = sender
+interface ScopedContextLike {
+  get?(name: string): unknown
+  conversation?: unknown
 }
 
-/** React 受控组件兼容：用原生 setter 设置 value 并触发 input 事件 */
-function setNativeValue(el: HTMLTextAreaElement, value: string): void {
-  const proto = Object.getPrototypeOf(el)
-  const desc = Object.getOwnPropertyDescriptor(proto, 'value')
-  if (desc?.set !== undefined) {
-    desc.set.call(el, value)
-  } else {
-    el.value = value
+/** conversation 服务最小形状（IConversation：send + input 门面）。 */
+interface ConversationServiceLike {
+  send?: (text: string) => Promise<unknown> | unknown
+  input?: {
+    for?: (actx: unknown) => SessionInputLike | undefined
   }
-  el.dispatchEvent(new Event('input', { bubbles: true }))
-  el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
-/** 找到 dsh 会话输入框（textarea 优先，contenteditable 兜底） */
-function findComposerTextarea(): HTMLTextAreaElement | null {
-  if (typeof document === 'undefined') return null
-  const tas = Array.from(document.querySelectorAll('textarea'))
-  if (tas.length === 0) return null
-  // 优先：placeholder 含「描述/输入/message/prompt」的输入框（dsh 会话 composer）
-  const byPlaceholder = tas.find((t) => {
-    const ph = (t.getAttribute('placeholder') ?? '').toLowerCase()
-    return ph.includes('描述') || ph.includes('输入') || ph.includes('message') || ph.includes('prompt') || ph.includes('问')
-  })
-  if (byPlaceholder !== undefined) return byPlaceholder as HTMLTextAreaElement
-  // 兜底：第一个 textarea
-  return tas[0] as HTMLTextAreaElement
+/** SessionInput 门面最小形状（setDraft + notify + state.draft）。 */
+interface SessionInputLike {
+  setDraft?: (text: string) => void
+  notify?: (level: 'info' | 'error', text: string) => void
+  state?: { getSnapshot?: () => { draft?: string } }
 }
 
-/** 通过 DOM 直接注入会话输入框（React 受控组件兼容） */
-function insertIntoComposer(text: string): boolean {
-  const ta = findComposerTextarea()
-  if (ta === null) return false
+type SessionResolveResult =
+  | { ok: true; scoped: ScopedContextLike; conversation: ConversationServiceLike | null }
+  | { ok: false; reason: string }
+
+/**
+ * 点击时刻按「当前会话」解析 sessions scope 与 conversation 服务。
+ * 这是 dsh 官方发送契约（见 harness apply.ts scopedConversation）：
+ *   ctx.sessions.list.getSnapshot().current → id
+ *   ctx.sessions.scope(id) → AgentContext（cordis Context）
+ *   scoped.get('conversation') → scope-addressed IConversation（send 走该会话）
+ * 失败返回 { ok:false, reason }，reason 用于可见反馈与 console.error。
+ */
+function resolveCurrentSession(): SessionResolveResult {
+  if (clientCtx === null || typeof clientCtx.get !== 'function') {
+    return { ok: false, reason: '客户端 context 未注入' }
+  }
+  let sessions: SessionsLike | undefined
   try {
-    setNativeValue(ta, text)
-    ta.focus()
-    return true
+    sessions = clientCtx.get('sessions') as SessionsLike | undefined
+  } catch (err) {
+    console.error('[ecommerce-analyst] 获取 sessions 服务失败：', err)
+    return { ok: false, reason: 'sessions 服务获取失败' }
+  }
+  if (sessions === undefined || sessions === null) return { ok: false, reason: 'sessions 服务不可用' }
+
+  let currentId: string | null | undefined
+  try {
+    currentId = sessions.list?.getSnapshot?.()?.current
+  } catch (err) {
+    console.error('[ecommerce-analyst] 读取当前会话失败：', err)
+    return { ok: false, reason: '当前会话快照读取失败' }
+  }
+  if (currentId === undefined || currentId === null || currentId === '') {
+    return { ok: false, reason: '无当前会话' }
+  }
+  if (typeof sessions.scope !== 'function') return { ok: false, reason: 'sessions.scope 不可用' }
+
+  let scoped: ScopedContextLike | undefined
+  try {
+    scoped = sessions.scope(currentId) as ScopedContextLike | undefined
+  } catch (err) {
+    console.error('[ecommerce-analyst] 获取会话 scope 失败：', err)
+    return { ok: false, reason: '会话 scope 获取失败' }
+  }
+  if (scoped === undefined || scoped === null) return { ok: false, reason: '会话 scope 为空' }
+
+  let conversation: ConversationServiceLike | null = null
+  try {
+    if (typeof scoped.get === 'function') {
+      conversation = (scoped.get('conversation') as ConversationServiceLike | undefined) ?? null
+    }
+    if (conversation === null && scoped.conversation !== undefined && scoped.conversation !== null) {
+      conversation = scoped.conversation as ConversationServiceLike
+    }
+  } catch (err) {
+    console.error('[ecommerce-analyst] 获取 conversation 服务失败：', err)
+  }
+
+  return { ok: true, scoped, conversation }
+}
+
+/** 可见 toast（DOM 注入，无 React 依赖；渲染失败不影响发送主流程） */
+function showToast(message: string, kind: 'info' | 'error' = 'info'): void {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return
+  try {
+    let host = document.getElementById('esd-toast-host')
+    if (host === null) {
+      host = document.createElement('div')
+      host.id = 'esd-toast-host'
+      document.body.appendChild(host)
+    }
+    const el = document.createElement('div')
+    el.className = 'esd-toast esd-toast-' + kind
+    el.textContent = message
+    host.appendChild(el)
+    window.setTimeout(() => {
+      el.remove()
+    }, 3200)
   } catch {
+    /* toast 渲染失败不影响主流程 */
+  }
+}
+
+/** 复制到剪贴板（仅在明确告知用户后才调用，绝不静默降级） */
+function copyToClipboard(text: string): void {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') {
+      navigator.clipboard.writeText(text).catch(() => {})
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 主路径：点击时刻按当前会话直接发送（官方 scope-addressed conversation.send）。 */
+async function sendViaCurrentSession(text: string): Promise<{ sent: boolean; reason: string }> {
+  const res = resolveCurrentSession()
+  if (!res.ok) return { sent: false, reason: res.reason }
+  const conv = res.conversation
+  if (conv === null || typeof conv.send !== 'function') {
+    return { sent: false, reason: 'conversation.send 不可用' }
+  }
+  try {
+    await conv.send(text)
+    return { sent: true, reason: '' }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.error('[ecommerce-analyst] 技能命令发送失败：', err)
+    return { sent: false, reason }
+  }
+}
+
+/** 兜底路径：填入当前会话输入框并聚焦（官方 input 门面 setDraft + notify），用户回车发送。 */
+function fillCurrentInput(text: string): boolean {
+  const res = resolveCurrentSession()
+  if (!res.ok) return false
+  const input = res.conversation?.input
+  if (input === undefined || input === null || typeof input.for !== 'function') return false
+  try {
+    const facade = input.for(res.scoped)
+    if (facade === undefined || facade === null || typeof facade.setDraft !== 'function') return false
+    facade.setDraft(text)
+    if (typeof facade.notify === 'function') facade.notify('info', '已填入命令，回车发送')
+    showToast('命令已填入输入框，回车发送')
+    return true
+  } catch (err) {
+    console.error('[ecommerce-analyst] 填入输入框失败：', err)
     return false
   }
 }
 
-/** 通过 session scope 的 conversation 服务发送（直接发送，作为 DOM 注入失败时的备选） */
-function sendViaSessionScope(text: string): boolean {
-  if (clientCtx === null || typeof clientCtx.get !== 'function') return false
-  try {
-    const sessions = clientCtx.get('sessions') as {
-      list?: { getSnapshot?: () => { current?: string | null } }
-      scope?: (id: string) => unknown
-    } | undefined
-    const currentId = sessions?.list?.getSnapshot?.()?.current
-    if (currentId !== undefined && currentId !== null && typeof sessions?.scope === 'function') {
-      const scoped = sessions.scope(currentId) as {
-        conversation?: { send?: (t: string) => unknown }
-        get?: (name: string) => unknown
-      }
-      const conv = scoped?.conversation ?? (typeof scoped?.get === 'function' ? scoped.get('conversation') : undefined) as
-        | { send?: (t: string) => unknown }
-        | undefined
-      if (conv !== undefined && typeof conv.send === 'function') {
-        void conv.send(text)
-        return true
-      }
-    }
-  } catch (err) {
-    console.error('[ecommerce-analyst] session scope 发送失败：', err)
-  }
-  return false
-}
+/**
+ * 向会话框发送一条指令（点击技能 → 生成 /slug 触发技能注入；点击商品 → 生成分析指令）。
+ * 优先级：
+ *  ① 主路径：点击时按「当前会话」直接发送（官方 sessions.scope(id).get('conversation').send）
+ *  ② 兜底：填入输入框并聚焦（官方 input 门面 setDraft + notify + toast）
+ *  ③ 全失败：可见 toast + console.error + 复制到剪贴板（绝不静默）
+ * 禁止再依赖对输入框 placeholder 的字符串猜测，或悄悄复制到剪贴板。
+ */
+export async function sendToConversation(text: string): Promise<{ sent: boolean }> {
+  // ① 主路径：当前会话直接发送
+  const viaSession = await sendViaCurrentSession(text)
+  if (viaSession.sent) return { sent: true }
 
-/** 向会话框发送一条指令（点击商品 → 生成分析指令）。
- *  优先级：① DOM 注入输入框（填充指令，用户可见可编辑） ② session scope conversation.send
- *  ③ 已注入的 sender ④ 剪贴板兜底 */
-export function sendToConversation(text: string): { sent: boolean } {
-  // ① DOM 直接注入会话输入框（首选：填充指令到输入框，符合「生成指令」语义）
-  if (insertIntoComposer(text)) {
-    return { sent: true }
-  }
-  // ② 通过 session scope 的 conversation 服务发送
-  if (sendViaSessionScope(text)) {
-    return { sent: true }
-  }
-  // ③ 已注入的 conversation sender（apply 时成功获取）
-  if (conversationSender !== null) {
-    try {
-      conversationSender(text)
-      return { sent: true }
-    } catch (err) {
-      console.error('[ecommerce-analyst] 发送会话指令失败：', err)
-    }
-  }
-  // ④ 降级：复制到剪贴板
-  if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') {
-    navigator.clipboard.writeText(text).catch(() => {})
-  }
+  // ② 兜底：填入输入框（官方 input 门面）
+  if (fillCurrentInput(text)) return { sent: true }
+
+  // ③ 全失败：可见反馈 + 剪贴板兜底（告知用户，绝不静默）
+  const skillId = text.startsWith('/') ? text.slice(1) : text
+  console.error('[ecommerce-analyst] 技能命令发送失败：', { text, reason: viaSession.reason })
+  showToast(`未能发送「${skillId}」，已复制到剪贴板，请手动粘贴发送`, 'error')
+  copyToClipboard(text)
   return { sent: false }
 }
 
 /**
  * 向会话框「追加」一条内容（用于点击视图弹值：与已选中的 skill 短链接/其他指标
  * 拼合到同一输入框，实现「skill + 数据」组合后一起发送分析）。
- * 优先级同 sendToConversation；DOM 输入框存在时追加，否则退回覆盖式发送。
+ * 读当前草稿 → setDraft(旧草稿 + '\n' + text) + notify + toast（官方 input 门面）；
+ * 无 input 门面时退回覆盖式发送（sendToConversation）。
  */
-export function appendToConversation(text: string): { sent: boolean } {
-  if (typeof document !== 'undefined') {
-    const ta = findComposerTextarea()
-    if (ta !== null) {
+export async function appendToConversation(text: string): Promise<{ sent: boolean }> {
+  const res = resolveCurrentSession()
+  if (res.ok) {
+    const input = res.conversation?.input
+    if (input !== undefined && input !== null && typeof input.for === 'function') {
       try {
-        const cur = ta.value ?? ''
-        const sep = cur.trim() === '' ? '' : '\n'
-        setNativeValue(ta, cur + sep + text)
-        ta.focus()
-        return { sent: true }
-      } catch {
-        /* 落到覆盖式发送 */
+        const facade = input.for(res.scoped)
+        if (facade !== undefined && facade !== null && typeof facade.setDraft === 'function') {
+          const current = (typeof facade.state?.getSnapshot === 'function' ? facade.state.getSnapshot().draft : undefined) ?? ''
+          const sep = current.trim() === '' ? '' : '\n'
+          facade.setDraft(current + sep + text)
+          if (typeof facade.notify === 'function') facade.notify('info', '已追加到输入框，回车发送')
+          showToast('已追加到输入框，回车发送')
+          return { sent: true }
+        }
+      } catch (err) {
+        console.error('[ecommerce-analyst] 追加到输入框失败：', err)
       }
     }
   }
+  // 退回覆盖式发送
   return sendToConversation(text)
 }
 
 /**
  * sessions 服务运行时形状（dsh 客户端 SessionRuntime，仅用所需成员；延迟读取规避加载顺序）。
  * 发送提示词走 scope 会话的 conversation 服务（scope-addressed）——这是 dsh 官方契约：
- *   ctx.sessions.scope(id).conversation.send(text)
+ *   ctx.sessions.scope(id).get('conversation').send(text)
  * 直接以用户消息形式送入该会话并触发 AI 分析，无需 DOM 注入会话输入框。
  */
 interface SessionsLike {
@@ -261,7 +340,7 @@ interface SessionsLike {
   }
   create?: (opts?: { workspaceId?: string; cwd?: string; sessionId?: string }) => Promise<string>
   open?: (id: string) => void
-  scope?: (id: string) => { conversation?: { send?: (text: string) => Promise<unknown> } } | undefined
+  scope?: (id: string) => ScopedContextLike | undefined
 }
 
 /** workspaces 服务运行时形状（dsh WorkspaceService，仅用 list 快照定位当前分组）。 */
@@ -353,8 +432,15 @@ async function sendToSession(sessions: SessionsLike, id: string, text: string): 
   try {
     if (typeof sessions.scope !== 'function') return false
     const scoped = sessions.scope(id)
-    const conversation = scoped?.conversation
-    if (conversation === undefined || typeof conversation.send !== 'function') return false
+    if (scoped === undefined || scoped === null) return false
+    let conversation: ConversationServiceLike | null = null
+    if (typeof scoped.get === 'function') {
+      conversation = (scoped.get('conversation') as ConversationServiceLike | undefined) ?? null
+    }
+    if (conversation === null && scoped.conversation !== undefined && scoped.conversation !== null) {
+      conversation = scoped.conversation as ConversationServiceLike
+    }
+    if (conversation === null || typeof conversation.send !== 'function') return false
     await conversation.send(text)
     return true
   } catch (err) {
@@ -380,7 +466,7 @@ export function resetLinkWarnSessionForTest(): void {
 export async function openNewConversation(text: string): Promise<{ opened: boolean; newSession: boolean }> {
   const sessions = getSessions()
   if (sessions === null) {
-    const r = sendToConversation(text)
+    const r = await sendToConversation(text)
     return { opened: r.sent, newSession: false }
   }
 
@@ -405,14 +491,14 @@ export async function openNewConversation(text: string): Promise<{ opened: boole
 
   if (id === null) {
     // 新建失败：降级到当前会话注入/剪贴板
-    const r = sendToConversation(text)
+    const r = await sendToConversation(text)
     return { opened: r.sent, newSession: false }
   }
 
   const sent = await sendToSession(sessions, id, text)
   if (sent) return { opened: true, newSession }
   // 直接发送失败：降级 DOM 注入/剪贴板
-  const r = sendToConversation(text)
+  const r = await sendToConversation(text)
   return { opened: r.sent, newSession }
 }
 

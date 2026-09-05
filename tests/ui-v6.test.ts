@@ -71,9 +71,13 @@ test('v0.6 [index.tsx] 保留 conversation.view + shell.overlay 注册', () => {
   assert.match(CLIENT_INDEX, /slots\.inject\(['"]shell\.overlay['"]/)
 })
 
-test('v0.6 [index.tsx] 注入 conversation 服务（点击商品 → 会话指令）', () => {
-  assert.match(CLIENT_INDEX, /ctx\.get\(['"]conversation['"]/)
-  assert.match(CLIENT_INDEX, /registerConversationSender/)
+test('v0.6 [index.tsx] 注入会话发送能力：保存 ctx，点击时按当前会话动态获取（官方 scope 契约）', () => {
+  // v0.3.3：不再启动期一次性 registerConversationSender；改为保存 ctx，点击时动态取 sessions
+  assert.match(CLIENT_INDEX, /setClientContext\(ctx\)/)
+  assert.doesNotMatch(CLIENT_INDEX, /registerConversationSender/, '启动期一次性注册 sender 应已删除')
+  // 官方发送契约落在 cockpit-bus：sessions.scope(id) 后 get('conversation').send
+  assert.match(COCKPIT_BUS, /get\(['"]conversation['"]\)/)
+  assert.match(COCKPIT_BUS, /sessions\.scope/)
 })
 
 /* === ShopDeskPanel 改动校验 === */

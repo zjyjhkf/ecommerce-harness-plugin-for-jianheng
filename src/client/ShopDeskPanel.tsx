@@ -169,10 +169,11 @@ function useShopDeskData(): ShopDeskData {
         const label = typeof data.label === 'string' ? data.label : ''
         const value = typeof data.value === 'string' ? data.value : ''
         if (label === '' || value === '') return
-        const r = appendToConversation(valuePromptOf(label, value))
-        setImportMsg({
-          ok: r.sent,
-          text: r.sent ? `已在会话框追加「${label}」：${value}` : '会话框未连接，已复制对应数值到剪贴板',
+        void appendToConversation(valuePromptOf(label, value)).then((r) => {
+          setImportMsg({
+            ok: r.sent,
+            text: r.sent ? `已在会话框追加「${label}」：${value}` : '会话框未连接，已复制对应数值到剪贴板',
+          })
         })
         return
       }

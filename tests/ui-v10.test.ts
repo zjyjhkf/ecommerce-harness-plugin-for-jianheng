@@ -1,84 +1,110 @@
 /**
  * v0.10 测试集：会话指令注入链路（点击商品 → 会话框生成指令）
  *
- * 覆盖 cockpit-bus.sendToConversation 的四层 fallback：
- *  ① DOM 注入输入框 ② session scope conversation ③ 已注入 sender ④ 剪贴板
- * 以及 analysisPromptOf 在会话框内的完整呈现（市场营销视角）。
+ * 覆盖 cockpit-bus.sendToConversation 的新三层 fallback（官方 session scope 发送契约）：
+ *  ① 主路径：sessions.scope(id).get('conversation').send（点击时刻按当前会话直接发送）
+ *  ② 兜底：conversation.input.for(scoped).setDraft（填入输入框 + notify + toast）
+ *  ③ 全失败：可见 toast + console.error + 剪贴板（绝不静默）
+ * 以及 openNewConversation 的会话分组新建/复用链路。
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   openNewConversation,
-  registerConversationSender,
   resetLinkWarnSessionForTest,
   sendToConversation,
   setClientContext,
 } from '../src/client/cockpit-bus.ts'
 
-test('v0.10 [cockpit-bus] 无任何注入能力时降级到剪贴板并返回 sent=false（node 无 DOM）', () => {
-  // 清空状态
-  registerConversationSender((_t) => {})
-  // 用一个永远抛错的 sender 覆盖，确保走到降级
-  let called = false
-  registerConversationSender(() => {
-    called = true
-    throw new Error('boom')
-  })
-  const result = sendToConversation('测试指令')
-  // 无 DOM、无 session scope，最终降级（剪贴板在 node 下无 navigator，静默）
-  assert.equal(result.sent, false)
-  assert.equal(called, true, '已注入 sender 应被尝试调用')
-})
-
-test('v0.10 [cockpit-bus] 已注入 sender 成功时返回 sent=true', () => {
-  let received = ''
-  registerConversationSender((t) => {
-    received = t
-  })
-  setClientContext(null)
-  const result = sendToConversation('分析商品A')
-  assert.equal(result.sent, true)
-  assert.equal(received, '分析商品A')
-})
-
-test('v0.10 [cockpit-bus] setClientContext 保存 context 引用（供动态获取）', () => {
-  const ctx = { get: () => undefined }
-  setClientContext(ctx)
-  // 无法直接断言内部状态，但验证不抛异常 + 后续 send 走降级
-  registerConversationSender(() => {
-    throw new Error('x')
-  })
-  const result = sendToConversation('x')
+test('v0.10 [cockpit-bus] 无 sessions 服务时全失败返回 sent=false（node 无 DOM，绝不静默）', async () => {
+  setClientContext({ get: () => undefined })
+  const result = await sendToConversation('测试指令')
   assert.equal(result.sent, false)
   setClientContext(null)
 })
 
-test('v0.10 [cockpit-bus] session scope 获取不到时静默降级（不抛异常）', () => {
-  const ctx = {
-    get: () => ({
-      list: { getSnapshot: () => ({ current: null }) },
-      scope: () => undefined,
-    }),
+test('v0.10 [cockpit-bus] 主路径：点击时按当前会话直接发送（scoped.get("conversation").send）', async () => {
+  const sent: string[] = []
+  const scoped = {
+    get: (name: string) => (name === 'conversation' ? { send: async (t: string) => { sent.push(t) } } : undefined),
   }
-  setClientContext(ctx)
-  registerConversationSender(() => {
-    throw new Error('x')
+  const sessions = {
+    list: { getSnapshot: () => ({ current: 'cur-session' }) },
+    scope: () => scoped,
+  }
+  setClientContext({ get: (name: string) => (name === 'sessions' ? sessions : undefined) })
+  const result = await sendToConversation('分析商品A')
+  assert.equal(result.sent, true)
+  assert.deepEqual(sent, ['分析商品A'])
+  setClientContext(null)
+})
+
+test('v0.10 [cockpit-bus] 主路径：兼容 scoped.conversation 直接暴露（无 get）', async () => {
+  const sent: string[] = []
+  const sessions = {
+    list: { getSnapshot: () => ({ current: 'cur-session' }) },
+    scope: () => ({ conversation: { send: async (t: string) => { sent.push(t) } } }),
+  }
+  setClientContext({ get: (name: string) => (name === 'sessions' ? sessions : undefined) })
+  const result = await sendToConversation('/keyword-research')
+  assert.equal(result.sent, true)
+  assert.deepEqual(sent, ['/keyword-research'])
+  setClientContext(null)
+})
+
+test('v0.10 [cockpit-bus] 兜底：send 不可用时填入输入框（input.for.setDraft + notify）', async () => {
+  const drafted: string[] = []
+  const notified: string[] = []
+  const facade = {
+    setDraft: (t: string) => { drafted.push(t) },
+    notify: (_level: string, t: string) => { notified.push(t) },
+    state: { getSnapshot: () => ({ draft: '' }) },
+  }
+  const scoped = {
+    get: (name: string) => (name === 'conversation' ? { input: { for: () => facade } } : undefined),
+  }
+  const sessions = { list: { getSnapshot: () => ({ current: 'cur-session' }) }, scope: () => scoped }
+  setClientContext({ get: (name: string) => (name === 'sessions' ? sessions : undefined) })
+  const result = await sendToConversation('/market-opportunity')
+  assert.equal(result.sent, true)
+  assert.deepEqual(drafted, ['/market-opportunity'])
+  assert.equal(notified.length, 1)
+  setClientContext(null)
+})
+
+test('v0.10 [cockpit-bus] send 抛错时降级填入输入框，不抛未捕获异常', async () => {
+  const drafted: string[] = []
+  const facade = {
+    setDraft: (t: string) => { drafted.push(t) },
+    notify: () => {},
+    state: { getSnapshot: () => ({ draft: '' }) },
+  }
+  const scoped = {
+    get: (name: string) => (name === 'conversation'
+      ? { send: async () => { throw new Error('no session scope') }, input: { for: () => facade } }
+      : undefined),
+  }
+  const sessions = { list: { getSnapshot: () => ({ current: 'cur-session' }) }, scope: () => scoped }
+  setClientContext({ get: (name: string) => (name === 'sessions' ? sessions : undefined) })
+  const result = await sendToConversation('/ad-traffic')
+  assert.equal(result.sent, true, 'send 抛错后应降级填入输入框')
+  assert.deepEqual(drafted, ['/ad-traffic'])
+  setClientContext(null)
+})
+
+test('v0.10 [cockpit-bus] session scope 获取不到时全失败（不抛异常）', async () => {
+  setClientContext({
+    get: () => ({ list: { getSnapshot: () => ({ current: null }) }, scope: () => undefined }),
   })
-  const result = sendToConversation('x')
+  const result = await sendToConversation('x')
   assert.equal(result.sent, false)
   setClientContext(null)
 })
 
-test('v0.10 [cockpit-bus] 四层 fallback 不会抛出未捕获异常', () => {
-  // 模拟各种坏境：无 DOM、conversation 抛错、剪贴板不存在
+test('v0.10 [cockpit-bus] 各种坏境不会抛出未捕获异常', async () => {
   setClientContext({ get: () => ({ send: () => { throw new Error('session') } }) })
-  registerConversationSender(() => {
-    throw new Error('sender')
-  })
-  assert.doesNotThrow(() => {
-    const r = sendToConversation('安全测试')
-    assert.equal(typeof r.sent, 'boolean')
-  })
+  const result = await sendToConversation('安全测试')
+  assert.equal(typeof result.sent, 'boolean')
   setClientContext(null)
 })
 
@@ -134,17 +160,12 @@ test('v0.11 [cockpit-bus] openNewConversation 首次在当前会话分组新建�
   setClientContext(null)
 })
 
-test('v0.11 [cockpit-bus] openNewConversation 无 sessions 服务时降级到 sendToConversation', async () => {
+test('v0.11 [cockpit-bus] openNewConversation 无 sessions 服务时降级到 sendToConversation（无发送路径 → opened=false）', async () => {
   resetLinkWarnSessionForTest()
-  let received = ''
-  registerConversationSender((t) => {
-    received = t
-  })
   setClientContext({ get: () => undefined })
   const r = await openNewConversation('降级指令')
   assert.equal(r.newSession, false)
-  assert.equal(r.opened, true)
-  assert.equal(received, '降级指令')
+  assert.equal(r.opened, false)
   setClientContext(null)
   resetLinkWarnSessionForTest()
 })
