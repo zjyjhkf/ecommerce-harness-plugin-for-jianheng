@@ -16,8 +16,8 @@ import { skillInvocationToken, type SkillModule } from './skills.ts'
 import { injectStyles } from './styles.ts'
 import { BrandMark } from './brand.tsx'
 import {
+  fillConversationInput,
   isCockpitOpen,
-  sendToConversation,
   setClientContext,
   subscribeCockpit,
   toggleCockpit,
@@ -73,12 +73,13 @@ function DataFooterLauncher(): React.ReactElement {
  *  关闭时移除，CSS 据此显示/隐藏（`body:not(.esd-cockpit-open) .esd-skillbar-dock`）。
  *  因此启动前不显示，点击插件 logo 打开侧边栏后显示；关闭侧边栏后技能条「归位」
  *  回初始隐藏状态。
- *  点击任一技能 → 会话框生成短链接（仅技能中文名，颜色与其他内容区分）。 */
+ *  点击任一技能 → 把 /slug 填入会话输入框（**不发送**），待用户点击视图追加数据后，
+ *  由用户手动回车发送，实现「skill + 数据」组合分析。 */
 function ComposerDockSkillBar(): React.ReactElement {
   return React.createElement(SkillBar, {
     variant: 'dock',
     onInvoke: (skill: SkillModule): void => {
-      void sendToConversation(skillInvocationToken(skill))
+      void fillConversationInput(skillInvocationToken(skill))
     },
   })
 }

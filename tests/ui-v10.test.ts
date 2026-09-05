@@ -10,6 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  fillConversationInput,
   openNewConversation,
   resetLinkWarnSessionForTest,
   sendToConversation,
@@ -105,6 +106,28 @@ test('v0.10 [cockpit-bus] 各种坏境不会抛出未捕获异常', async () => 
   setClientContext({ get: () => ({ send: () => { throw new Error('session') } }) })
   const result = await sendToConversation('安全测试')
   assert.equal(typeof result.sent, 'boolean')
+  setClientContext(null)
+})
+
+test('v0.10 [cockpit-bus] 技能条点击仅填入输入框（fillConversationInput 不直接发送）', async () => {
+  const drafted: string[] = []
+  const sent: string[] = []
+  const facade = {
+    setDraft: (t: string) => { drafted.push(t) },
+    notify: () => {},
+    state: { getSnapshot: () => ({ draft: '' }) },
+  }
+  const scoped = {
+    get: (name: string) => (name === 'conversation'
+      ? { input: { for: () => facade }, send: async (t: string) => { sent.push(t) } }
+      : undefined),
+  }
+  const sessions = { list: { getSnapshot: () => ({ current: 'cur-session' }) }, scope: () => scoped }
+  setClientContext({ get: (name: string) => (name === 'sessions' ? sessions : undefined) })
+  const result = await fillConversationInput('/keyword-research')
+  assert.equal(result.sent, true)
+  assert.deepEqual(drafted, ['/keyword-research'], '应填入输入框而非直接发送')
+  assert.deepEqual(sent, [], '技能按钮点击不应直接发送会话消息')
   setClientContext(null)
 })
 

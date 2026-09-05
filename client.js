@@ -280,6 +280,14 @@ async function sendToConversation(text) {
   copyToClipboard(text);
   return { sent: false };
 }
+async function fillConversationInput(text) {
+  if (fillCurrentInput(text)) return { sent: true };
+  const skillId = text.startsWith("/") ? text.slice(1) : text;
+  console.error("[ecommerce-analyst] \u6280\u80FD\u547D\u4EE4\u586B\u5165\u5931\u8D25\uFF1A", { text });
+  showToast(`\u672A\u80FD\u586B\u5165\u300C${skillId}\u300D\uFF0C\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34`, "error");
+  copyToClipboard(text);
+  return { sent: false };
+}
 async function appendToConversation(text) {
   const res = resolveCurrentSession();
   if (res.ok) {
@@ -1792,7 +1800,7 @@ function ComposerDockSkillBar() {
   return React4.createElement(SkillBar, {
     variant: "dock",
     onInvoke: (skill) => {
-      void sendToConversation(skillInvocationToken(skill));
+      void fillConversationInput(skillInvocationToken(skill));
     }
   });
 }

@@ -173,7 +173,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 2. **电商数据中台面板**：面板标题为「电商数据中台」，工具栏含 全屏 / 导出 / 导入 / 刷新 四个按键，主体为数据中台 iframe。
 3. **数据导入 + 复盘**：点击「📥 导入」选择月度（4 份 Excel）/ 周度（3 份「商品排名导出」）文件 → 数据中台显示对应复盘内容；**连续导入同口径两期后**出现「数据对比」结果（第一期仅显示「暂无上一期」引导）。
 4. **工具**：对话中调用任意 `product_list` / `order_list` / `order_stats` / `stats_overview` / `inventory_low_stock` / `ecommerce_import_excel` / `ecommerce_export_csv` / `ecommerce_qa` / `ecommerce_compare` 正常返回。
-5. **技能**：直接 `/keyword-research`、`/market-opportunity` 等 7 个技能可调用；会话输入框下方技能条（打开面板后显示）点击任一技能按钮，命令 `/slug` 会**直接送入当前会话**（若直接发送不可用，则填入输入框并提示「回车发送」；均失败时给出可见提示并复制到剪贴板，绝不静默）（详见下方技能包章节）。
+5. **技能**：直接 `/keyword-research`、`/market-opportunity` 等 7 个技能可调用；会话输入框下方技能条（打开面板后显示）点击任一技能按钮，命令 `/slug` 会**填入输入框（不直接发送）**，再点击数据中台视图追加对应数据，最后由你回车统一发送触发技能分析；填入失败时给出可见提示并复制到剪贴板，绝不静默（详见下方技能包章节）。
 
 ---
 
@@ -199,7 +199,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 - **对话调用**：`/keyword-research`、`/market-opportunity` 等 `/name` 形式（7 个 slug 见上表）；
 - **模型自动调用**：技能声明为 `modelInvocable`，模型可按需自动选中；
-- **技能条按键**：会话框下方技能条的 7 个技能按键点击后发送 `/<slug>`，触发技能注入。
+- **技能条按键**：会话框下方技能条的 7 个技能按键点击后**填入 `/<slug>`（不直接发送）**，配合点击数据中台视图追加数据，回车后触发技能注入。
 
 > 若使用较旧 dsh（无 `ctx.skills` 服务），插件会打印 warn 并跳过注册；此时仍可手动装载：把 `skills/` 下各目录复制到 `~/.dsh/skills/`（Linux/macOS）、`%USERPROFILE%\.dsh\skills`（Windows），或 `<dsh项目根>/.dsh/skills/` 后重启 dsh。
 

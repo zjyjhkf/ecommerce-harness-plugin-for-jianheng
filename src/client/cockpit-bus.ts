@@ -296,6 +296,21 @@ export async function sendToConversation(text: string): Promise<{ sent: boolean 
 }
 
 /**
+ * 仅把指令填入当前会话输入框（**不发送**）。
+ * 用于「技能条点击」：填入 /slug 后等待用户继续点击视图追加数据，
+ * 最后由用户手动回车发送，实现「skill + 数据」组合分析（而非点击即直接发送）。
+ * 填入成功返回 { sent: true }（语义 = 已填入待发送）；失败走可见反馈 + 剪贴板。
+ */
+export async function fillConversationInput(text: string): Promise<{ sent: boolean }> {
+  if (fillCurrentInput(text)) return { sent: true }
+  const skillId = text.startsWith('/') ? text.slice(1) : text
+  console.error('[ecommerce-analyst] 技能命令填入失败：', { text })
+  showToast(`未能填入「${skillId}」，已复制到剪贴板，请手动粘贴`, 'error')
+  copyToClipboard(text)
+  return { sent: false }
+}
+
+/**
  * 向会话框「追加」一条内容（用于点击视图弹值：与已选中的 skill 短链接/其他指标
  * 拼合到同一输入框，实现「skill + 数据」组合后一起发送分析）。
  * 读当前草稿 → setDraft(旧草稿 + '\n' + text) + notify + toast（官方 input 门面）；

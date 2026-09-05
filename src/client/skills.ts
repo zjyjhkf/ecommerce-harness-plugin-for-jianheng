@@ -89,8 +89,8 @@ export function findSkill(id: string): SkillModule | undefined {
 /**
  * 构建「点击技能按键 → 会话框」的技能调用令牌。
  * dsh 规范：会话框以 `/name` 开头即触发对应技能注入（宿主在 pre-step 边界识别，
- * 见 packages/host/apiproxy/src/api/skills.ts 注释），因此直接发送 `/<slug>`，
- * 技能正文由宿主注入，避免把冗长提示词塞进输入框。
+ * 见 packages/host/apiproxy/src/api/skills.ts 注释），因此向会话框填入 `/<slug>`
+ * （回车后触发），技能正文由宿主注入，避免把冗长提示词塞进输入框。
  */
 export function skillInvocationToken(skill: SkillModule): string {
   return `/${skill.id}`
