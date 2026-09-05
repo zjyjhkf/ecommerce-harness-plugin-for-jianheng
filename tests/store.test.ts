@@ -8,7 +8,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EcommerceStore } from '../src/store.ts'
 import { isRevenueOrder } from '../src/types.ts'
-import { buildSnapshot, buildBrief } from '../src/shop-api.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
 
 function makeStore(): { store: EcommerceStore; dir: string } {
@@ -193,34 +192,5 @@ test('回归#1 importFromFile：仅商品导入时清空演示订单（杜绝演
   assert.equal(r.products, 2)
   assert.equal(r.orders, 0) // 演示订单被清空
   assert.equal(store.dataMode, 'imported')
-  rmSync(dir, { recursive: true, force: true })
-})
-
-test('回归#4 buildSnapshot：today.shipments 暴露待发货明细（今日待办可展开）', async () => {
-  const { store, dir } = await initStore()
-  const snap = buildSnapshot(store)
-  assert.ok(Array.isArray(snap.today.shipments))
-  assert.equal(snap.today.shipments.length, snap.today.shipmentsCount)
-  assert.equal(snap.today.shipments.length, 55) // 与 todayActions().shipments 一致
-  const s = snap.today.shipments[0]
-  for (const k of ['order_id', 'buyer', 'product_name', 'quantity', 'amount', 'created_at', 'status'] as const) {
-    assert.ok(k in s, `shipments 缺字段 ${k}`)
-  }
-  rmSync(dir, { recursive: true, force: true })
-})
-
-test('回归#2/#3 导入后快照与简报实时反映导入数据（修复：CSV 导入未实时响应 / 简报未更新）', async () => {
-  const { store, dir } = await initStore()
-  const orders = [
-    { order_id: 'RT-1', sku: 'RT-A', product_name: '实时A', buyer: 'b', quantity: 4, amount: 200, created_at: '2026-08-25T10:00:00Z', status: 'paid' },
-  ]
-  store.importFromFile(undefined, orders as never)
-  // 快照应实时反映导入订单（而非演示数据）
-  const snap = buildSnapshot(store)
-  assert.equal(snap.today.shipmentsCount, 1)
-  assert.equal(snap.today.shipments[0].product_name, '实时A')
-  // 经营简报应基于导入数据重新生成
-  const brief = buildBrief(store)
-  assert.match(brief, /实时A/)
   rmSync(dir, { recursive: true, force: true })
 })

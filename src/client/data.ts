@@ -1,82 +1,11 @@
 /**
  * ecommerce-analyst-plugin — 侧边栏客户端数据层
  *
- * 只读消费服务端 /ecommerce-api（与 src/shop-api.ts 对齐）。数据口径与
- * stats_overview / inventory_low_stock / todayActions 等工具完全一致——
- * 同一 EcommerceStore，同一统计逻辑，无客户端二次计算。
+ * 面板只承载「电商数据中台」（复盘数据：月度 / 周度 / 数据对比），数据一律来自
+ * 导入的 Excel 复盘报表。早期「店铺工作台 / BI 看板」的实时经营数据
+ * （订单 / 商品）相关接口（快照 / 行动清单 / 简报 / 数据源切换 / 独立仪表盘）
+ * 已随 BI 看板一并移除。
  */
-
-/** 面板快照（服务端 buildSnapshot 的镜像） */
-export interface ShopSnapshot {
-  overview: {
-    revenue: number
-    orders: number
-    avg_order_value: number
-    top_selling_sku: string
-    refund_rate: number
-  }
-  today: {
-    shipmentsCount: number
-    overdueCount: number
-    overdues: Array<{ order_id: string; buyer: string; amount: number; created_at: string }>
-    /** 待发货订单明细（今日待办可展开查看） */
-    shipments: Array<{ order_id: string; buyer: string; product_name: string; quantity: number; amount: number; created_at: string; status: string }>
-    lowStockCount: number
-  }
-  categories: Array<{ category: string; count: number; revenue: number; ratio: number }>
-  top: Array<{ sku: string; name: string; revenue: number; units: number }>
-  lowStock: Array<{ sku: string; name: string; stock: number; category: string; threshold: number }>
-  sourceMode: 'mock' | 'rest'
-  /** 数据来源模式与可切换性（侧边栏「数据源」标签） */
-  mode: {
-    mode: 'demo' | 'imported' | 'rest'
-    sourceMode: 'mock' | 'rest'
-    canDemo: boolean
-    canImported: boolean
-    canRest: boolean
-  }
-  /** 近 30 天日销售趋势（总览卡片迷你图） */
-  trend30: Array<{ date: string; revenue: number; orders: number }>
-  generatedAt: string
-}
-
-/** 数据源模式信息 */
-export interface ModeInfo {
-  mode: 'demo' | 'imported' | 'rest'
-  sourceMode: 'mock' | 'rest'
-  canDemo: boolean
-  canImported: boolean
-  canRest: boolean
-}
-
-/** 商品行（分类筛选用） */
-export interface ProductRow {
-  sku: string
-  name: string
-  category: string
-  price: number
-  stock: number
-  status: 'on_sale' | 'off_sale'
-}
-
-/** 行动清单（服务端 buildActions 镜像，对齐视频 cockpit dock） */
-export interface ShopActions {
-  mode: string
-  dock: { open: number; dueToday: number; urgent: number }
-  actions: Array<{
-    id: string
-    kind: 'overdue' | 'ship' | 'low_stock'
-    title: string
-    detail: string
-    urgent: boolean
-    dueToday?: boolean
-  }>
-}
-
-/** 一页经营简报（Markdown 文本） */
-export interface ShopBrief {
-  markdown: string
-}
 
 interface ApiEnvelope<T> {
   ok?: boolean
@@ -102,65 +31,6 @@ function resolveApiBase(): string | null {
   return null
 }
 
-async function call<T>(path: string): Promise<T> {
-  const base = resolveApiBase()
-  const url = base ? base + path : path
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-      cache: 'no-store',
-      credentials: 'omit',
-    })
-  } catch (err) {
-    throw new Error(err instanceof Error ? err.message : String(err))
-  }
-  const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null
-  if (!res.ok || body === null || body.ok !== true || body.value === undefined) {
-    const message = body?.error?.message ?? `HTTP ${res.status}`
-    throw new Error(message)
-  }
-  return body.value
-}
-
-
-/** 拉取行动清单（驾驶舱 dock） */
-export function fetchActions(): Promise<ShopActions> {
-  return call<ShopActions>('/ecommerce-api/actions')
-}
-
-/** 拉取面板全量快照 */
-export function fetchSnapshot(): Promise<ShopSnapshot> {
-  return call<ShopSnapshot>('/ecommerce-api/snapshot')
-}
-
-/** 拉取一页经营简报（Markdown） */
-export function fetchBrief(): Promise<ShopBrief> {
-  return call<ShopBrief>('/ecommerce-api/brief')
-}
-
-/** 按分类拉取商品（分类树点击筛选） */
-export async function fetchCategoryProducts(category: string): Promise<ProductRow[]> {
-  const page = await call<{ total: number; items: ProductRow[] }>(
-    `/ecommerce-api/products?category=${encodeURIComponent(category)}`,
-  )
-  return page.items
-}
-
-/** 金额格式化：¥1,234.56 */
-export function formatMoney(value: number): string {
-  return `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-/** 时刻格式化：HH:MM:SS */
-export function formatTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '--'
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
-
 /** 本地文件导入结果 */
 export interface ImportResult {
   products: number
@@ -183,41 +53,6 @@ function toBase64(bytes: Uint8Array): string {
     bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
   return btoa(bin)
-}
-
-/** 把本地文件上传到 /ecommerce-api/import 解析并导入店铺数据 */
-export async function importLocalFile(file: File): Promise<ImportResult> {
-  const ext = (file.name.split('.').pop() ?? '').toLowerCase()
-  const isText = ['csv', 'txt', 'json', 'sql'].includes(ext)
-  let content: string
-  let encoding: 'utf8' | 'base64'
-  if (isText) {
-    content = await file.text()
-    encoding = 'utf8'
-  } else {
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    content = toBase64(bytes)
-    encoding = 'base64'
-  }
-  const base = resolveApiBase()
-  const url = (base ? base : '') + '/ecommerce-api/import'
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({ filename: file.name, content, encoding }),
-    })
-  } catch (err) {
-    throw new Error(err instanceof Error ? err.message : String(err))
-  }
-  const body = (await res.json().catch(() => null)) as ApiEnvelope<ImportResult> | null
-  if (!res.ok || body === null || body.ok !== true || body.value === undefined) {
-    const message = body?.error?.message ?? `HTTP ${res.status}`
-    throw new Error(message)
-  }
-  return body.value
 }
 
 /** 把多个本地文件一次性批量上传到 /ecommerce-api/import-batch（30 天周期的 4 份 Excel
@@ -259,62 +94,6 @@ export async function importLocalFiles(files: File[]): Promise<ImportResult> {
     throw new Error(message)
   }
   return body.value
-}
-
-/** 数据源模式切换结果 */
-export interface ModeSwitchResult {
-  products: number
-  orders: number
-  mode: string
-  info: ModeInfo
-}
-
-async function post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const base = resolveApiBase()
-  const url = (base ? base : '') + path
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify(body),
-    })
-  } catch (err) {
-    throw new Error(err instanceof Error ? err.message : String(err))
-  }
-  const data = (await res.json().catch(() => null)) as ApiEnvelope<T> | null
-  if (!res.ok || data === null || data.ok !== true || data.value === undefined) {
-    const message = data?.error?.message ?? `HTTP ${res.status}`
-    throw new Error(message)
-  }
-  return data.value
-}
-
-/** 切换数据源模式（demo / imported / rest） */
-export function switchMode(mode: 'demo' | 'imported' | 'rest'): Promise<ModeSwitchResult> {
-  return post<ModeSwitchResult>('/ecommerce-api/mode', { mode })
-}
-
-/** 一键重置为演示数据（服务端先备份当前数据） */
-export function resetToDemo(): Promise<ModeSwitchResult> {
-  return post<ModeSwitchResult>('/ecommerce-api/reset-demo', {})
-}
-
-/** 数据源模式中文标签 */
-export function modeLabelOf(mode: string): string {
-  switch (mode) {
-    case 'demo': return '演示数据'
-    case 'imported': return '导入数据'
-    case 'rest': return '平台 API'
-    default: return mode
-  }
-}
-
-/** 独立仪表盘页面地址（供侧边栏一键打开） */
-export function dashboardUrl(): string {
-  const base = resolveApiBase()
-  return (base ? base : '') + '/ecommerce-api/dashboard'
 }
 
 /** 电商数据中台页面地址（全屏面板 iframe 加载「电商数据中台.html」修改版）。

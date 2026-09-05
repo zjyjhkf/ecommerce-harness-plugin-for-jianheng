@@ -110,15 +110,17 @@ test('v0.6 [ShopDeskPanel] 保留 panel header 全屏按钮 ⛶', () => {
   assert.ok(panelHTML.includes('⛶') || panelHTML.includes('🗗'), '应包含全屏图标')
 })
 
-test('v0.6 [ShopDeskPanel] 保留主要模块：经营总览 / 打开仪表盘 / 商品分类 / BI 看板 / 一页简报', () => {
-  assert.match(SHOP_DESK, /BiDashboardSection/, 'BI 数据看板')
-  assert.match(SHOP_DESK, /OverviewSection/, '经营总览')
-  assert.match(SHOP_DESK, /CategorySection/, '商品分类')
-  assert.match(SHOP_DESK, /TopSection/, '销售排行 TOP')
-  assert.match(SHOP_DESK, /LowStockSection/, '低库存预警')
-  assert.match(SHOP_DESK, /TodoSection/, '今日待办')
-  assert.match(SHOP_DESK, /BriefSection/, '一页简报')
-  assert.match(SHOP_DESK, /openDashboard/, '打开仪表盘入口')
+test('v0.12 [ShopDeskPanel] 移除 BI 看板 / 经营总览 / 商品分类等演示面板，仅保留电商数据中台 iframe', () => {
+  assert.doesNotMatch(SHOP_DESK, /BiDashboardSection/, 'BI 数据看板应已移除')
+  assert.doesNotMatch(SHOP_DESK, /OverviewSection/, '经营总览应已移除')
+  assert.doesNotMatch(SHOP_DESK, /CategorySection/, '商品分类应已移除')
+  assert.doesNotMatch(SHOP_DESK, /TopSection/, '销售排行 TOP 应已移除')
+  assert.doesNotMatch(SHOP_DESK, /LowStockSection/, '低库存预警应已移除')
+  assert.doesNotMatch(SHOP_DESK, /TodoSection/, '今日待办应已移除')
+  assert.doesNotMatch(SHOP_DESK, /BriefSection/, '一页简报应已移除')
+  assert.doesNotMatch(SHOP_DESK, /openDashboard/, '打开仪表盘入口应已移除')
+  assert.match(SHOP_DESK, /esd-dc-frame/, '数据中台 iframe 容器应保留')
+  assert.match(SHOP_DESK, /dataCenterUrl\(\)/, '数据中台 iframe 地址应保留')
 })
 
 test('v0.6 [ShopDeskPanel] 删除商品管理表格（单个商品增删改查/上下架已由导入维护）', () => {
@@ -128,13 +130,10 @@ test('v0.6 [ShopDeskPanel] 删除商品管理表格（单个商品增删改查/�
 
 /* === demo 模式导入引导横幅 === */
 
-test('v0.6 [ShopDeskPanel] demo 模式下显示导入引导横幅（v0.6 数据完全由导入决定）', () => {
-  // ShopDeskTab 内应当有导入引导横幅（条件 d.snapshot.mode.mode === 'demo'）
-  assert.match(
-    SHOP_DESK,
-    /d\.snapshot !== null && d\.snapshot\.mode\.mode === ['"]demo['"][\s\S]*?esd-import-banner/,
-    'demo 模式应触发导入引导横幅',
-  )
+test('v0.12 [ShopDeskPanel] 移除演示数据导入引导横幅（早期 BI 看板演示态已删除）', () => {
+  // 早期「当前展示演示数据」引导横幅已随 BI 看板一并移除
+  assert.doesNotMatch(SHOP_DESK, /esd-import-banner/, '演示数据导入引导横幅应已移除')
+  assert.doesNotMatch(SHOP_DESK, /演示数据/, '不应再有「演示数据」文案')
 })
 
 test('v0.6 [styles] 新增导入引导横幅样式', () => {

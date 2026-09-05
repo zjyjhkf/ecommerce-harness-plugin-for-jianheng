@@ -1,26 +1,30 @@
 /**
- * ecommerce-analyst-plugin — 侧边栏数据 API（服务端）
+ * ecommerce-analyst-plugin — 电商数据中台 API（服务端）
  *
- * 为客户端「店铺工作台」面板提供 JSON 只读接口。所有数据直接委托给
- * EcommerceStore 的既有统计逻辑（overview / todayActions / lowStock /
- * topProducts / categoryDistribution / listProducts），与 stats_*、
- * inventory_* 等工具口径完全一致，不另造数据层。
+ * 为客户端「电商数据中台」面板提供数据接口：Excel 导入 → 月度/周度复盘、
+ * 数据对比、数据评价与导出。早期「店铺工作台 / BI 看板」的实时经营数据
+ * （订单 / 商品）接口（快照 / 行动清单 / 简报 / 趋势 / 独立仪表盘 / 模式切换
+ * / 商品列表 / 单文件导入）已随 BI 看板一并移除，数据一律来自导入的 Excel 复盘报表。
  *
  * 路由（prefix /ecommerce-api）：
- *   GET /ecommerce-api/snapshot                  → 面板全量数据
- *   GET /ecommerce-api/products?category=<分类>  → 分类筛选商品
+ *   POST /ecommerce-api/import-batch  → 批量导入 Excel 复盘报表
+ *   GET  /ecommerce-api/monthly-report → 月度复盘（30/60 天）
+ *   GET  /ecommerce-api/weekly-report  → 周度复盘（7 天）
+ *   GET  /ecommerce-api/compare        → 数据对比（连续导入两期）
+ *   GET  /ecommerce-api/evaluation     → 数据评价（AI / 规则）
+ *   GET  /ecommerce-api/data-center    → 数据中台 HTML 页面
+ *   GET  /ecommerce-api/export         → 导出 CSV / JSON
  *
  * 响应约定（与 dsh-office 一致）：{ ok: true, value } / { ok: false, error }
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EcommerceStore } from './store.ts'
 import { parseImportFile } from './import-parse.ts'
-import { renderDashboard } from './dashboard.ts'
 import { renderDataCenter } from './data-center.ts'
 import { ordersToCsv, productsToCsv } from './csv-util.ts'
 import type { MonthlyParseResult } from './monthly-report.ts'
 import type { WeeklyParseResult } from './weekly-report.ts'
-import type { MonthlyReport, Order, Product, TrendPoint } from './types.ts'
+import type { MonthlyReport, Order, Product } from './types.ts'
 import { buildEvaluationSummary, callLlmForEvaluation, evaluationPrompt, ruleBasedEvaluation } from './data-evaluation.ts'
 import type { EvaluationSummary } from './data-evaluation.ts'
 import { buildComparePayload, isCompareCycle } from './compare-payload.ts'
@@ -43,40 +47,6 @@ export interface WebServerLike {
   }): () => void
   /** index.html 注入变换（用于向客户端广播 API base，跨 file:// 桌面端可用） */
   tapIndex?(transform: (html: string) => string): () => void
-}
-
-/** 面板快照（客户端一次拉取全部数据） */
-export interface ShopSnapshot {
-  overview: {
-    revenue: number
-    orders: number
-    avg_order_value: number
-    top_selling_sku: string
-    refund_rate: number
-  }
-  today: {
-    shipmentsCount: number
-    overdueCount: number
-    overdues: Array<{ order_id: string; buyer: string; amount: number; created_at: string }>
-    /** 待发货订单明细（今日待办可展开查看） */
-    shipments: Array<{ order_id: string; buyer: string; product_name: string; quantity: number; amount: number; created_at: string; status: string }>
-    lowStockCount: number
-  }
-  categories: Array<{ category: string; count: number; revenue: number; ratio: number }>
-  top: Array<{ sku: string; name: string; revenue: number; units: number }>
-  lowStock: Array<{ sku: string; name: string; stock: number; category: string; threshold: number }>
-  sourceMode: 'mock' | 'rest'
-  /** 数据来源模式（demo/imported/rest）与可切换性（供侧边栏「数据源」标签） */
-  mode: {
-    mode: 'demo' | 'imported' | 'rest'
-    sourceMode: 'mock' | 'rest'
-    canDemo: boolean
-    canImported: boolean
-    canRest: boolean
-  }
-  /** 近 30 天日销售趋势（供总览卡片迷你图） */
-  trend30: TrendPoint[]
-  generatedAt: string
 }
 
 /** 统一响应头：JSON + 禁用缓存 + CORS（桌面端 file:// 跨源拉取 /ecommerce-api 必需） */
@@ -127,65 +97,6 @@ export function injectApiBase(webServer: WebServerLike): (() => void) | undefine
     if (html.includes('__ECOM_API_BASE__')) return html
     return html.replace('</head>', tag + '</head>')
   })
-}
-
-/** 构建面板快照：全部来自 Store 既有统计口径 */
-export function buildSnapshot(store: EcommerceStore): ShopSnapshot {
-  const overview = store.overview()
-  const actions = store.todayActions()
-  const lowStock = store.lowStock()
-  const top = store.topProducts({}, 5)
-  // 订单行缺 product_name 时，用商品表补齐（保持面板与商品口径一致）
-  const nameBySku = new Map(store.listProducts({ page_size: 1000 }).items.map((p) => [p.sku, p.name]))
-  for (const t of top) {
-    if (!t.name) t.name = nameBySku.get(t.sku) ?? t.sku
-  }
-  const dist = new Map(store.categoryDistribution().map((c) => [c.category, c]))
-  const productCounts = new Map<string, number>()
-  for (const p of store.listProducts({ page_size: 1000 }).items) {
-    productCounts.set(p.category, (productCounts.get(p.category) ?? 0) + 1)
-  }
-  const categories = [...productCounts.entries()]
-    .map(([category, count]) => ({
-      category,
-      count,
-      revenue: dist.get(category)?.revenue ?? 0,
-      ratio: dist.get(category)?.ratio ?? 0,
-    }))
-    .sort((a, b) => b.revenue - a.revenue)
-  return {
-    overview,
-    today: {
-      shipmentsCount: actions.shipments.length,
-      overdueCount: actions.overdues.length,
-      overdues: actions.overdues.map((o) => ({
-        order_id: o.order_id,
-        buyer: o.buyer,
-        amount: o.amount,
-        created_at: o.created_at,
-      })),
-      shipments: actions.shipments.map((o) => ({
-        order_id: o.order_id,
-        buyer: o.buyer,
-        product_name: o.product_name,
-        quantity: o.quantity,
-        amount: o.amount,
-        created_at: o.created_at,
-        status: o.status,
-      })),
-      lowStockCount: actions.lowStockCount,
-    },
-    categories,
-    top,
-    lowStock,
-    sourceMode: store.sourceMode,
-    mode: store.getModeInfo(),
-    trend30: store.trend(
-      { date_from: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) },
-      'day',
-    ),
-    generatedAt: new Date().toISOString(),
-  }
 }
 
 /** 读取请求体 JSON（简单缓冲，限额 64MB） */
@@ -297,41 +208,6 @@ export function registerShopApi(
           sendPreflight(res)
           return
         }
-        if (pathname === '/ecommerce-api/import' && req.method === 'POST') {
-          const body = await readJsonBody(req)
-          const filename = String(body.filename ?? '')
-          const content = String(body.content ?? '')
-          const encoding = body.encoding === 'base64' ? 'base64' : 'utf8'
-          const parsed = await parseImportFile(filename, content, encoding)
-          const snapshot = store.exportBackup()
-          const result = store.importFromFile(parsed.products, parsed.orders)
-          // 月度完整月报（JSON，整体替换）：供 30 天「月复盘」使用
-          if (parsed.monthlyReport !== undefined) {
-            store.setMonthlyReport(parsed.monthlyReport)
-          }
-          // 月度单份文件（「月度表」3 份「商品排名导出」+ 1 份「利润表」，逐份合并）
-          if (parsed.monthlyPart !== undefined) {
-            store.mergeMonthlyReport(parsed.monthlyPart)
-          }
-          // 周复盘（「商品排名导出」三份，按展示形式合并）：供 7 天「周复盘」使用
-          if (parsed.weeklyReport !== undefined) {
-            store.mergeWeeklyReport(parsed.weeklyReport)
-          }
-          // 导入后预热：后台预生成两周期数据评价，进入复盘面板即见 AI 结果（不阻塞）
-          prewarmEvaluations(store, ctx)
-          sendJson(res, 200, {
-            ok: true,
-            value: {
-              products: result.products,
-              orders: result.orders,
-              monthlyReport: store.getMonthlyReport() !== null,
-              weeklyReport: store.getWeeklyReport() !== null,
-              hint: parsed.hint,
-              snapshot,
-            },
-          })
-          return
-        }
         if (pathname === '/ecommerce-api/import-batch' && req.method === 'POST') {
           // 批量导入：一次性接收多个文件（30 天周期的 4 份 Excel：利润表 + 三份「商品排名导出」），
           // 在同一请求内解析并整体重建月度复盘，保证 30 天面板的分析结果完全来自本次导入的文件。
@@ -413,10 +289,6 @@ export function registerShopApi(
           })
           return
         }
-        if (pathname === '/ecommerce-api/snapshot') {
-          sendJson(res, 200, { ok: true, value: buildSnapshot(store) })
-          return
-        }
         if (pathname === '/ecommerce-api/monthly-report') {
           // 月度复盘（30/60 天「月复盘」数据源，来自 7月月度复盘.xlsx 导入）
           sendJson(res, 200, { ok: true, value: store.getMonthlyReport(), revision: store.getReportRevision() })
@@ -457,38 +329,6 @@ export function registerShopApi(
           })
           return
         }
-        if (pathname === '/ecommerce-api/actions') {
-          // 行动清单（对齐视频 cockpit 的 dock）：逾期/待发货/低库存 → 待办、今天到期、紧急
-          const actions = buildActions(store)
-          sendJson(res, 200, { ok: true, value: actions })
-          return
-        }
-        if (pathname === '/ecommerce-api/brief') {
-          // 一页经营简报（Markdown 文本，可复制/导出）
-          const brief = buildBrief(store)
-          sendJson(res, 200, { ok: true, value: { markdown: brief } })
-          return
-        }
-        if (pathname === '/ecommerce-api/trend') {
-          const days = Math.min(Math.max(Number(query.get('days') ?? 30) || 30, 1), 366)
-          const points = store.trend(
-            { date_from: new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) },
-            'day',
-          )
-          sendJson(res, 200, { ok: true, value: { days, points } })
-          return
-        }
-        if (pathname === '/ecommerce-api/dashboard' && req.method === 'GET') {
-          // 独立仪表盘模板页（HTML，内联样式/SVG，零外部依赖）
-          const html = renderDashboard(store)
-          res.writeHead(200, {
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-            ...CORS_HEADERS,
-          })
-          res.end(html)
-          return
-        }
         if (pathname === '/ecommerce-api/data-center' && req.method === 'GET') {
           // 电商数据中台（对接「电商数据中台.html」修改版，全屏面板 iframe 加载）
           // 传入 req：renderDataCenter 依据 host/referer 向 iframe 页面自身注入 __ECOM_API_BASE__
@@ -499,50 +339,6 @@ export function registerShopApi(
             ...CORS_HEADERS,
           })
           res.end(html)
-          return
-        }
-        if (pathname === '/ecommerce-api/mode') {
-          if (req.method === 'GET') {
-            sendJson(res, 200, { ok: true, value: store.getModeInfo() })
-            return
-          }
-          if (req.method === 'POST') {
-            const body = await readJsonBody(req)
-            const mode = String(body.mode ?? '')
-            if (mode !== 'demo' && mode !== 'imported' && mode !== 'rest') {
-              sendJson(res, 400, { ok: false, error: { code: 'BAD_MODE', message: 'mode 需为 demo/imported/rest' } })
-              return
-            }
-            try {
-              const result = await store.switchMode(mode as 'demo' | 'imported' | 'rest')
-              sendJson(res, 200, { ok: true, value: { ...result, mode, info: store.getModeInfo() } })
-            } catch (err) {
-              sendJson(res, 400, {
-                ok: false,
-                error: { code: 'SWITCH_FAILED', message: err instanceof Error ? err.message : String(err) },
-              })
-            }
-            return
-          }
-        }
-        if (pathname === '/ecommerce-api/reset-demo' && req.method === 'POST') {
-          try {
-            const result = await store.resetToDemo()
-            sendJson(res, 200, { ok: true, value: { ...result, info: store.getModeInfo() } })
-          } catch (err) {
-            sendJson(res, 500, {
-              ok: false,
-              error: { code: 'RESET_FAILED', message: err instanceof Error ? err.message : String(err) },
-            })
-          }
-          return
-        }
-        if (pathname === '/ecommerce-api/products') {
-          const category = query.get('category') || undefined
-          sendJson(res, 200, {
-            ok: true,
-            value: store.listProducts({ category, page_size: 100 }),
-          })
           return
         }
         if (pathname === '/ecommerce-api/export' && req.method === 'GET') {
@@ -601,110 +397,3 @@ export function registerShopApi(
   })
 }
 
-/** 行动清单（对齐视频 cockpit 的 dock：待办/今天到期/紧急） */
-export interface ShopActions {
-  mode: string
-  dock: { open: number; dueToday: number; urgent: number }
-  actions: Array<{
-    id: string
-    kind: 'overdue' | 'ship' | 'low_stock'
-    title: string
-    detail: string
-    urgent: boolean
-    dueToday?: boolean
-  }>
-}
-
-export function buildActions(store: EcommerceStore): ShopActions {
-  const t = store.todayActions()
-  const today = new Date().toISOString().slice(0, 10)
-  const actions: ShopActions['actions'] = []
-  // 逾期订单（紧急）
-  for (const o of t.overdues) {
-    actions.push({
-      id: `ov-${o.order_id}`,
-      kind: 'overdue',
-      title: `逾期订单 ${o.order_id}`,
-      detail: `${o.buyer} · ¥${o.amount.toFixed(2)} · ${o.created_at.slice(0, 10)}`,
-      urgent: true,
-    })
-  }
-  // 待发货（今天到期按下单日期）
-  for (const o of t.shipments) {
-    actions.push({
-      id: `ship-${o.order_id}`,
-      kind: 'ship',
-      title: `待发货 ${o.order_id}`,
-      detail: `${o.buyer} · ${o.product_name} ×${o.quantity} · ¥${o.amount.toFixed(2)}`,
-      urgent: false,
-      dueToday: o.created_at.slice(0, 10) === today,
-    })
-  }
-  // 低库存
-  for (const p of store.lowStock()) {
-    actions.push({
-      id: `ls-${p.sku}`,
-      kind: 'low_stock',
-      title: `低库存 ${p.name}`,
-      detail: `${p.category} · 库存 ${p.stock}`,
-      urgent: p.stock === 0,
-    })
-  }
-  const urgent = actions.filter((a) => a.urgent).length
-  const dueToday = actions.filter((a) => a.dueToday === true).length
-  return {
-    mode: store.getModeInfo().mode,
-    dock: { open: actions.length, dueToday, urgent },
-    actions,
-  }
-}
-
-/** 一页经营简报（Markdown，可复制/导出） */
-export function buildBrief(store: EcommerceStore): string {
-  const o = store.overview()
-  const today = new Date().toISOString().slice(0, 10)
-  const nameBySku = new Map(
-    store.listProducts({ page_size: 1000 }).items.map((p) => [p.sku, p.name]),
-  )
-  const top3 = store.topProducts({}, 3).map((p) => ({
-    ...p,
-    name: p.name || nameBySku.get(p.sku) || p.sku,
-  }))
-  const cats = store.categoryDistribution()
-  const t = store.todayActions()
-  const suggest = store.restockSuggestions()
-  const money = (v: number) =>
-    '¥' + v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const lines: string[] = []
-  lines.push(`# 📊 电商经营简报（${today}）`)
-  lines.push('')
-  lines.push('## 一、经营总览')
-  lines.push(
-    `- 销售额 **${money(o.revenue)}**（${o.orders} 单）｜ 客单价 ${money(o.avg_order_value)} ｜ 退款率 ${o.refund_rate}%`,
-  )
-  if (o.top_selling_sku) {
-    lines.push(`- 畅销商品：${o.top_selling_sku}（${nameBySku.get(o.top_selling_sku) ?? o.top_selling_sku}）`)
-  }
-  lines.push('')
-  lines.push('## 二、销售排行 TOP3')
-  top3.forEach((p, i) => lines.push(`${i + 1}. ${p.name}（${p.sku}）${money(p.revenue)} / ${p.units} 件`))
-  lines.push('')
-  lines.push('## 三、类目占比')
-  for (const c of cats) lines.push(`- ${c.category} ${c.ratio}%（${money(c.revenue)}）`)
-  lines.push('')
-  lines.push('## 四、今日待办')
-  lines.push(
-    `- ⚠️ 逾期订单 **${t.overdues.length}** 笔 ｜ 📦 待发货 **${t.shipments.length}** 笔 ｜ ⚠️ 低库存 **${t.lowStockCount}** 件`,
-  )
-  lines.push('')
-  const toRestock = suggest.filter((x) => x.suggest_qty > 0).slice(0, 5)
-  if (toRestock.length > 0) {
-    lines.push('## 五、库存预警与补货建议')
-    for (const s of toRestock) {
-      lines.push(`- ${s.name}：库存 ${s.stock} → 建议补货 ${s.suggest_qty}`)
-    }
-    lines.push('')
-  }
-  lines.push('> 数据来源：ecommerce-analyst-plugin 电商商单数据（与工具同口径）')
-  return lines.join('\n')
-}

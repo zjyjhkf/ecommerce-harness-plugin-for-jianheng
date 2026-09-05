@@ -225,10 +225,6 @@ async function main(): Promise<void> {
   ok(res.json?.value?.weeklyReport === true, '批量导入后 weeklyReport=true')
   ok(res.json?.value?.files === files.length, `批量导入收到 ${res.json?.value?.files} 个文件`)
 
-  // 单文件导入（兼容旧入口）
-  res = await call(handler!, 'POST', '/ecommerce-api/import', { filename: basename(monthlyPaths[0]?.path ?? weeklyPaths[0] ?? 'x'), content: readFileSync((monthlyPaths[0] ?? { path: weeklyPaths[0] }).path).toString('base64'), encoding: 'base64' })
-  ok(res.status === 200 && res.json?.ok === true, 'POST /import（单文件）返回 200 ok:true')
-
   // 月报 / 周报查询
   res = await call(handler!, 'GET', '/ecommerce-api/monthly-report')
   ok(res.status === 200 && res.json?.ok === true && res.json?.value?.period === MONTH_G.period,
@@ -246,18 +242,6 @@ async function main(): Promise<void> {
     ok(['ai', 'rule'].includes(String(v?.source)), `GET /evaluation?cycle=${cycle} source 合法（${String(v?.source)}）`)
     ok(typeof v?.pending === 'boolean', `GET /evaluation?cycle=${cycle} pending 为布尔值`)
   }
-
-  // 快照 / 行动清单 / 简报 / 趋势 / 商品列表
-  res = await call(handler!, 'GET', '/ecommerce-api/snapshot')
-  ok(res.status === 200 && res.json?.ok === true && !!res.json?.value?.overview, 'GET /snapshot 返回 overview')
-  res = await call(handler!, 'GET', '/ecommerce-api/actions')
-  ok(res.status === 200 && res.json?.ok === true && !!res.json?.value?.dock, 'GET /actions 返回 dock 行动清单')
-  res = await call(handler!, 'GET', '/ecommerce-api/brief')
-  ok(res.status === 200 && res.json?.ok === true && typeof res.json?.value?.markdown === 'string', 'GET /brief 返回 markdown 简报')
-  res = await call(handler!, 'GET', '/ecommerce-api/trend?days=30')
-  ok(res.status === 200 && res.json?.ok === true && Array.isArray(res.json?.value?.points), 'GET /trend 返回趋势点数组')
-  res = await call(handler!, 'GET', '/ecommerce-api/products')
-  ok(res.status === 200 && res.json?.ok === true && !!res.json?.value, 'GET /products 返回商品列表')
 
   // 页面模板（HTML）
   res = await call(handler!, 'GET', '/ecommerce-api/data-center')
