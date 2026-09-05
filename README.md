@@ -7,65 +7,79 @@
 
 ---
 
-## 下载与使用（GitHub 获取后）
+## 环境要求（Windows / Ubuntu 通用）
 
-### 1. 获取源码
+安装前请先满足以下依赖：
 
-```sh
-git clone https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git   # 或直接下载 zip 解压
-```
+| 依赖 | 版本 / 要求 | 自检命令 |
+|---|---|---|
+| Node.js | ≥ 22.19 | `node -v` |
+| git | 任意 | `git --version` |
+| pnpm 或 npm | 推荐 pnpm | `pnpm -v` / `npm -v` |
+| DeepSeek Harness (dsh) | v0.1.1-rc.2 | 已部署 dsh 仓库 |
 
-将插件目录放入 dsh（deepseek-harness）仓库内，例如：
+> 插件运行时依赖仅 `xlsx`（Excel 解析，导入必需）与 `pdfjs-dist`（PDF 导入，可选，缺失自动降级）。
 
-```
-deepseek-harness-master/
-└── ecommerce-analyst-plugin/   # 本插件
-```
+---
 
-### 2. 安装依赖
+## 部署与配置（按操作系统）
 
-在 dsh 仓库根目录执行（插件依赖 `@deepseek-ai/*` 等 workspace peer 包，由 dsh 仓库统一提供）：
+### 方式一：git 一键安装（推荐，Windows / Ubuntu 通用）
 
-```sh
-pnpm install
-```
+> 仓库已内置构建产物 `index.js` / `client.js` / `assets/data-center.html`，
+> 安装时不执行任何构建，**开箱即用**。
 
-> 插件的运行时依赖仅 `xlsx`（Excel 解析，构建/导入时使用）与 `pdfjs-dist`（PDF 导入，可选，缺省自动降级）。
->
-> **独立 clone**（不在 dsh 仓库 workspace 内）：仅加载已入库产物无需安装；若要自行**构建或跑测试**，需先在插件目录执行 `npm install`——`esbuild`/`tsx` 在 devDependencies 中，缺了无法构建。
-
-### 3. 加载插件（开发/演示，推荐）
-
-编辑 [cordis.yml](cordis.yml)，把占位路径替换为你的本机绝对路径：
-
-```yaml
-- insert:
-    - id: ecommerce-analyst
-      name: '/你的绝对路径/deepseek-harness-master/ecommerce-analyst-plugin/src/index.ts'
-```
-
-然后在 dsh 仓库根目录执行：
-
-```sh
-pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
-```
-
-> 首次启动即内置企业演示数据（26 商品 + 480 订单：总览 ¥154,699 / 359 单 / 客单价 ¥430.92 / 退款率 10.6%，含逾期 43 笔、待发货 55 笔、低库存 8 件），开箱即可演示。
-
-### 4. 构建部署（生产 bundle）
-
-**产物已随仓库提交，git 安装可直接加载，无需构建。** 通过 `git clone` 或
+Windows（PowerShell）与 Ubuntu（bash）**命令一致**，在终端执行：
 
 ```sh
 dsh plugin --profile web add git+https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git
 ```
 
-获取本仓库后，`index.js` / `client.js` / `assets/data-center.html` 已在仓库根就位，加载阶段不执行任何构建。只有**改动 `src/` 源码后**才需要重新构建：
+安装位置（自动生成，无需手动修改）：
+
+| 系统 | Profile 目录 |
+|---|---|
+| Windows | `C:\Users\<你的用户名>\.dsh\profiles\web\` |
+| Ubuntu | `~/.dsh/profiles/web/` |
+
+安装完成后**完全退出并重启 dsh**，插件即生效。
+
+### 方式二：源码克隆 + 开发模式（二次开发 / 本地联调）
+
+仅当需要改动 `src/` 源码并本地联调时使用。先克隆到 dsh 仓库内，再编辑 [cordis.yml](cordis.yml) 的 `name` 占位路径，替换为本机绝对路径。
+
+#### Windows
+
+```powershell
+cd E:\dsh\deepseek-harness-master
+git clone https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git ecommerce-analyst-plugin
+# 编辑 ecommerce-analyst-plugin\cordis.yml，把 name 改为（示例，按本机路径替换）：
+#   name: 'E:\dsh\deepseek-harness-master\ecommerce-analyst-plugin\src\index.ts'
+pnpm install
+pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
+```
+
+#### Ubuntu
+
+```bash
+cd ~/deepseek-harness-master
+git clone https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git ecommerce-analyst-plugin
+# 编辑 ecommerce-analyst-plugin/cordis.yml，把 name 改为（示例，按本机路径替换）：
+#   name: '/home/<你的用户名>/deepseek-harness-master/ecommerce-analyst-plugin/src/index.ts'
+pnpm install
+pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
+```
+
+> 首次启动即内置企业演示数据（26 商品 + 480 订单：总览 ¥154,699 / 359 单 / 客单价 ¥430.92 / 退款率 10.6%，含逾期 43 笔、待发货 55 笔、低库存 8 件），开箱即可演示。
+
+### 方式三：源码构建（仅在改动 src/ 后需要）
+
+独立 clone（不在 dsh workspace 内）首次构建需先安装 dev 依赖，Windows / Ubuntu 命令一致：
 
 ```sh
 cd ecommerce-analyst-plugin
-npm i              # 独立 clone 首次构建需要（esbuild 在 devDependencies）
-npm run build      # 即 node scripts/build.mjs
+npm install        # 安装 esbuild / tsx（在 devDependencies 中）
+npm run build      # = node scripts/build.mjs
 ```
 
 > **默认输出目录 = 仓库根本身**：`index.js`（服务端 bundle）+ `client.js`（客户端 bundle）+ `assets/data-center.html` 直接写入仓库根并随仓库提交；仓库根 `package.json` 即部署清单（含 `dsh.bundle`/`dsh.client` 声明），`cordis.patch.yml` 也在仓库根，默认构建不向别处复制任何清单。
@@ -83,6 +97,19 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 | `ECOM_PLUGIN_OUT` | 覆盖输出目录（默认 = 仓库根）。仅当指向仓库外目录时触发上述复制行为 |
 | `ESBUILD_REQUIRE` | 指定 esbuild 包入口（esbuild 定位：此变量优先，其次本仓库 `node_modules`；两者都没有则直接报错，提示 `npm install -D esbuild`） |
 | `ECOM_LINK_PEERS=1` | 在 `OUT/node_modules` 下为 `@deepseek-ai/*` 等 peer 包建立 junction。仅当 `ECOM_PLUGIN_OUT` 指向仓库外目录时才生效；**默认跳过**（防止误删真实 node_modules） |
+
+---
+
+## 验证安装（Windows / Ubuntu 通用）
+
+重启 dsh 后，按以下顺序确认各功能可用：
+
+1. **侧边栏**：右侧出现「店铺」悬浮开关（逾期红点徽标 = 43），点击展开面板。
+2. **经营总览**：显示 销售额 **¥154,699.00** ｜ 订单量 **359 单** ｜ 客单价 **¥430.92** ｜ 退款率 **10.6%**。
+3. **今日待办**：逾期 **43**（红色置顶）/ 待发货 **55** / 低库存 **8**。
+4. **工具**：对话中调用任意 `product_list` / `order_list` / `order_stats` / `stats_overview` / `inventory_low_stock` / `ecommerce_import_excel` / `ecommerce_export_csv` / `ecommerce_qa` 正常返回。
+5. **数据中台 + 数据对比**：导入月度/周度 Excel → 打开「数据中台」能看到对应内容；侧边栏出现「数据对比」模块（**连续导入同口径两期后**出对比结果，第一期仅显示「暂无上一期」引导）。
+6. **技能**：直接 `/keyword-research`、`/market-opportunity` 等 7 个技能可调用（详见下方技能包章节）。
 
 ---
 
@@ -139,6 +166,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 | 📦 商品查询 | `product_list` | 商品查询筛选（只读；商品数据由导入/平台 API 决定，无手动增删改查） |
 | 🧾 订单处理 | `order_list` / `order_stats` / `order_update_status` / `order_ship` / `order_refund` | 订单查询统计、状态流转（含合法性校验）、发货、退款 |
 | 📊 销售数据分析 | `stats_overview` / `stats_trend` / `stats_top_products` / `stats_category` | 经营总览、趋势、TOP 排行、类目分布 |
+| 🔀 数据对比 | `ecommerce_compare` | 连续导入两期月度/周度复盘后，按层级对比 KPI 增减、排名位移（上一期自动归档） |
 | ⚠️ 库存预警 | `inventory_low_stock` / `inventory_suggest` | 低库存清单、补货建议（近 30 天销量 × 1.5） |
 | 💾 数据备份 | `ecommerce_export_backup` / `ecommerce_import_backup` | JSON 备份导出/导入恢复 |
 | 📥 表格导入 | `ecommerce_import_excel` | CSV/JSON 表格数据整体导入，字段级校验失败返回「行号/字段/原因」明细 |
@@ -154,6 +182,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 - **周复盘（7 天「周复盘」）**：导入 3 份「商品排名导出」（平台货品/系统货品/系统规格）。
 - **周期严格隔离**：7 天与 30 天数据分开存放与展示。**只导入 7 日周数据时，30 天面板保持为空**（不插入数据就不显示对应面板）；反之亦然。
 - **数据评价**：对导入数据自动生成一句 40~80 字 AI 经营评价（销售额/产品/推广/退款四角度），AI 不可用时回退规则模板。
+- **数据对比**：同口径**连续导入两期**（如两个月/两周）后，导入新周期自动归档上一期；侧边栏「数据对比」模块按层级/指标输出上期→本期 KPI、条形图、排行与名次位移（仅导一期显示「暂无上一期」引导）。
 - **入口**：侧边栏「店铺工作台」→ 导入 Excel 文件 → 全屏「数据中台」面板（iframe 加载 `/ecommerce-api/data-center`）。
 
 导入的月度/周度文件格式（列名/元数据行）由插件固定识别；同格式不同内容的文件插入后，面板即展示对应内容。
@@ -209,7 +238,7 @@ ecommerceAnalyst:
 ## 开发与测试
 
 ```sh
-# 单元测试（106 项：状态机、统计口径、库存预警、持久化、工具注册、周期隔离、导出接口、入口冒烟、UI 完整性）
+# 单元测试（121 项：状态机、统计口径、库存预警、持久化、工具注册、周期隔离、导出接口、入口冒烟、UI 完整性、数据对比引擎）
 pnpm --dir ecommerce-analyst-plugin test
 
 # 端到端测试（生成物理 Excel 测试文件 → 导入/导出/分析 → 自动清理）
@@ -217,6 +246,9 @@ node --import tsx scripts/e2e-test.ts
 
 # 模拟多组数据渲染（3 组月度 + 3 组周度，验证「同格式不同内容 → 不同面板」）
 node --import tsx scripts/simulate-import.ts
+
+# 数据对比端到端（真实 Excel 为上期 + 本地 mutate 副本为本期 → 断言归档/对比/接口/视图 → 自动清理）
+node --import tsx scripts/compare-test.ts
 ```
 
 > 说明：`typecheck` 脚本依赖仓库根 `node_modules/typescript`（workspace 提升），在独立 clone 下可能因路径不一致而失败；类型正确性以 `pnpm test`（tsx 类型擦除执行）+ `scripts/build.mjs`（esbuild）为准。
@@ -232,6 +264,8 @@ src/
 ├── import-parse.ts       # 数据导入解析（CSV/JSON/Excel/SQL/PDF）
 ├── monthly-report.ts     # 月度复盘解析（「商品排名导出」×3 + 「利润表」）
 ├── weekly-report.ts      # 周复盘解析（「商品排名导出」×3）
+├── compare.ts            # 数据对比引擎（按层级对齐行、KPI 增减、排名位移，纯函数）
+├── compare-payload.ts    # 对比接口负载组装（当前/上一期 → hasPrev/kinds/metrics/result）
 ├── data-center.ts        # 电商数据中台（全屏 HTML + echarts 内联）
 ├── data-evaluation.ts    # 数据评价（AI/规则四角度 40~80 字）
 ├── shop-api.ts           # /ecommerce-api 只读 JSON 接口 + 导入/导出/中台页面
@@ -248,9 +282,10 @@ src/
     ├── stats.ts          # 数据分析工具集
     ├── inventory.ts      # 库存预警工具集
     ├── backup.ts         # 数据备份工具集
+    ├── compare.ts        # 数据对比工具（ecommerce_compare）
     └── json.ts           # 输出类型适配
 data/seed.json            # 预置示例数据（26 商品 / 480 订单）
-tests/                    # 106 项单元测试
+tests/                    # 121 项单元测试
 docs/functional-spec.md   # 功能规范文档
 ```
 
@@ -258,6 +293,7 @@ docs/functional-spec.md   # 功能规范文档
 
 - **数据来源唯一**：商品/订单由「导入」或「平台 API」决定，无手动增删改查，杜绝导入后残留演示数据
 - **周期隔离**：月度（30 天）与周度（7 天）复盘分库存储，互不串数据；只导入 7 天数据则 30 天面板为空
+- **上一期归档**：导入新周期时自动把上一期归档（`previousXxxReport`）并持久化，供「数据对比」跨期对齐
 - **统计口径统一**：销售额 = 已支付订单（paid/shipped/completed）实付金额；退款率 = 退款单/总单
 - **金额精度**：内部整数分位运算，杜绝浮点误差（¥0.1+0.2 = ¥0.3）
 - **状态机约束**：`pending→paid→shipped→completed`，`paid/shipped→refunded`，`pending→cancelled`，非法流转报错
