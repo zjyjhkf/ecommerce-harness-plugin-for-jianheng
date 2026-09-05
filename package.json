@@ -29,6 +29,7 @@
     "client.js",
     "assets/",
     "src/",
+    "skills/",
     "scripts/",
     "tests/",
     "docs/",

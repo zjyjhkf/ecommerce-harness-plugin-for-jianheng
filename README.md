@@ -88,7 +88,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 ## 附带技能包（skills）：安装与联合使用
 
-仓库根目录 `skills/` 附带 7 个**跨境电商品类分析 skill**（DeepSeek Harness 标准 `.dsh` 技能格式，每个含一个 `SKILL.md`），与插件配套使用：**插件负责「取数」**（订单/销售/库存/中台数据），**skills 负责「决策」**（选品/竞品/关键词/Listing/广告/评论的经营判断）。
+仓库根目录 `skills/` 附带 7 个**跨境电商品类分析 skill**（DeepSeek Harness 标准 `.dsh` 技能格式，每个含一个 `SKILL.md`）。插件加载时会**自动把这 7 个技能注册进 dsh 的技能目录**（`ctx.skills`），装完即可 `/keyword-research` 直接调用或让模型自动调用，**无需手动复制**。**插件负责「取数」**（订单/销售/库存/中台数据），**skills 负责「决策」**（选品/竞品/关键词/Listing/广告/评论的经营判断）。
 
 ### 1. 技能包内容
 
@@ -102,22 +102,15 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 | `review-insight` | 从评论挖掘好评卖点/差评痛点/改进机会 | 「评价怎么样」「评论里发现了什么」 |
 | `comprehensive-research` | 跨市场/竞品/关键词/评论/广告/Listing 的端到端综合研究 | 「帮我把这个品/店/类目系统分析一遍」 |
 
-### 2. 安装到本地 dsh
+### 2. 加载方式（自动注册，推荐）
 
-把 `skills/` 下各 skill 目录合并进 dsh 的技能装载目录（不存在则自动新建）：
+插件在 `apply()` 阶段把 `skills/` 下 7 个技能注册进 dsh 的 `ctx.skills` 目录（provider 名 `ecommerce-analyst`，rank 600，不覆盖用户同名技能）。因此 **`dsh plugin add` / 加载插件后即可直接使用**：
 
-```sh
-# Linux / macOS
-mkdir -p ~/.dsh/skills
-cp -r skills/* ~/.dsh/skills/
+- **对话调用**：`/keyword-research`、`/market-opportunity` 等 `/name` 形式（7 个 slug 见上表）；
+- **模型自动调用**：技能声明为 `modelInvocable`，模型可按需自动选中；
+- **面板按键**：店铺工作台侧边栏的 7 个技能按键点击后发送 `/<slug>`，触发技能注入。
 
-# Windows（PowerShell）
-$dst = "$env:USERPROFILE\.dsh\skills"
-New-Item -ItemType Directory -Force -Path $dst
-Copy-Item "skills\*" $dst -Recurse -Force
-```
-
-> 或直接放入 dsh 项目内：把 `skills/` 下 7 个目录复制到 `<dsh项目根>/.dsh/skills/` 即可。重启 dsh（`pnpm dsh web`）后技能即生效。
+> 若使用较旧 dsh（无 `ctx.skills` 服务），插件会打印 warn 并跳过注册；此时仍可手动装载：把 `skills/` 下各目录复制到 `~/.dsh/skills/`（Linux/macOS）、`%USERPROFILE%\.dsh\skills`（Windows），或 `<dsh项目根>/.dsh/skills/` 后重启 dsh。
 
 ### 3. 与 ecommerce-analyst-plugin 联合使用
 
@@ -134,6 +127,8 @@ Copy-Item "skills\*" $dst -Recurse -Force
    - `comprehensive-research`：汇总以上为一份可执行经营决策报告。
 
 **典型流水线**：`market-opportunity`（选类目）→ `keyword-research`（选词）→ `competitor-analysis`（看对手）→ `listing`（写页面）→ `ad-traffic`（控广告）→ `review-insight`（盯反馈）→ `comprehensive-research`（出决策报告）。
+
+> 技能正文的「数据来源」已默认绑定插件自身工具（`product_list`、`stats_*`、`inventory_*`、`order_*`、`ecommerce_export_*` 及导入的月度/周度复盘）；外部采集器（`amz_*`/VOC/抖音/小红书等）降级为「可选，若已接入」，未接入时模型基于插件数据给出结论并标注信息缺口。
 
 ---
 

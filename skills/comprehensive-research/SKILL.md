@@ -33,8 +33,8 @@ description: 跨境电商综合研究。当用户要求对某个商品、ASIN、
 
 ## 数据来源
 
-- **店铺侧（本插件）**：`product_*`（商品）、`stats_*`（销售总览/趋势/TOP/类目）、`order_*`（订单）、`inventory_*`（库存）——用于「自身经营现状」维度。
-- **市场侧（外部，按需）**：Amazon 类目/榜单/ABA、第三方选品工具（卖家精灵 / Helium10 / OpenBoost 等）、TikTok Shop 大盘——用于「市场 / 竞品 / 关键词 / 评论 / 广告」维度。
+- **店铺侧（本插件，主）**：`product_*`（商品）、`stats_*`（销售总览/趋势/TOP/类目）、`order_*`（订单）、`inventory_*`（库存）、导入的月度/周度复盘（`/ecommerce-api/monthly-report`、`/ecommerce-api/weekly-report`）——用于「自身经营现状」维度。
+- **外部（可选，若已接入）**：Amazon 类目/榜单/ABA、第三方选品工具（卖家精灵 / Helium10 / OpenBoost 等）、TikTok Shop 大盘——用于「市场 / 竞品 / 关键词 / 评论 / 广告」维度。未接入时只输出店铺侧可得维度的结论，并明确列出信息缺口。
 
 ## 输出格式
 

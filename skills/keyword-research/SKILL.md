@@ -28,8 +28,8 @@ description: 跨境电商关键词研究。当用户问「挖词 / 选词 / 关�
 
 ## 数据来源
 
-- 种子词挖掘 / 选词 / 趋势 / 流量结构 / ABA（OpenBoost `amz_keyword_miner` / `amz_keyword_research` / `amz_traffic_keyword` / `amz_aba_*`）。
-- 店铺侧：自身商品的 `name` / `category`（作为种子词来源之一）。
+- **店铺侧（本插件，主）**：自身商品的 `name` / `category`（`product_list`）、`stats_top_products`（畅销商品）作为种子词来源。
+- **外部（可选，若已接入）**：种子词挖掘 / 选词 / 趋势 / 流量结构 / ABA（OpenBoost `amz_keyword_miner` / `amz_keyword_research` / `amz_traffic_keyword` / `amz_aba_*`）。未接入时基于店铺商品与类目做种子词与长尾扩展，并标注「搜索量/竞争度数据缺失」。
 
 ## 输出格式
 

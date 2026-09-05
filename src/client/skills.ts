@@ -87,12 +87,13 @@ export function findSkill(id: string): SkillModule | undefined {
 }
 
 /**
- * 构建「点击技能按键 → 会话框」的短链接形式。
- * 会话框只显示技能中文名（渲染为彩色链接，与其他内容区分度明显），
- * 不再塞入冗长提示词；后续点击视图弹值会追加到同一输入框，与技能拼合后一起分析。
+ * 构建「点击技能按键 → 会话框」的技能调用令牌。
+ * dsh 规范：会话框以 `/name` 开头即触发对应技能注入（宿主在 pre-step 边界识别，
+ * 见 packages/host/apiproxy/src/api/skills.ts 注释），因此直接发送 `/<slug>`，
+ * 技能正文由宿主注入，避免把冗长提示词塞进输入框。
  */
-export function skillTagOf(skill: SkillModule): string {
-  return `[${skill.label}](ecommerce-skill://${skill.id})`
+export function skillInvocationToken(skill: SkillModule): string {
+  return `/${skill.id}`
 }
 
 /** 构建「点击视图 → 会话框弹出对应数值」的提示词 */

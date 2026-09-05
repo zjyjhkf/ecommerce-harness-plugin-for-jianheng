@@ -28,8 +28,8 @@ description: 跨境电商竞品分析。当用户问「对手是谁」「竞品�
 
 ## 数据来源
 
-- 竞品 ASIN 详情、销量预估、评论、榜单（OpenBoost `amz_sku_query` / `amz_sales_query` / 评论 / `amz_hot_*` 榜单）。
-- 店铺侧：自身 `product_*` / `stats_*` 作为「我方基线」对照。
+- **店铺侧（本插件，主）**：自身 `product_*`（商品/价格/库存）、`stats_*`（销售/类目/退款率）作为「我方基线」对照。
+- **外部（可选，若已接入）**：竞品 ASIN 详情、销量预估、评论、榜单（OpenBoost `amz_sku_query` / `amz_sales_query` / 评论 / `amz_hot_*` 榜单）。未接入时基于已知竞品信息与店铺数据做对标，并标注「竞品外部数据缺失」。
 
 ## 输出格式
 

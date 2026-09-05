@@ -12,7 +12,7 @@
 import * as React from 'react'
 import { ShopDeskPanel, ShopDeskTab } from './ShopDeskPanel.tsx'
 import { SkillBar } from './SkillBar.tsx'
-import { skillTagOf, type SkillModule } from './skills.ts'
+import { skillInvocationToken, type SkillModule } from './skills.ts'
 import { injectStyles } from './styles.ts'
 import { BrandMark } from './brand.tsx'
 import {
@@ -84,7 +84,7 @@ function ComposerDockSkillBar(): React.ReactElement {
   return React.createElement(SkillBar, {
     variant: 'dock',
     onInvoke: (skill: SkillModule): void => {
-      void sendToConversation(skillTagOf(skill))
+      void sendToConversation(skillInvocationToken(skill))
     },
   })
 }

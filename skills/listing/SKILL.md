@@ -34,9 +34,9 @@ description: 跨境电商 Listing 优化。当用户问「优化 Listing」「�
 
 ## 数据来源
 
-- keyword-research 词表 + review-insight 卖点/痛点。
-- 竞品 Listing（competitor-analysis）作为结构参照。
-- 店铺侧：`product_*` 的商品信息、`stats_*` 的转化与退款率。
+- **店铺侧（本插件，主）**：`product_*` 的商品信息（标题/类目/属性）、`stats_*` 的转化与退款率、`review-insight` 卖点/痛点（如有评论数据）。
+- **交叉技能**：keyword-research 词表、competitor-analysis 竞品 Listing 结构。
+- **外部（可选，若已接入）**：平台后台的点击率/转化率/关键词排名。未接入时基于店铺销售与退款数据做漏斗定位，并标注「点击/转化漏斗数据缺失」。
 
 ## 输出格式
 

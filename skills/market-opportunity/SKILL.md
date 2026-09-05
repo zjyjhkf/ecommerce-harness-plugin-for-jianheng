@@ -29,8 +29,8 @@ description: 跨境电商市场机会与选品分析。当用户问「这个类�
 
 ## 数据来源
 
-- 店铺侧：`stats_overview` / 类目分布 / 近 30 天趋势（反映自身所在市场的表现）。
-- 市场侧：类目树、市场容量/统计、价格带、品牌/卖家结构（OpenBoost `amz_market_*` / `amz_category_query_v2` 等），TikTok Shop 品类大盘。
+- **店铺侧（本插件，主）**：`stats_overview` / 类目分布 / 近 30 天趋势（`stats_trend`）、`product_*`（价格带）、`inventory_*`（备货）——反映自身所在市场的表现。
+- **外部（可选，若已接入）**：类目树、市场容量/统计、价格带、品牌/卖家结构（OpenBoost `amz_market_*` / `amz_category_query_v2` 等）、TikTok Shop 品类大盘。未接入时基于店铺侧类目/价格带数据做判断，并标注「市场容量/集中度数据缺失」。
 
 ## 输出格式
 

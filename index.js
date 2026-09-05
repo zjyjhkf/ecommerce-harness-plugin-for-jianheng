@@ -10109,6 +10109,110 @@ function modeText(mode) {
   }
 }
 
+// src/skills.ts
+import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync } from "node:fs";
+import { dirname as dirname3, join as join2 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var MODULE_DIR2 = dirname3(fileURLToPath2(import.meta.url));
+var SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+var PROVIDER_NAME = "ecommerce-analyst";
+var PROVIDER_RANK = 600;
+function parseFrontmatter(raw) {
+  const lines = raw.split(/\r?\n/);
+  if ((lines[0] ?? "").trim() !== "---") return void 0;
+  let close = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if ((lines[i] ?? "").trim() === "---") {
+      close = i;
+      break;
+    }
+  }
+  if (close < 0) return void 0;
+  const data = {};
+  for (let i = 1; i < close; i++) {
+    const m = (lines[i] ?? "").match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/);
+    if (m !== null) data[m[1]] = m[2];
+  }
+  return { data, body: lines.slice(close + 1).join("\n") };
+}
+function resolveSkillsDir() {
+  for (const candidate of [join2(MODULE_DIR2, "skills"), join2(MODULE_DIR2, "..", "skills")]) {
+    if (existsSync2(join2(candidate, "keyword-research", "SKILL.md"))) return candidate;
+  }
+  return void 0;
+}
+function readSkill(path) {
+  let raw;
+  try {
+    raw = readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+  const parsed = parseFrontmatter(raw);
+  if (parsed === void 0) return void 0;
+  const name2 = (parsed.data.name ?? "").trim();
+  const description = (parsed.data.description ?? "").trim();
+  if (name2 === "" || description === "" || !SKILL_NAME.test(name2)) return void 0;
+  const whenToUse = (parsed.data.whenToUse ?? "").trim();
+  return {
+    name: name2,
+    description,
+    ...whenToUse !== "" ? { whenToUse } : {},
+    invocation: { modelInvocable: true, userInvocable: true },
+    source: "custom",
+    provider: PROVIDER_NAME,
+    content: parsed.body.trim(),
+    path
+  };
+}
+function createSkillsProvider(skillsDir) {
+  return {
+    name: PROVIDER_NAME,
+    async list() {
+      const candidates = [];
+      let entries;
+      try {
+        entries = readdirSync(skillsDir, { withFileTypes: true });
+      } catch {
+        return candidates;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const md = join2(skillsDir, entry.name, "SKILL.md");
+        const skill = readSkill(md);
+        if (skill === void 0) continue;
+        candidates.push({
+          name: skill.name,
+          description: skill.description,
+          ...skill.whenToUse !== void 0 ? { whenToUse: skill.whenToUse } : {},
+          invocation: skill.invocation,
+          source: skill.source,
+          provider: PROVIDER_NAME,
+          resourceBase: { kind: "directory", path: skillsDir },
+          rank: PROVIDER_RANK,
+          locator: md,
+          path: md
+        });
+      }
+      return candidates;
+    },
+    async get(candidate) {
+      const md = candidate.locator;
+      return readSkill(md);
+    }
+  };
+}
+function registerPluginSkills(ctx) {
+  const registry = ctx.get("skills");
+  if (registry === void 0 || typeof registry.registerProvider !== "function") {
+    return void 0;
+  }
+  const skillsDir = resolveSkillsDir();
+  if (skillsDir === void 0) return void 0;
+  const provider = createSkillsProvider(skillsDir);
+  return registry.registerProvider(() => provider);
+}
+
 // src/index.ts
 var name = "ecommerce-analyst";
 var inject = ["systemPrompt", "webServer", "tools"];
@@ -10142,6 +10246,12 @@ async function apply(ctx, config = {}) {
   registerQaTool(ctx, store);
   registerExportCsvTool(ctx, store);
   registerModeTools(ctx, store);
+  const disposeSkills = registerPluginSkills(ctx);
+  if (disposeSkills === void 0) {
+    console.warn("[ecommerce-analyst] skills \u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u8DF3\u8FC7\u6280\u80FD\u76EE\u5F55\u6CE8\u518C\uFF08/name \u8C03\u7528\u4E0D\u53EF\u7528\uFF09");
+  } else {
+    ctx.effect(() => disposeSkills, "ecommerce: skills provider");
+  }
   let webServer = ctx.get("webServer");
   if (webServer === void 0) {
     await new Promise((r) => setTimeout(r, 250));

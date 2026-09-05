@@ -29,6 +29,7 @@ import { registerExcelTools } from './tools/excel.ts'
 import { registerQaTool } from './tools/qa.ts'
 import { registerExportCsvTool } from './tools/export-csv.ts'
 import { registerModeTools } from './tools/mode.ts'
+import { registerPluginSkills } from './skills.ts'
 import { qaRuleDescription } from './qa-engine.ts'
 
 export const name = 'ecommerce-analyst'
@@ -73,6 +74,15 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
   registerQaTool(ctx, store)
   registerExportCsvTool(ctx, store)
   registerModeTools(ctx, store)
+
+  // 技能层：把仓库 skills/*/SKILL.md 注册进 dsh 技能目录（/name 可调用 + 模型可自动调用）。
+  // ctx.skills 为可选服务，缺失（老版本 dsh）时跳过，不影响插件其余功能。
+  const disposeSkills = registerPluginSkills(ctx)
+  if (disposeSkills === undefined) {
+    console.warn('[ecommerce-analyst] skills 服务不可用，跳过技能目录注册（/name 调用不可用）')
+  } else {
+    ctx.effect(() => disposeSkills, 'ecommerce: skills provider')
+  }
 
   // 侧边栏数据 API：只读 JSON，复用同一 Store（与工具口径一致）
   // webServer 服务随 inject 注入；极端时序下（尚未提供）做一次短暂等待再注册

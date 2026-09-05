@@ -534,8 +534,8 @@ var SKILL_MODULES = [
     task: "\u4ECE\u7528\u6237\u8BC4\u8BBA\u6316\u6398\u9AD8\u9891\u597D\u8BC4\u5356\u70B9\u3001\u5DEE\u8BC4\u75DB\u70B9\u4E0E\u4F7F\u7528\u573A\u666F\uFF0C\u6309 P0/P1/P2 \u7ED9\u51FA\u53CD\u54FA\u9009\u54C1\u3001Listing \u4E0E\u552E\u540E\u7684\u6539\u8FDB\u52A8\u4F5C\u3002"
   }
 ];
-function skillTagOf(skill) {
-  return `[${skill.label}](ecommerce-skill://${skill.id})`;
+function skillInvocationToken(skill) {
+  return `/${skill.id}`;
 }
 function valuePromptOf(label, value, note) {
   const lines = [`\u5F53\u524D\u5E97\u94FA\u6570\u636E \xB7 ${label}\uFF1A${value}`];
@@ -2389,7 +2389,7 @@ function ComposerDockSkillBar() {
   return React5.createElement(SkillBar, {
     variant: "dock",
     onInvoke: (skill) => {
-      void sendToConversation(skillTagOf(skill));
+      void sendToConversation(skillInvocationToken(skill));
     }
   });
 }

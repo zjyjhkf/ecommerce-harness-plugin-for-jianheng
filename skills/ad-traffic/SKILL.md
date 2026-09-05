@@ -29,8 +29,8 @@ description: 跨境电商广告与流量分析。当用户问「广告效果」�
 
 ## 数据来源
 
-- 广告后台报表（campaign/搜索词/ACOS/CPC/预算）；流量来源（OpenBoost `amz_traffic_source` / `amz_traffic_keyword`）。
-- 店铺侧：`stats_*` 的客单价/转化，用于衡量广告投入产出。
+- **店铺侧（本插件，主）**：`stats_overview` / `stats_trend` / `stats_top_products`（客单价、转化、退款率）、`order_list` / `order_stats`（订单明细）——衡量广告投入产出与转化漏斗。
+- **外部（可选，若已接入）**：广告后台报表（campaign/搜索词/ACOS/CPC/预算）、流量来源（OpenBoost `amz_traffic_source` / `amz_traffic_keyword`）。未接入时仅基于店铺销售数据做转化侧诊断，并明确标注「广告花费/流量来源数据缺失」。
 
 ## 输出格式
 
