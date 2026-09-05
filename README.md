@@ -11,14 +11,24 @@
 
 安装前请先满足以下依赖：
 
-| 依赖 | 版本 / 要求 | 自检命令 |
-|---|---|---|
-| Node.js | ≥ 22.19 | `node -v` |
-| git | 任意 | `git --version` |
-| pnpm 或 npm | 推荐 pnpm | `pnpm -v` / `npm -v` |
-| DeepSeek Harness (dsh) | v0.1.1-rc.2 | 已部署 dsh 仓库 |
+| 依赖 | 版本 / 要求 | 自检命令 | 说明 |
+|---|---|---|---|
+| Node.js | ≥ 22.19 | `node -v` | |
+| git | 任意 | `git --version` | |
+| pnpm | ≥ 9（**必须**，npm 不可替代） | `pnpm -v` | `dsh plugin` 依赖 pnpm 管理插件；缺失时先执行 `npm install -g pnpm` |
+| DeepSeek Harness (dsh) | v0.1.1-rc.2 及以上（已在 0.1.2-rc.1 验证） | `dsh -V` | 全局安装或 `npx @deepseek-ai/dsh` 临时运行均可，命令写法见「方式一」 |
 
 > 插件运行时依赖仅 `xlsx`（Excel 解析，导入必需）与 `pdfjs-dist`（PDF 导入，可选，缺失自动降级）。
+
+---
+
+## 为什么「下载完不能直接用」？
+
+> **机制说明**：dsh 插件要经过三步才生效——
+> ① **下载**（把代码放到本地文件夹）→ ② **安装**（`dsh plugin add` 注册进
+> `~/.dsh/profiles/web/`，自动装齐运行依赖）→ ③ **重启**（`dsh web` 启动时加载，
+> 此时才出现 logo / 工具 / 「数据查看」入口与「电商数据中台」面板）。
+> **只下载不安装、只安装不重启，界面上都不会有任何变化。**
 
 ---
 
@@ -28,11 +38,45 @@
 
 > 仓库已内置构建产物 `index.js` / `client.js` / `assets/data-center.html`，
 > 安装时不执行任何构建，**开箱即用**。
+>
+> 源地址二选一（内容一致）：
+> - GitHub：`https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git`
+> - Gitee 镜像：`https://gitee.com/zjy041213/ecommerce-harness-plugin-for-jianheng.git`
 
-Windows（PowerShell）与 Ubuntu（bash）**命令一致**，在终端执行：
+**前置**：确认 pnpm 可用（`dsh plugin` 依赖它，缺失会报 `pnpm not found`）：
+
+```sh
+pnpm -v || npm install -g pnpm
+```
+
+**A. 已全局安装 dsh（终端可直接执行 `dsh`）** —— Windows PowerShell 与 Ubuntu bash 命令一致：
 
 ```sh
 dsh plugin --profile web add git+https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git
+# Gitee 源：
+# dsh plugin --profile web add git+https://gitee.com/zjy041213/ecommerce-harness-plugin-for-jianheng.git
+```
+
+**B. dsh 由 `npx` / `npm exec` 临时运行（PATH 上没有 `dsh` 命令）**
+
+> ⚠️ 不要写成 `npm exec @deepseek-ai/dsh plugin --profile web ...`：
+> npm 会把 `--profile` 当成自己的参数吞掉（报 `Unknown cli config "--profile"`）导致命令不执行。
+> 用下面两种写法之一：
+
+```sh
+# 写法 1：用 `--` 分隔，告诉 npm 后面的参数全部交给 dsh
+npm exec --package @deepseek-ai/dsh -- dsh plugin --profile web add git+https://gitee.com/zjy041213/ecommerce-harness-plugin-for-jianheng.git
+
+# 写法 2（最稳）：直接调用 npx 缓存里的 dsh 可执行文件
+~/.npm/_npx/*/node_modules/.bin/dsh plugin --profile web add git+https://gitee.com/zjy041213/ecommerce-harness-plugin-for-jianheng.git
+```
+
+**C. 使用本地已 clone 的目录安装（二次开发场景）**
+
+```sh
+git clone https://gitee.com/zjy041213/ecommerce-harness-plugin-for-jianheng.git ~/dsh-plugin
+ls ~/dsh-plugin   # 自检：必须能看到 package.json / index.js / client.js —— 空目录说明 clone 失败，先解决下载
+dsh plugin --profile web add file:/home/<你的用户名>/dsh-plugin   # 务必用绝对路径
 ```
 
 安装位置（自动生成，无需手动修改）：
@@ -42,11 +86,32 @@ dsh plugin --profile web add git+https://github.com/zjyjhkf/ecommerce-harness-pl
 | Windows | `C:\Users\<你的用户名>\.dsh\profiles\web\` |
 | Ubuntu | `~/.dsh/profiles/web/` |
 
-安装完成后**完全退出并重启 dsh**，插件即生效。
+**安装成功的判定**（二选一）：
+
+```sh
+# 1) 查看 profile 清单：dependencies 与 dsh.profile.bundles 中应出现 ecommerce-analyst-plugin
+cat ~/.dsh/profiles/web/package.json
+# 2) 组合配置校验：应能看到 "# == ecommerce-analyst-plugin" 层
+dsh --profile web --dump-config | grep -A3 ecommerce
+```
+
+**最后一步（必须）**：**完全退出**正在运行的 dsh（终端 Ctrl+C；重启前确认端口已释放，
+`ss -ltn | grep 3080` 应无输出，否则会报端口占用），然后重新启动：
+
+```sh
+dsh web        # 或你平时启动 GUI 的命令（如 npm exec @deepseek-ai/dsh web）
+```
+
+> 为什么必须重启：dsh 在**进程启动时**组合加载插件 bundle（服务端工具 + 客户端
+> logo/面板）。**刷新网页、重开对话都不会触发加载**，只有重启进程才会生效。
 
 ### 方式二：源码克隆 + 开发模式（二次开发 / 本地联调）
 
 仅当需要改动 `src/` 源码并本地联调时使用。先克隆到 dsh 仓库内，再编辑 [cordis.yml](cordis.yml) 的 `name` 占位路径，替换为本机绝对路径。
+
+> ⚠️ **普通用户请勿使用本方式，也不要修改/引用 `cordis.yml`。**
+> 该文件的 `name` 是开发模式占位路径（`/absolute/path/to/...`），未经替换直接 `--patch` 会加载失败。
+> 日常安装请用「方式一」——它自动使用 `cordis.patch.yml`，无需手动编辑任何清单。
 
 #### Windows
 
@@ -70,7 +135,7 @@ pnpm install
 pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
 ```
 
-> 首次启动即内置企业演示数据（26 商品 + 480 订单：总览 ¥154,699 / 359 单 / 客单价 ¥430.92 / 退款率 10.6%，含逾期 43 笔、待发货 55 笔、低库存 8 件），开箱即可演示。
+> 默认运行在**示例数据模式**（mock），内置一套 26 商品 / 480 订单的示例数据，可先通过对话工具（`product_list` / `order_list` / `stats_overview` / `inventory_low_stock` 等）体验取数与统计，再按「对接真实电商平台」章节切换到真实数据。
 
 ### 方式三：源码构建（仅在改动 src/ 后需要）
 
@@ -104,12 +169,11 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 重启 dsh 后，按以下顺序确认各功能可用：
 
-1. **侧边栏**：右侧出现「店铺」悬浮开关（逾期红点徽标 = 43），点击展开面板。
-2. **经营总览**：显示 销售额 **¥154,699.00** ｜ 订单量 **359 单** ｜ 客单价 **¥430.92** ｜ 退款率 **10.6%**。
-3. **今日待办**：逾期 **43**（红色置顶）/ 待发货 **55** / 低库存 **8**。
-4. **工具**：对话中调用任意 `product_list` / `order_list` / `order_stats` / `stats_overview` / `inventory_low_stock` / `ecommerce_import_excel` / `ecommerce_export_csv` / `ecommerce_qa` 正常返回。
-5. **数据中台 + 数据对比**：导入月度/周度 Excel → 打开「数据中台」能看到对应内容；侧边栏出现「数据对比」模块（**连续导入同口径两期后**出对比结果，第一期仅显示「暂无上一期」引导）。
-6. **技能**：直接 `/keyword-research`、`/market-opportunity` 等 7 个技能可调用（详见下方技能包章节）。
+1. **侧边栏入口**：右侧底部出现「数据查看」圆形按钮，点击展开面板。
+2. **电商数据中台面板**：面板标题为「电商数据中台」，工具栏含 全屏 / 导出 / 导入 / 刷新 四个按键，主体为数据中台 iframe。
+3. **数据导入 + 复盘**：点击「📥 导入」选择月度（4 份 Excel）/ 周度（3 份「商品排名导出」）文件 → 数据中台显示对应复盘内容；**连续导入同口径两期后**出现「数据对比」结果（第一期仅显示「暂无上一期」引导）。
+4. **工具**：对话中调用任意 `product_list` / `order_list` / `order_stats` / `stats_overview` / `inventory_low_stock` / `ecommerce_import_excel` / `ecommerce_export_csv` / `ecommerce_qa` / `ecommerce_compare` 正常返回。
+5. **技能**：直接 `/keyword-research`、`/market-opportunity` 等 7 个技能可调用（详见下方技能包章节）。
 
 ---
 
@@ -135,7 +199,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 - **对话调用**：`/keyword-research`、`/market-opportunity` 等 `/name` 形式（7 个 slug 见上表）；
 - **模型自动调用**：技能声明为 `modelInvocable`，模型可按需自动选中；
-- **面板按键**：店铺工作台侧边栏的 7 个技能按键点击后发送 `/<slug>`，触发技能注入。
+- **技能条按键**：会话框下方技能条的 7 个技能按键点击后发送 `/<slug>`，触发技能注入。
 
 > 若使用较旧 dsh（无 `ctx.skills` 服务），插件会打印 warn 并跳过注册；此时仍可手动装载：把 `skills/` 下各目录复制到 `~/.dsh/skills/`（Linux/macOS）、`%USERPROFILE%\.dsh\skills`（Windows），或 `<dsh项目根>/.dsh/skills/` 后重启 dsh。
 
@@ -143,7 +207,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 插件与 skills 形成「数据 → 洞察 → 决策」闭环：
 
-1. **插件取数**：启动 `ecommerce-analyst-plugin` 后，用对话或「店铺工作台」完成订单/销售/库存管理，或导入月度/周度复盘 Excel，进入数据中台；
+1. **插件取数**：启动 `ecommerce-analyst-plugin` 后，用对话完成订单/销售/库存管理，或导入月度/周度复盘 Excel，进入数据中台；
 2. **导出数据**：用 `ecommerce_export_csv` 把商品/订单导出为 UTF-8 CSV（带 BOM，Excel 可直接打开）；
 3. **喂给 skills**：把 CSV / 中台面板数据作为输入交给对应 skill，输出经营结论——
    - `market-opportunity`：用销量/类目分布判断该细分市场是否值得进入；
@@ -183,19 +247,18 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 - **周期严格隔离**：7 天与 30 天数据分开存放与展示。**只导入 7 日周数据时，30 天面板保持为空**（不插入数据就不显示对应面板）；反之亦然。
 - **数据评价**：对导入数据自动生成一句 40~80 字 AI 经营评价（销售额/产品/推广/退款四角度），AI 不可用时回退规则模板。
 - **数据对比**：同口径**连续导入两期**（如两个月/两周）后，导入新周期自动归档上一期；侧边栏「数据对比」模块按层级/指标输出上期→本期 KPI、条形图、排行与名次位移（仅导一期显示「暂无上一期」引导）。
-- **入口**：侧边栏「店铺工作台」→ 导入 Excel 文件 → 全屏「数据中台」面板（iframe 加载 `/ecommerce-api/data-center`）。
+- **入口**：侧边栏「数据查看」按钮 → 打开「电商数据中台」面板 → 导入 Excel 文件（iframe 加载 `/ecommerce-api/data-center`）。
 
 导入的月度/周度文件格式（列名/元数据行）由插件固定识别；同格式不同内容的文件插入后，面板即展示对应内容。
 
-## 桌面端侧边栏「店铺工作台」
+## 桌面端侧边栏「电商数据中台」
 
-> 打开方式：**侧边栏模块启动**（better-sidebar 标签页 / 右侧悬浮「驾驶舱」按键 / shell.overlay 兜底），不再依赖对话顶部。
+> 打开方式：右侧底部「数据查看」圆形入口（`sidebar.footer.action`）点击展开面板；面板以 `conversation.view` 标签页形态呈现，`shell.overlay` 兜底。早期「店铺工作台 / BI 看板」（经营总览卡片、今日待办、商品分类树、销售排行、低库存清单、行动清单、一页简报、数据源切换）已随 v0.3.2 移除，面板现在只承载「电商数据中台」。
 
-- 经营总览卡片（销售额/订单量/客单价/退款率）｜ 今日待办（逾期红置顶/待发货/低库存）
-- 商品分类树（点击筛选）｜ 销售排行 TOP5 ｜ 低库存预警清单（可展开）
-- 行动清单 dock（逾期/待发货/低库存 → 待办 N 项 · 今天到期 N · 紧急 N）
-- 一页经营简报（Markdown 一键复制）｜ 数据导入（CSV/Excel/SQL/PDF/JSON）｜ 数据源切换｜ 数据中台全屏面板
-- 数据全部来自同一 `EcommerceStore` 统计口径（`/ecommerce-api` 只读接口），与工具结果完全一致
+- **唯一主体**：电商数据中台 iframe（`/ecommerce-api/data-center`），展示导入的月度/周度复盘与数据对比
+- **工具栏**：全屏浏览 / 导出 CSV / 导入本地数据（CSV/Excel/SQL/PDF/JSON）/ 刷新
+- **数据联动**：导入 Excel 后 postMessage 通知 iframe 刷新，面板随导入数据动态更新；点击中台内商品名可唤起「链接预警分析」
+- 数据一律来自导入的 Excel 复盘报表（月度/周度），无内置演示面板
 
 ## 快速开始：对话示例
 
@@ -211,7 +274,7 @@ ECOM_PLUGIN_OUT=/your/plugins/ecommerce-analyst-plugin npm run build
 
 - 商品表头（支持中文别名）：`sku/商品编码, name/商品名称, category/类目, price/售价, stock/库存, status/状态(在售|下架)`
 - 订单表头（支持中文别名）：`order_id/订单号, buyer/买家, sku/商品编码, product_name/商品名称, quantity/数量, amount/金额, status/状态, created_at/下单时间`
-- 导入前自动备份当前数据；导入后「店铺工作台」侧边栏与统计工具立即反映新数据（同一 Store）
+- 导入前自动备份当前数据；导入后数据中台面板与统计工具立即反映新数据（同一 Store）
 
 ### 对接真实电商平台（rest 模式）
 
@@ -238,7 +301,7 @@ ecommerceAnalyst:
 ## 开发与测试
 
 ```sh
-# 单元测试（121 项：状态机、统计口径、库存预警、持久化、工具注册、周期隔离、导出接口、入口冒烟、UI 完整性、数据对比引擎）
+# 单元测试（116 项：状态机、统计口径、库存预警、持久化、工具注册、周期隔离、导出接口、入口冒烟、UI 完整性、数据对比引擎）
 pnpm --dir ecommerce-analyst-plugin test
 
 # 端到端测试（生成物理 Excel 测试文件 → 导入/导出/分析 → 自动清理）
@@ -285,7 +348,7 @@ src/
     ├── compare.ts        # 数据对比工具（ecommerce_compare）
     └── json.ts           # 输出类型适配
 data/seed.json            # 预置示例数据（26 商品 / 480 订单）
-tests/                    # 121 项单元测试
+tests/                    # 116 项单元测试
 docs/functional-spec.md   # 功能规范文档
 ```
 
@@ -302,6 +365,17 @@ docs/functional-spec.md   # 功能规范文档
 
 ## 兼容性
 
-- dsh 版本：`0.1.1-rc.2`
+- dsh 版本：`0.1.1-rc.2` 及以上（已在 `0.1.2-rc.1` 验证）
 - Node.js：≥ 22.19
 - 零外部运行时依赖（仅 peer 依赖 dsh 内置包；`xlsx`/`pdfjs-dist` 为导入解析可选依赖）
+
+## 安装失败排查
+
+| 报错 / 现象 | 原因 | 解决 |
+|---|---|---|
+| `dsh: pnpm not found on PATH`（exit 127） | 没装 pnpm，`dsh plugin` 硬依赖它 | `npm install -g pnpm` 后重试 |
+| npm 输出 `Unknown cli config "--profile"` 或命令「没反应」 | `npm exec` 把 `--profile` 当自己的参数吞掉 | 用 `--` 分隔（见方式一 B）或直接调用 dsh 可执行文件绝对路径 |
+| `dsh plugin add` 报找不到包 / 目录为空 | `file:` 指向的目录不存在或 clone 失败 | 重新 `git clone` 并用 `ls` 校验；路径用绝对路径 |
+| 重启时报端口占用 / `EADDRINUSE` | 上一个 dsh 实例没退干净 | `Ctrl+C` 退出全部实例，`ss -ltn \| grep 3080` 无输出后再启动 |
+| 安装成功但界面看不到插件 | 没有重启进程（刷新网页无效） | 完全退出后重新执行 `dsh web` |
+| 不确定装没装上 | — | `cat ~/.dsh/profiles/web/package.json` 或 `dsh --profile web --dump-config \| grep -A3 ecommerce` |
