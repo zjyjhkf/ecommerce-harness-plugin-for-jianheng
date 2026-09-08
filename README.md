@@ -34,7 +34,30 @@
 
 ## 部署与配置（按操作系统）
 
-### 方式一：git 一键安装（推荐，Windows / Ubuntu 通用）
+### 方式一：npm registry 一键安装（推荐，Windows / Ubuntu 通用）
+
+> 自 v0.3.4 起本包已发布到 npm 官方 registry，包名 `ecommerce-analyst-plugin`，
+> 内置构建产物、安装时不跑任何构建，`dsh plugin` 原生支持 registry 包名并会自动登记 bundle。
+
+**前置**：确认 pnpm 可用（`dsh plugin` 依赖它，缺失会报 `pnpm not found`）：
+
+```sh
+pnpm -v || npm install -g pnpm
+```
+
+```sh
+dsh plugin --profile web add ecommerce-analyst-plugin
+# 升级：dsh plugin --profile web add ecommerce-analyst-plugin@latest
+```
+
+> ⚠️ 国内用户默认走 npmmirror 镜像时，新版本存在分钟~小时级同步延迟；若报 404
+> `ecommerce-analyst-plugin@... is not in this registry`，临时切官方源重试：
+> `npm config set registry https://registry.npmjs.org`（装完可切回
+> `npm config set registry https://registry.npmmirror.com`），或改用下方「方式二」兜底。
+
+安装成功的判定、重启 dsh 等步骤与「方式二」完全相同（见下）。
+
+### 方式二：git 一键安装（兜底通道；GitHub / Gitee 直连可用时）
 
 > 仓库已内置构建产物 `index.js` / `client.js` / `assets/data-center.html`，
 > 安装时不执行任何构建，**开箱即用**。
@@ -105,13 +128,13 @@ dsh web        # 或你平时启动 GUI 的命令（如 npm exec @deepseek-ai/ds
 > 为什么必须重启：dsh 在**进程启动时**组合加载插件 bundle（服务端工具 + 客户端
 > logo/面板）。**刷新网页、重开对话都不会触发加载**，只有重启进程才会生效。
 
-### 方式二：源码克隆 + 开发模式（二次开发 / 本地联调）
+### 方式三：源码克隆 + 开发模式（二次开发 / 本地联调）
 
 仅当需要改动 `src/` 源码并本地联调时使用。先克隆到 dsh 仓库内，再编辑 [cordis.yml](cordis.yml) 的 `name` 占位路径，替换为本机绝对路径。
 
 > ⚠️ **普通用户请勿使用本方式，也不要修改/引用 `cordis.yml`。**
 > 该文件的 `name` 是开发模式占位路径（`/absolute/path/to/...`），未经替换直接 `--patch` 会加载失败。
-> 日常安装请用「方式一」——它自动使用 `cordis.patch.yml`，无需手动编辑任何清单。
+> 日常安装请用「方式一 / 方式二」——它们自动使用 `cordis.patch.yml`，无需手动编辑任何清单。
 
 #### Windows
 
@@ -137,7 +160,7 @@ pnpm dsh web --patch ./ecommerce-analyst-plugin/cordis.yml
 
 > 默认运行在**示例数据模式**（mock），内置一套 26 商品 / 480 订单的示例数据，可先通过对话工具（`product_list` / `order_list` / `stats_overview` / `inventory_low_stock` 等）体验取数与统计，再按「对接真实电商平台」章节切换到真实数据。
 
-### 方式三：源码构建（仅在改动 src/ 后需要）
+### 方式四：源码构建（仅在改动 src/ 后需要）
 
 独立 clone（不在 dsh workspace 内）首次构建需先安装 dev 依赖，Windows / Ubuntu 命令一致：
 

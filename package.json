@@ -1,9 +1,13 @@
 {
   "name": "ecommerce-analyst-plugin",
-  "version": "0.3.1",
+  "version": "0.3.5",
   "description": "dsh 电商商单智能体插件：商品管理 / 订单处理 / 销售数据分析 / 库存预警（含桌面端「店铺工作台」侧边栏、数据中台与 Excel/PDF 导入）",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zjyjhkf/ecommerce-harness-plugin-for-jianheng.git"
+  },
   "main": "index.js",
   "exports": {
     ".": "./index.js",
@@ -41,7 +45,7 @@
   ],
   "dependencies": {
     "pdfjs-dist": "^4.10.38",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.0",
