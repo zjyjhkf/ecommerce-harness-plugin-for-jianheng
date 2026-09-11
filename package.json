@@ -1,6 +1,6 @@
 {
   "name": "ecommerce-analyst-plugin",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "dsh 电商商单智能体插件：商品管理 / 订单处理 / 销售数据分析 / 库存预警（含桌面端「店铺工作台」侧边栏、数据中台与 Excel/PDF 导入）。v0.4.0：默认 silent 激活（未显式启用对会话零影响），示例种子数据移除（数据仅来自导入/rest）",
   "type": "module",
   "license": "MIT",

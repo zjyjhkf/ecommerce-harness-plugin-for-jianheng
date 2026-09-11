@@ -1292,13 +1292,12 @@ var EcommerceStore = class {
     return { products: this.products.length, orders: this.orders.length, snapshot };
   }
   /**
-   * v0.4.1「清除重置」：一键清空当前所有已导入的数据——
+   * v0.4.2「清除重置」：一键清空当前所有已导入的数据——
    * 商品/订单、月度/周度复盘及其上一期归档、导入快照缓存，全部归零并持久化。
-   * 清空前自动导出全量备份快照返回给调用方（下载即可完整回滚，杜绝误操作损失）。
-   * 返回 { products, orders, snapshot }，snapshot 为清空前数据的备份 JSON 字符串。
+   * 纯清除语义：不产生/不回传备份快照（不触发任何文件导入导出）；
+   * 归档清空后，只导入一份数据时「数据对比」模块不会出现。
    */
   clearAllData() {
-    const snapshot = this.exportBackup();
     const cleared = { products: this.products.length, orders: this.orders.length };
     this.products = [];
     this.orders = [];
@@ -1312,7 +1311,7 @@ var EcommerceStore = class {
     this.previousWeeklyReport = null;
     this.reportRevision += 1;
     this.save();
-    return { ...cleared, snapshot };
+    return cleared;
   }
   /** 切换回最近一次导入的数据（无导入记录时报错） */
   switchToImported() {
@@ -3525,8 +3524,7 @@ function registerShopApi(webServer, store, ctx = {}) {
             value: {
               clearedProducts: r.products,
               clearedOrders: r.orders,
-              snapshot: r.snapshot,
-              hint: `\u5DF2\u6E05\u9664 ${r.products} \u6761\u5546\u54C1\u3001${r.orders} \u6761\u8BA2\u5355\u53CA\u5168\u90E8\u6708/\u5468\u590D\u76D8\uFF1B\u6E05\u7A7A\u524D\u5FEB\u7167\u5DF2\u968F\u54CD\u5E94\u8FD4\u56DE\uFF0C\u4E0B\u8F7D\u4FDD\u5B58\u5373\u53EF\u6062\u590D`
+              hint: `\u5DF2\u6E05\u9664 ${r.products} \u6761\u5546\u54C1\u3001${r.orders} \u6761\u8BA2\u5355\u53CA\u5168\u90E8\u6708/\u5468\u590D\u76D8\u4E0E\u5BF9\u6BD4\u5F52\u6863`
             }
           });
           return;

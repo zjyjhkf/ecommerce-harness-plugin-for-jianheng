@@ -248,7 +248,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
     <div class="menu-item" data-view="promo" onclick="switchView('promo')" style="--ic:#ffdcc5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> 推广分析</div>
     <div class="menu-item" data-view="refund" onclick="switchView('refund')" style="--ic:#ffd1d4"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 12 a7.2 7.2 0 1 1 2.1 5.1"/><path d="M4.3 7.6 V12.3 H9"/></svg> 退款分析</div>
     <div class="menu-item" data-view="review" onclick="switchView('review')" style="--ic:#e9dcff"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6.5 3 H14 L18 7 V21 H6.5 Z"/><path d="M14 3 V7 H18"/><path d="M9.5 12 H15 M9.5 15.5 H15"/></svg> <span id="reviewMenuLabel">周复盘</span></div>
-    <div class="menu-item" data-view="compare" onclick="switchView('compare')" style="--ic:#fff3bf"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 V12 M10 20 V5 M16 20 V9 M21.5 20 H2.5"/><path d="M12.5 5 L10 7.5 L12.5 10 L15 7.5 Z" fill="currentColor" stroke="none"/></svg> 数据对比</div>
+    <div class="menu-item" data-view="compare" onclick="switchView('compare')" style="--ic:#fff3bf;display:none"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 V12 M10 20 V5 M16 20 V9 M21.5 20 H2.5"/><path d="M12.5 5 L10 7.5 L12.5 10 L15 7.5 Z" fill="currentColor" stroke="none"/></svg> 数据对比</div>
   </div>
   <div class="sidebar-section" id="weeklyLevelNav" style="display:none;border-top:1px solid rgba(255,255,255,.12);padding:8px 0 2px;margin-top:6px">
     <div style="padding:0 16px 6px;font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.5px">周数据层级（下钻）</div>
@@ -2634,10 +2634,20 @@ function compareFrame(){
   renderCompareMetricBar();
   renderCompareBody();
 }
+/** v0.4.2：仅当「连续导入两期」形成对比结果时才显示「数据对比」菜单；
+ *  单期 / 无数据 / 清除后模块整体不出现；若正停留在对比视图则回到默认视图。 */
+function updateCompareMenu(){
+  try {
+    const has = !!(comparePayload && comparePayload.result && Array.isArray(comparePayload.kinds) && comparePayload.kinds.length > 0);
+    const mi = document.querySelector('.menu-item[data-view="compare"]');
+    if (mi) mi.style.display = has ? '' : 'none';
+    if (!has && typeof currentView !== 'undefined' && currentView === 'compare' && typeof switchView === 'function') switchView('sales');
+  } catch(e) {}
+}
 /** 拉取服务端对比数据（按当前周期 + 层级 + 指标），完成后重渲染 */
 async function compareRefresh(){
   if (compareLoading) return;
-  if (!__API_READY) { compareFrame(); return; }
+  if (!__API_READY) { compareFrame(); updateCompareMenu(); return; }
   compareLoading = true;
   try {
     const q = new URLSearchParams({ cycle: cycle, limit: '120' });
@@ -2647,7 +2657,7 @@ async function compareRefresh(){
     if (j && j.ok) comparePayload = j.value || null;
     else if (j && j.value === null) comparePayload = null;
     else compareError = '对比接口暂不可用，请稍后重试。';
-  } catch (e) { compareError = '对比数据拉取失败。'; } finally { compareLoading = false; compareFrame(); }
+  } catch (e) { compareError = '对比数据拉取失败。'; } finally { compareLoading = false; compareFrame(); updateCompareMenu(); }
 }
 
 function renderCompareKindBar(){
@@ -2884,7 +2894,7 @@ function __dataSig(){
 // 变化判定优先采用服务端单调递增的 revision（任一报表导入即 +1，能捕获「行数不变但数值变化」的更新），
 // 无版本号时回退到内容指纹。force=true 强制重渲染；仅变化时重渲染以避免轮询闪烁。
 // 构建版本标记：随每次发版更新，用于面板右上角展示 + iframe 缓存失效（与 client data.ts 保持一致）
-const DC_VERSION = '2026-09-04.r18';
+const DC_VERSION = '2026-09-11.r19';
 
 // 右上角数据状态徽标：实时显示「版本 / 接口状态 / 当前周期 / 层级行数 / 服务端版本号 / 刷新时间」，
 // 便于直观确认面板是否加载到最新导入数据（排查「插入不同数据但显示相同」问题时一目了然）。
@@ -2950,6 +2960,9 @@ async function loadRealData(force){
       if (typeof renderView === 'function') renderView(currentView);
       // 数据评价：数据变化后客户端缓存失效（服务端按 revision 缓存，数据变了评价需重算）
       __evalCache = { '30d': null, '7d': null };
+      // v0.4.2：任何数据变化（含清除重置）后对比缓存作废——菜单立即隐藏，重进视图自动重取
+      comparePayload = null; compareError = '';
+      if (typeof updateCompareMenu === 'function') updateCompareMenu();
     }
     // 每次轮询都刷新评价：服务端非阻塞（即时返回规则占位 + 后台生成 AI），
     // 轮询自动把占位升级为 AI；已拿到最终结果（非 pending）则跳过。

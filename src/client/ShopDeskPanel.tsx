@@ -10,7 +10,7 @@
  * 刷新（postMessage「ecommerce:refresh」）→ 数据中台重新拉取月度/周度复盘。
  */
 import * as React from 'react'
-import { clearAllData, dataCenterUrl, downloadSnapshot, exportData, importLocalFiles } from './data.ts'
+import { clearAllData, dataCenterUrl, exportData, importLocalFiles } from './data.ts'
 import {
   appendToConversation,
   isCockpitOpen,
@@ -157,26 +157,24 @@ function useShopDeskData(): ShopDeskData {
     [notifyDcRefresh],
   )
 
-  /* v0.4.1 清除重置：二次确认 → 清空全部已导入数据（商品/订单/月周复盘/归档）→
-   * 自动下载清空前的全量备份快照（与 import_backup 兼容，导回即可完整恢复）→ 刷新 iframe。 */
+  /* v0.4.2 清除重置（单一职责）：二次确认 → 清空全部已导入数据与对比归档 → 立即通知面板刷新。
+   * 不下载、不导入导出任何文件（v0.4.1 的自动快照下载在 WebView 中抛错会阻断刷新通知，已移除）；
+   * 面板另有 4s 轮询兜底，刷新通知与轮询双通道保证清空后画面即刻归空。 */
   const doClearData = React.useCallback(async (): Promise<void> => {
     const ok = window.confirm(
-      '将清除当前所有已导入数据（商品、订单、月度/周度复盘及归档），此操作影响数据中台全部面板。\n\n' +
-        '点击「确定」继续——清空前会自动下载一份完整备份文件，导入该文件即可恢复。',
+      '确定清除当前所有已导入数据？\n商品、订单、月度/周度复盘及数据对比归档将全部清空，面板恢复空白。',
     )
     if (!ok) return
     setImporting(true)
     setImportMsg(null)
     try {
       const r = await clearAllData()
+      notifyDcRefresh()
       if (!mountedRef.current) return
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      downloadSnapshot(`ecommerce-backup-before-clear-${ts}.json`, r.snapshot)
       setImportMsg({
         ok: true,
-        text: `已清除 ${r.clearedProducts} 条商品、${r.clearedOrders} 条订单及全部复盘数据；备份快照已自动下载，导回可恢复`,
+        text: `已清除 ${r.clearedProducts} 条商品、${r.clearedOrders} 条订单及全部复盘与对比归档，面板已恢复空白`,
       })
-      notifyDcRefresh()
     } catch (err) {
       if (!mountedRef.current) return
       setImportMsg({

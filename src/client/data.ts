@@ -101,15 +101,14 @@ export async function importLocalFiles(files: File[]): Promise<ImportResult> {
   return body.value
 }
 
-/** v0.4.1 清除重置结果（snapshot 为清空前的全量备份 JSON） */
+/** v0.4.2 清除重置结果（纯清除，不含快照） */
 export interface ClearDataResult {
   clearedProducts: number
   clearedOrders: number
-  snapshot: string
   hint: string
 }
 
-/** 一键清除当前所有已导入数据（商品/订单/月周复盘/归档）。成功后浏览器自动下载备份快照。 */
+/** 一键清除当前所有已导入数据（商品/订单/月周复盘/对比归档）。不产生、不下载任何文件。 */
 export async function clearAllData(): Promise<ClearDataResult> {
   const base = resolveApiBase()
   const url = (base ? base : '') + '/ecommerce-api/clear-data'
@@ -125,22 +124,11 @@ export async function clearAllData(): Promise<ClearDataResult> {
   return body.value
 }
 
-/** 把清除前的快照落盘为备份文件（与 import_backup 格式兼容，可原样导回恢复）。 */
-export function downloadSnapshot(filename: string, snapshotJson: string): void {
-  if (typeof window === 'undefined') return
-  const blob = new Blob([snapshotJson], { type: 'application/json' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
-
 /** 电商数据中台页面地址（全屏面板 iframe 加载「电商数据中台.html」修改版）。
  *  带 ?v= 版本号强制 iframe 每次发版后走全新 URL，绕过桌面端 WebView 对旧 HTML 的激进缓存。 */
 export function dataCenterUrl(): string {
   const base = resolveApiBase()
-  return (base ? base : '') + '/ecommerce-api/data-center?v=20260904-r18'
+  return (base ? base : '') + '/ecommerce-api/data-center?v=20260911-r19'
 }
 
 /** 导出数据（CSV 或 JSON）——触发浏览器下载 */

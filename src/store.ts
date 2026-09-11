@@ -455,13 +455,12 @@ export class EcommerceStore {
   }
 
   /**
-   * v0.4.1「清除重置」：一键清空当前所有已导入的数据——
+   * v0.4.2「清除重置」：一键清空当前所有已导入的数据——
    * 商品/订单、月度/周度复盘及其上一期归档、导入快照缓存，全部归零并持久化。
-   * 清空前自动导出全量备份快照返回给调用方（下载即可完整回滚，杜绝误操作损失）。
-   * 返回 { products, orders, snapshot }，snapshot 为清空前数据的备份 JSON 字符串。
+   * 纯清除语义：不产生/不回传备份快照（不触发任何文件导入导出）；
+   * 归档清空后，只导入一份数据时「数据对比」模块不会出现。
    */
-  clearAllData(): { products: number; orders: number; snapshot: string } {
-    const snapshot = this.exportBackup()
+  clearAllData(): { products: number; orders: number } {
     const cleared = { products: this.products.length, orders: this.orders.length }
     this.products = []
     this.orders = []
@@ -475,7 +474,7 @@ export class EcommerceStore {
     this.previousWeeklyReport = null
     this.reportRevision += 1
     this.save()
-    return { ...cleared, snapshot }
+    return cleared
   }
 
   /** 切换回最近一次导入的数据（无导入记录时报错） */
