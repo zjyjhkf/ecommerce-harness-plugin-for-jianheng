@@ -6,7 +6,7 @@ node_modules/
 dist/
 # 注意：以下规则不得匹配根目录 index.js / client.js / assets/，如需新增请先确认不会误伤已提交产物
 
-# runtime state (导入/累积数据，不入库；seed.json 为种子数据，保留入库)
+# runtime state（导入/累积数据，不入库；v0.4.0 起示例种子已移至 tests/fixtures/seed.json，仅供测试）
 data/store.json
 
 # typescript

@@ -17,7 +17,7 @@ import type {
 export interface PlatformAdapter {
   /** 平台名，如 'mock' | 'taobao' | 'pdd' | 'douyin' */
   readonly name: string
-  /** 是否为只读演示适配器 */
+  /** 是否为只读本地适配器 */
   readonly readOnly: boolean
 
   listProducts(filter: ProductFilter): Promise<Product[]>
@@ -29,9 +29,6 @@ export interface PlatformAdapter {
     status: OrderStatus,
     meta?: OrderMeta,
   ): Promise<Order>
-
-  /** 仅示例（mock）适配器实现：返回种子数据深拷贝，供「重置为演示数据」使用 */
-  seedSnapshot?(): { products: Product[]; orders: Order[] }
 }
 
 /** 适配器配置 */

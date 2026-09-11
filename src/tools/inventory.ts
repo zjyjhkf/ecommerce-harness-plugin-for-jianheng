@@ -34,7 +34,7 @@ export function registerInventoryTools(ctx: Context, store: EcommerceStore): voi
         const lines = v.items
           .map((p) => `- ${p.sku} ｜ ${p.name} ｜ 库存 ${p.stock} ｜ ${p.category}`)
           .join('\n')
-        const note = mode === 'mock' ? '\n（当前为示例数据模式，仅作演示）' : ''
+        const note = mode === 'mock' ? '\n（当前为本地模式：数据来自导入；需平台实时数据请配置 rest）' : ''
         return [{
           type: 'text',
           text: `⚠️ 有 ${v.items.length} 件商品库存低于阈值（${v.threshold}）：\n${lines}${note}`,

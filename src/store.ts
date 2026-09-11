@@ -435,23 +435,18 @@ export class EcommerceStore {
   }
 
   /**
-   * 重置为演示数据：先导出当前数据快照（防误操作），再从示例种子重新初始化。
+   * 重置为本地初始数据：先导出当前数据快照（防误操作），再从适配器重新拉取。
+   * v0.4.0 起示例种子已移除——mock 适配器返回空库，即「清空重置」。
    * 返回 { products, orders, snapshot }，snapshot 为重置前的备份 JSON。
    */
   async resetToDemo(): Promise<{ products: number; orders: number; snapshot: string }> {
     const snapshot = this.exportBackup()
-    if (typeof this.adapter.seedSnapshot === 'function') {
-      const seed = this.adapter.seedSnapshot()
-    this.products = seed.products
-    this.orders = seed.orders
-  } else {
     const [products, orders] = await Promise.all([
       this.adapter.listProducts({}),
       this.adapter.listOrders({}),
     ])
     this.products = products
     this.orders = orders
-  }
     this.dataMode = 'demo'
     this.productsSource = 'demo'
     this.ordersSource = 'demo'

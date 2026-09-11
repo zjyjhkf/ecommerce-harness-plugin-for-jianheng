@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -151,7 +152,7 @@ test('v0.6 [styles] 新增导入引导横幅样式', () => {
 async function makeTempStore(): Promise<{ store: EcommerceStore; dir: string }> {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-v6-'))
   const store = new EcommerceStore(
-    new MockAdapter(),
+    new MockAdapter(seedFixture),
     { file: join(dir, 's.json'), seedOnEmpty: true, lowStockThreshold: 10 },
   )
   await store.init()

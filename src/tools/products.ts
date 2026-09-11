@@ -17,7 +17,7 @@ function renderProducts(data: { total: number; items: ProductRow[] }, sourceMode
     const statusText = p.status === 'on_sale' ? '在售' : '下架'
     return `- ${p.sku} ｜ ${p.name} ｜ ¥${p.price.toFixed(2)} ｜ 库存 ${p.stock} ｜ ${p.category} ｜ ${statusText}`
   })
-  const note = sourceMode === 'mock' ? '\n（当前为示例数据模式，仅作演示）' : ''
+  const note = sourceMode === 'mock' ? '\n（当前为本地模式：数据来自导入；需平台实时数据请配置 rest）' : ''
   return `共 ${data.total} 件商品${data.total > data.items.length ? `，显示前 ${data.items.length} 件` : ''}：\n${lines.join('\n')}${note}`
 }
 

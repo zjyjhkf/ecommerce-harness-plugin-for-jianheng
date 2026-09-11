@@ -18,6 +18,7 @@ import { EventEmitter } from 'node:events'
 import * as XLSX from 'xlsx'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 import { parseImportFile } from '../src/import-parse.ts'
 import { parseMonthlyRankExcel } from '../src/monthly-report.ts'
 import { parseWeeklyRankExcel } from '../src/weekly-report.ts'
@@ -100,7 +101,7 @@ test('周期隔离：parseImportFile 把整月文件路由到 monthlyPart 而非
 
 function makeTempStore(): { store: EcommerceStore; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-iso-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'), seedOnEmpty: false, lowStockThreshold: 10,
   })
   return { store, dir }

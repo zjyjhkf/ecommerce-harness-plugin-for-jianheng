@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 import { buildCompare, type CompareResult } from '../src/compare.ts'
 import { buildComparePayload } from '../src/compare-payload.ts'
 import { registerShopApi, type WebServerLike } from '../src/shop-api.ts'
@@ -158,7 +159,7 @@ test('buildCompare：任一侧章节缺失 / 两侧皆空 → null；仅一侧�
 
 function makeStore(): { store: EcommerceStore; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-cmp-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'), seedOnEmpty: false, lowStockThreshold: 10,
   })
   return { store, dir }
@@ -218,14 +219,14 @@ test('Store 持久化：报表 + 上一期归档跨 Store 重建恢复（重启�
   const dir = mkdtempSync(join(tmpdir(), 'ecom-cmp-persist-'))
   const file = join(dir, 'store.json')
   // 第一实例：seedOnEmpty=true → init 落盘 demo 数据，随后连续导入两期建立归档
-  const s1 = new EcommerceStore(new MockAdapter(), { file, seedOnEmpty: true, lowStockThreshold: 10 })
+  const s1 = new EcommerceStore(new MockAdapter(seedFixture), { file, seedOnEmpty: true, lowStockThreshold: 10 })
   await s1.init()
   s1.importMonthlyReport([monthlyPart('2026-06-01~2026-06-30', 'platformLinks', 100)] as never)
   s1.importMonthlyReport([monthlyPart('2026-07-01~2026-07-31', 'platformLinks', 150)] as never)
   assert.equal(s1.getPreviousMonthlyReport()?.period, '2026-06-01~2026-06-30', '第一实例内归档已建立')
 
   // 第二实例：同一 file → 模拟插件重启/热重载/新会话，init 应恢复报表与归档
-  const s2 = new EcommerceStore(new MockAdapter(), { file, seedOnEmpty: true, lowStockThreshold: 10 })
+  const s2 = new EcommerceStore(new MockAdapter(seedFixture), { file, seedOnEmpty: true, lowStockThreshold: 10 })
   await s2.init()
   assert.equal(s2.getMonthlyReport()?.period, '2026-07-01~2026-07-31', '重启后恢复当前月报')
   assert.equal(s2.getPreviousMonthlyReport()?.period, '2026-06-01~2026-06-30', '重启后恢复上一期归档')

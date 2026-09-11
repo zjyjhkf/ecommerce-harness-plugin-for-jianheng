@@ -44,9 +44,21 @@ export const inject = ['systemPrompt', 'webServer', 'tools']
  * 插件主体。cordis 会等待 inject 声明的服务全部就绪后再调用 apply，
  * 因此 apply 内可安全使用 ctx.tools / ctx.webServer / ctx.systemPrompt。
  * apply 支持 async：数据层初始化完成后才注册工具与路由。
+ *
+ * v0.4.0 激活门控（默认 silent）：
+ *  - silent：不注册业务工具、不注入系统提示——模型上下文里不存在本插件的任何痕迹；
+ *            仅保留技能目录（/name 显式调用入口）与工作台 API/侧边栏（纯 UI）。
+ *  - active：全量注册（config.activation=active 或环境变量 ECOM_ANALYST_ACTIVATION=active）。
  */
 export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Promise<void> {
+  const envActivation =
+    process.env.ECOM_ANALYST_ACTIVATION === 'active'
+      ? ('active' as const)
+      : process.env.ECOM_ANALYST_ACTIVATION === 'silent'
+        ? ('silent' as const)
+        : undefined
   const resolved: ConfigShape = {
+    activation: envActivation ?? config.activation ?? defaultConfig.activation,
     platform: { ...defaultConfig.platform, ...config.platform },
     storage: { ...defaultConfig.storage, ...config.storage },
     inventory: { ...defaultConfig.inventory, ...config.inventory },
@@ -68,23 +80,32 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     lowStockThreshold: resolved.inventory.lowStockThreshold,
   })
   await store.init()
-  if (store.sourceMode === 'mock') {
-    console.log('[ecommerce-analyst] 已启动：示例数据模式（配置电商平台 API 可切换真实数据）')
+  if (resolved.activation === 'active') {
+    console.log(
+      store.sourceMode === 'mock'
+        ? '[ecommerce-analyst] 已启动：active 模式，本地空库（数据靠导入）；工具与提示注入已全量注册'
+        : `[ecommerce-analyst] 已启动：active 模式，对接平台 API（${adapter.name}）`,
+    )
   } else {
-    console.log(`[ecommerce-analyst] 已启动：对接平台 API（${adapter.name}）`)
+    console.log(
+      '[ecommerce-analyst] 已启动：silent 模式——对会话零影响（未注册工具/未注入提示）。' +
+        '需要电商工作台能力时：profile 补丁层设 config.activation=active，或环境变量 ECOM_ANALYST_ACTIVATION=active',
+    )
   }
 
-  // 工具层：四个业务模块 + 备份（ctx.tools 已由 inject 声明）
-  registerProductTools(ctx, store)
-  registerOrderTools(ctx, store)
-  registerStatsTools(ctx, store)
-  registerInventoryTools(ctx, store)
-  registerBackupTools(ctx, store)
-  registerExcelTools(ctx, store)
-  registerQaTool(ctx, store)
-  registerExportCsvTool(ctx, store)
-  registerModeTools(ctx, store)
-  registerCompareTools(ctx, store)
+  // 工具层：仅在 active 下注册（silent = 模型上下文里看不到任何本插件工具）
+  if (resolved.activation === 'active') {
+    registerProductTools(ctx, store)
+    registerOrderTools(ctx, store)
+    registerStatsTools(ctx, store)
+    registerInventoryTools(ctx, store)
+    registerBackupTools(ctx, store)
+    registerExcelTools(ctx, store)
+    registerQaTool(ctx, store)
+    registerExportCsvTool(ctx, store)
+    registerModeTools(ctx, store)
+    registerCompareTools(ctx, store)
+  }
 
   // 技能层：把仓库 skills/*/SKILL.md 注册进 dsh 技能目录（/name 可调用 + 模型可自动调用）。
   // ctx.skills 为可选服务，缺失（老版本 dsh）时跳过，不影响插件其余功能。
@@ -114,18 +135,21 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     }
   }
 
-  // 「今天要处理」：注入动态系统提示，模型开聊即知今日待办
-  ctx.systemPrompt.section({
-    name: 'ecommerce:today',
-    order: -95,
-    text: () => todayPrompt(store),
-  })
-  // 规则问答说明：高频问题命中即直答，未命中再走工具（对齐视频 rule-based Q&A）
-  ctx.systemPrompt.section({
-    name: 'ecommerce:qa-rules',
-    order: -94,
-    text: () => qaRuleDescription(),
-  })
+  // 系统提示注入：同样仅 active 下挂载（silent = 不往任何会话塞「今日待办」，杜绝幻觉源头）
+  if (resolved.activation === 'active') {
+    // 「今天要处理」：注入动态系统提示，模型开聊即知今日待办
+    ctx.systemPrompt.section({
+      name: 'ecommerce:today',
+      order: -95,
+      text: () => todayPrompt(store),
+    })
+    // 规则问答说明：高频问题命中即直答，未命中再走工具（对齐视频 rule-based Q&A）
+    ctx.systemPrompt.section({
+      name: 'ecommerce:qa-rules',
+      order: -94,
+      text: () => qaRuleDescription(),
+    })
+  }
 }
 
 /**

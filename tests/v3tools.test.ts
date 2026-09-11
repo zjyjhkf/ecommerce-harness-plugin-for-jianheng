@@ -8,12 +8,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 import { validateProducts, validateOrders } from '../src/import-parse.ts'
 import { productsToCsv, ordersToCsv, toCsv } from '../src/csv-util.ts'
 
 async function makeStore(): Promise<EcommerceStore> {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-v3tools-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'),
     seedOnEmpty: true,
     lowStockThreshold: 10,

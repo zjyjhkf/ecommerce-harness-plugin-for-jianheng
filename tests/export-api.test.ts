@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 import { registerShopApi, type WebServerLike } from '../src/shop-api.ts'
 
 type FakeReq = EventEmitter & { url: string; method: string; headers: Record<string, string>; destroy: () => void }
@@ -61,7 +62,7 @@ async function call(handler: (req: unknown, res: unknown) => void | Promise<void
 
 test('导出接口：JSON 返回与 Store 口径一致的商品/订单', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-export-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'), seedOnEmpty: true, lowStockThreshold: 10,
   })
   await store.init() // 演示种子：26 商品 / 480 订单
@@ -90,7 +91,7 @@ test('导出接口：JSON 返回与 Store 口径一致的商品/订单', async (
 
 test('导出接口：CSV 带 BOM + 正确表头 + CRLF，scope 分流', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-export-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'), seedOnEmpty: true, lowStockThreshold: 10,
   })
   await store.init()

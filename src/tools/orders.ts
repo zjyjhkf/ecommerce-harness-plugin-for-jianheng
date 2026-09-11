@@ -24,7 +24,7 @@ function renderOrders(data: { total: number; items: OrderRow[] }, sourceMode: 'm
     const tracking = o.tracking_no ? ` ｜ 运单 ${o.tracking_no}` : ''
     return `- ${o.order_id} ｜ ${o.buyer} ｜ ${o.product_name} ×${o.quantity} ｜ ¥${o.amount.toFixed(2)} ｜ ${STATUS_TEXT[o.status as OrderStatus] ?? o.status} ｜ ${o.created_at.slice(0, 10)}${tracking}`
   })
-  const note = sourceMode === 'mock' ? '\n（当前为示例数据模式，仅作演示）' : ''
+  const note = sourceMode === 'mock' ? '\n（当前为本地模式：数据来自导入；需平台实时数据请配置 rest）' : ''
   return `共 ${data.total} 笔订单${data.total > data.items.length ? `，显示前 ${data.items.length} 笔` : ''}：\n${lines.join('\n')}${note}`
 }
 

@@ -9,10 +9,11 @@ import { join } from 'node:path'
 import { EcommerceStore } from '../src/store.ts'
 import { isRevenueOrder } from '../src/types.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
+import { seedFixture } from './seed-fixture.ts'
 
 function makeStore(): { store: EcommerceStore; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'ecom-test-'))
-  const store = new EcommerceStore(new MockAdapter(), {
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'),
     seedOnEmpty: true,
     lowStockThreshold: 10,
@@ -119,7 +120,7 @@ test('持久化：导入写操作落盘，重载后数据不丢失', async () =>
   )
   assert.ok(existsSync(join(dir, 'store.json')))
 
-  const reload = new EcommerceStore(new MockAdapter(), {
+  const reload = new EcommerceStore(new MockAdapter(seedFixture), {
     file: join(dir, 'store.json'),
     seedOnEmpty: true,
     lowStockThreshold: 10,

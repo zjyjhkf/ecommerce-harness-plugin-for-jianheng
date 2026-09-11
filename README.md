@@ -7,6 +7,31 @@
 
 ---
 
+## v0.4.0 重大变更：会话激活门控 + 示例数据移除（必读）
+
+**问题背景**：v0.3.x 中插件一旦装载，就把「今日待办（逾期未处理订单 N 笔…）」注入**所有** dsh 会话的系统提示，并全量注册 30+ 业务工具——用户哪怕只说「你好」，模型也可能自行调用工具、凭空谈论并不存在的店铺数据（幻觉）。
+
+**v0.4.0 的行为**：
+
+1. **默认 `silent`（静默激活）**：不注册任何业务工具、不注入任何系统提示段落——对 dsh 会话**零影响**。仅保留：
+   - 技能目录（`skills/*` 7 个分析技能，`/name` 显式调用入口）；
+   - 侧边栏「电商数据中台」与 `/ecommerce-api`（纯 UI，不进模型上下文）。
+2. **示例种子数据已彻底移除**：包内不再有 26 商品/480 订单演示种子；运行时以**空库**启动，数据只能来自 Excel/备份导入或 rest 平台 API。`ecommerce_reset_demo`（一键重置演示数据）工具随之删除；`ecommerce_set_mode` 仅支持 `imported / rest`。
+3. **显式启用（active）**——三选一：
+   - 在 profile 补丁层 `~/.dsh/profiles/web/cordis.patch.yml` 为插件条目加配置：
+     ```yaml
+     - id: ecommerce-analyst
+       config:
+         activation: active
+     ```
+   - 或环境变量：`ECOM_ANALYST_ACTIVATION=active`（服务器 pm2 场景免改文件）；
+   - 启用后行为与 v0.3.x 一致（工具全量注册 + 今日待办注入；空库时显示「今日无待办」，不会编造数据）。
+
+> 迁移提示：旧演示流程若依赖「开箱即见演示数据」，请改为导入 Excel（导入会持久化，重启不丢），或按上文启用 active。
+> 测试基建：示例种子已降级为测试专用 fixture（`tests/fixtures/seed.json`，经 `tests/seed-fixture.ts` 注入），生产代码与 npm 包均不再携带。
+
+---
+
 ## 环境要求（Windows / Ubuntu 通用）
 
 安装前请先满足以下依赖：

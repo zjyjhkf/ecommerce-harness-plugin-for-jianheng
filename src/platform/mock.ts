@@ -1,7 +1,9 @@
 /**
- * ecommerce-analyst-plugin — 示例数据适配器（MockAdapter）
+ * ecommerce-analyst-plugin — 本地数据适配器（MockAdapter）
  *
- * 默认启用：提供开箱即用的演示数据，用户无凭证时即可完整体验全部功能。
+ * v0.4.0 起运行时**不携带任何示例数据**：默认空库，数据只能来自导入或 rest 平台。
+ * （原 data/seed.json 已降级为测试专用 fixture：tests/fixtures/seed.json，
+ *  由测试通过构造参数显式注入，不再影响生产会话。）
  * 只读：写操作返回明确错误，提示切换到真实平台适配器。
  */
 import type {
@@ -13,18 +15,25 @@ import type {
   ProductFilter,
 } from '../types.ts'
 import type { PlatformAdapter } from './adapter.ts'
-import rawSeed from '../../data/seed.json' with { type: 'json' }
 
-/** seed.json 为 JSON 推断类型（status: string），此处断言为领域类型 */
-const seedData = rawSeed as unknown as { products: Product[]; orders: Order[] }
+/** 测试注入口：仅供 tests 用 fixture 数据构造；生产路径一律不传 → 空库。 */
+export interface MockAdapterSeed {
+  products: Product[]
+  orders: Order[]
+}
 
 export class MockAdapter implements PlatformAdapter {
   readonly name = 'mock'
   readonly readOnly = true
 
-  /** 深拷贝 seed 数据，避免 Store 写操作污染模块级示例数据（测试隔离） */
-  private products: Product[] = structuredClone(seedData.products)
-  private orders: Order[] = structuredClone(seedData.orders)
+  /** 深拷贝注入数据（缺省为空），避免 Store 写操作污染调用方持有的数组（测试隔离）。 */
+  private products: Product[]
+  private orders: Order[]
+
+  constructor(seed?: MockAdapterSeed) {
+    this.products = seed ? structuredClone(seed.products) : []
+    this.orders = seed ? structuredClone(seed.orders) : []
+  }
 
   async listProducts(filter: ProductFilter): Promise<Product[]> {
     return filterProducts(this.products, filter)
@@ -32,14 +41,6 @@ export class MockAdapter implements PlatformAdapter {
 
   async listOrders(filter: OrderFilter): Promise<Order[]> {
     return filterOrders(this.orders, filter)
-  }
-
-  /** 返回示例种子数据的深拷贝（供「重置为演示数据」使用） */
-  seedSnapshot(): { products: Product[]; orders: Order[] } {
-    return {
-      products: structuredClone(seedData.products),
-      orders: structuredClone(seedData.orders),
-    }
   }
 
   private writeDenied(operation: string): never {
