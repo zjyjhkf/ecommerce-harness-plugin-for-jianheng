@@ -10,7 +10,7 @@
  * 刷新（postMessage「ecommerce:refresh」）→ 数据中台重新拉取月度/周度复盘。
  */
 import * as React from 'react'
-import { dataCenterUrl, exportData, importLocalFiles } from './data.ts'
+import { clearAllData, dataCenterUrl, downloadSnapshot, exportData, importLocalFiles } from './data.ts'
 import {
   appendToConversation,
   isCockpitOpen,
@@ -157,6 +157,37 @@ function useShopDeskData(): ShopDeskData {
     [notifyDcRefresh],
   )
 
+  /* v0.4.1 清除重置：二次确认 → 清空全部已导入数据（商品/订单/月周复盘/归档）→
+   * 自动下载清空前的全量备份快照（与 import_backup 兼容，导回即可完整恢复）→ 刷新 iframe。 */
+  const doClearData = React.useCallback(async (): Promise<void> => {
+    const ok = window.confirm(
+      '将清除当前所有已导入数据（商品、订单、月度/周度复盘及归档），此操作影响数据中台全部面板。\n\n' +
+        '点击「确定」继续——清空前会自动下载一份完整备份文件，导入该文件即可恢复。',
+    )
+    if (!ok) return
+    setImporting(true)
+    setImportMsg(null)
+    try {
+      const r = await clearAllData()
+      if (!mountedRef.current) return
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      downloadSnapshot(`ecommerce-backup-before-clear-${ts}.json`, r.snapshot)
+      setImportMsg({
+        ok: true,
+        text: `已清除 ${r.clearedProducts} 条商品、${r.clearedOrders} 条订单及全部复盘数据；备份快照已自动下载，导回可恢复`,
+      })
+      notifyDcRefresh()
+    } catch (err) {
+      if (!mountedRef.current) return
+      setImportMsg({
+        ok: false,
+        text: `清除失败：${err instanceof Error ? err.message : String(err)}`,
+      })
+    } finally {
+      if (mountedRef.current) setImporting(false)
+    }
+  }, [notifyDcRefresh])
+
   /* 链接预警分析：监听数据中台 iframe 的 postMessage（点击退款商品明细里的商品名触发）。
    *  收到后开启全新会话并把 AI 分析提示词自动输入到会话框。 */
   React.useEffect(() => {
@@ -224,6 +255,7 @@ function useShopDeskData(): ShopDeskData {
     fullscreen,
     toggleFullscreen: toggleFs,
     doExport,
+    doClearData,
   }
 }
 
@@ -276,6 +308,16 @@ export function ShopDeskTab(): React.ReactElement {
               onClick={d.refreshDataCenter}
             >
               🔄
+            </button>
+            <button
+              type="button"
+              className="esd-icon-btn esd-icon-btn-danger"
+              title="清除重置当前所有已导入数据（自动下载备份快照，导回可恢复）"
+              aria-label="清除重置数据"
+              onClick={() => void d.doClearData()}
+              disabled={d.importing}
+            >
+              🧹
             </button>
             <input
               ref={d.fileInputRef}
@@ -358,6 +400,16 @@ export function ShopDeskPanel(): React.ReactElement {
               </button>
               <button type="button" className="esd-icon-btn" title="刷新数据" aria-label="刷新数据" onClick={d.refreshDataCenter}>
                 🔄
+              </button>
+              <button
+                type="button"
+                className="esd-icon-btn esd-icon-btn-danger"
+                title="清除重置当前所有已导入数据（自动下载备份快照，导回可恢复）"
+                aria-label="清除重置数据"
+                onClick={() => void d.doClearData()}
+                disabled={d.importing}
+              >
+                🧹
               </button>
               <input
                 ref={d.fileInputRef}

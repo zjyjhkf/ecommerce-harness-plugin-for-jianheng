@@ -213,12 +213,28 @@ export async function parseMonthlyRankExcel(
       avgPrice: colBy('平均单价', 33),
     }
     const out: WeeklyLinkRow[] = []
+    // v0.4.1 数值结转：无身份「幽灵行」不再丢弃其数字——可加指标并入一条标注汇总行，
+    // 保证面板合计与源表逐分一致（真实数据实测曾因此丢 2 件销量）。
+    // 比率/转化率类字段一律 0：占位行残留的 600%/200% 异常退款率不会冲进任何排行，
+    // 且销售额为 0 也不会进入销售/毛利 Top 榜。
+    const GHOST_NUM = [
+      'sales', 'salesCount', 'salesCost', 'grossProfit', 'refundAmount', 'netSales',
+      'adSpend', 'views', 'visitors', 'favCount', 'cartCount', 'cartQty',
+      'orderCount', 'orderQty', 'payCount', 'payQty', 'searchVisitors', 'searchPayCount', 'avgPrice',
+    ] as const
+    const ghost: Record<string, number> = {}
+    let ghostCount = 0
     for (let r = subIdx + 1; r < rows.length; r++) {
       const row = rows[r] ?? []
-      // 幽灵行：链接名称与链接ID同时为空（导出残留的占位/汇总行），无商品身份，剔除。
-      // 这些行销售额/净销为 0，但常残留异常「退款率」（600%/500%/200%），
-      // 若保留会在按退款率排行时以空商品名冲进 Top20（对应 1、2、3、5、7 位空白）。
-      if (!data(id.linkName, row) && !data(id.linkId, row)) continue
+      // 幽灵行：链接名称与链接ID同时为空（导出残留的占位/汇总行），无商品身份 → 数值结转
+      if (!data(id.linkName, row) && !data(id.linkId, row)) {
+        ghostCount += 1
+        for (const k of GHOST_NUM) {
+          const n = toNum(row[c[k]])
+          if (n !== 0) ghost[k] = (ghost[k] ?? 0) + n
+        }
+        continue
+      }
       out.push({
         shop: data(id.shop, row),
         linkName: data(id.linkName, row),
@@ -256,6 +272,46 @@ export async function parseMonthlyRankExcel(
         avgPrice: toNum(row[c.avgPrice]),
       })
       if (out.length >= 5000) break
+    }
+    // 结转行：把幽灵行的可加数值显式带进章节数组（合计口径 = 源表全量），
+    // 身份列用可读标签，所有比率字段留 0，不参与任何排行/最值。
+    if (ghostCount > 0) {
+      out.push({
+        shop: '',
+        linkName: `（无身份占位行 ${ghostCount} 行·数值已并入合计）`,
+        linkId: '',
+        linkCode: '',
+        linkTag: '',
+        sales: ghost.sales ?? 0,
+        salesCount: ghost.salesCount ?? 0,
+        salesCost: ghost.salesCost ?? 0,
+        grossProfit: ghost.grossProfit ?? 0,
+        grossMargin: 0,
+        refundAmount: ghost.refundAmount ?? 0,
+        refundRate: 0,
+        returnRate: 0,
+        netSales: ghost.netSales ?? 0,
+        adSpend: ghost.adSpend ?? 0,
+        fullConv: 0,
+        realConv: 0,
+        views: ghost.views ?? 0,
+        visitors: ghost.visitors ?? 0,
+        favCount: ghost.favCount ?? 0,
+        favRate: 0,
+        cartCount: ghost.cartCount ?? 0,
+        cartQty: ghost.cartQty ?? 0,
+        cartRate: 0,
+        orderCount: ghost.orderCount ?? 0,
+        orderQty: ghost.orderQty ?? 0,
+        orderRate: 0,
+        payCount: ghost.payCount ?? 0,
+        payQty: ghost.payQty ?? 0,
+        payRate: 0,
+        searchVisitors: ghost.searchVisitors ?? 0,
+        searchPayCount: ghost.searchPayCount ?? 0,
+        searchConv: 0,
+        avgPrice: ghost.avgPrice ?? 0,
+      })
     }
     return out.length ? { kind, period, month: monthOf(period), shops, platformLinks: out } : null
   }

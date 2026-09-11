@@ -606,9 +606,39 @@ async function parseMonthlyRankExcel(buffer) {
       avgPrice: colBy("\u5E73\u5747\u5355\u4EF7", 33)
     };
     const out2 = [];
+    const GHOST_NUM = [
+      "sales",
+      "salesCount",
+      "salesCost",
+      "grossProfit",
+      "refundAmount",
+      "netSales",
+      "adSpend",
+      "views",
+      "visitors",
+      "favCount",
+      "cartCount",
+      "cartQty",
+      "orderCount",
+      "orderQty",
+      "payCount",
+      "payQty",
+      "searchVisitors",
+      "searchPayCount",
+      "avgPrice"
+    ];
+    const ghost = {};
+    let ghostCount = 0;
     for (let r = subIdx + 1; r < rows.length; r++) {
       const row = rows[r] ?? [];
-      if (!data(id2.linkName, row) && !data(id2.linkId, row)) continue;
+      if (!data(id2.linkName, row) && !data(id2.linkId, row)) {
+        ghostCount += 1;
+        for (const k of GHOST_NUM) {
+          const n = toNum2(row[c2[k]]);
+          if (n !== 0) ghost[k] = (ghost[k] ?? 0) + n;
+        }
+        continue;
+      }
       out2.push({
         shop: data(id2.shop, row),
         linkName: data(id2.linkName, row),
@@ -646,6 +676,44 @@ async function parseMonthlyRankExcel(buffer) {
         avgPrice: toNum2(row[c2.avgPrice])
       });
       if (out2.length >= 5e3) break;
+    }
+    if (ghostCount > 0) {
+      out2.push({
+        shop: "",
+        linkName: `\uFF08\u65E0\u8EAB\u4EFD\u5360\u4F4D\u884C ${ghostCount} \u884C\xB7\u6570\u503C\u5DF2\u5E76\u5165\u5408\u8BA1\uFF09`,
+        linkId: "",
+        linkCode: "",
+        linkTag: "",
+        sales: ghost.sales ?? 0,
+        salesCount: ghost.salesCount ?? 0,
+        salesCost: ghost.salesCost ?? 0,
+        grossProfit: ghost.grossProfit ?? 0,
+        grossMargin: 0,
+        refundAmount: ghost.refundAmount ?? 0,
+        refundRate: 0,
+        returnRate: 0,
+        netSales: ghost.netSales ?? 0,
+        adSpend: ghost.adSpend ?? 0,
+        fullConv: 0,
+        realConv: 0,
+        views: ghost.views ?? 0,
+        visitors: ghost.visitors ?? 0,
+        favCount: ghost.favCount ?? 0,
+        favRate: 0,
+        cartCount: ghost.cartCount ?? 0,
+        cartQty: ghost.cartQty ?? 0,
+        cartRate: 0,
+        orderCount: ghost.orderCount ?? 0,
+        orderQty: ghost.orderQty ?? 0,
+        orderRate: 0,
+        payCount: ghost.payCount ?? 0,
+        payQty: ghost.payQty ?? 0,
+        payRate: 0,
+        searchVisitors: ghost.searchVisitors ?? 0,
+        searchPayCount: ghost.searchPayCount ?? 0,
+        searchConv: 0,
+        avgPrice: ghost.avgPrice ?? 0
+      });
     }
     return out2.length ? { kind, period, month: monthOf(period), shops, platformLinks: out2 } : null;
   }
@@ -1222,6 +1290,29 @@ var EcommerceStore = class {
     this.ordersSource = "demo";
     this.save();
     return { products: this.products.length, orders: this.orders.length, snapshot };
+  }
+  /**
+   * v0.4.1「清除重置」：一键清空当前所有已导入的数据——
+   * 商品/订单、月度/周度复盘及其上一期归档、导入快照缓存，全部归零并持久化。
+   * 清空前自动导出全量备份快照返回给调用方（下载即可完整回滚，杜绝误操作损失）。
+   * 返回 { products, orders, snapshot }，snapshot 为清空前数据的备份 JSON 字符串。
+   */
+  clearAllData() {
+    const snapshot = this.exportBackup();
+    const cleared = { products: this.products.length, orders: this.orders.length };
+    this.products = [];
+    this.orders = [];
+    this.dataMode = "demo";
+    this.productsSource = "demo";
+    this.ordersSource = "demo";
+    this.lastImported = null;
+    this.monthlyReport = null;
+    this.weeklyReport = null;
+    this.previousMonthlyReport = null;
+    this.previousWeeklyReport = null;
+    this.reportRevision += 1;
+    this.save();
+    return { ...cleared, snapshot };
   }
   /** 切换回最近一次导入的数据（无导入记录时报错） */
   switchToImported() {
@@ -3423,6 +3514,19 @@ function registerShopApi(webServer, store, ctx = {}) {
               weeklyReport: store.getWeeklyReport() !== null,
               hint: `\u6279\u91CF\u5BFC\u5165 ${files.length} \u4E2A\u6587\u4EF6\uFF1A${parsedList.map((p) => p.hint).join("\uFF1B")}`,
               snapshot
+            }
+          });
+          return;
+        }
+        if (pathname === "/ecommerce-api/clear-data" && req.method === "POST") {
+          const r = store.clearAllData();
+          sendJson(res, 200, {
+            ok: true,
+            value: {
+              clearedProducts: r.products,
+              clearedOrders: r.orders,
+              snapshot: r.snapshot,
+              hint: `\u5DF2\u6E05\u9664 ${r.products} \u6761\u5546\u54C1\u3001${r.orders} \u6761\u8BA2\u5355\u53CA\u5168\u90E8\u6708/\u5468\u590D\u76D8\uFF1B\u6E05\u7A7A\u524D\u5FEB\u7167\u5DF2\u968F\u54CD\u5E94\u8FD4\u56DE\uFF0C\u4E0B\u8F7D\u4FDD\u5B58\u5373\u53EF\u6062\u590D`
             }
           });
           return;

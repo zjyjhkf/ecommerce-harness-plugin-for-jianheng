@@ -195,3 +195,49 @@ test('回归#1 importFromFile：仅商品导入时清空演示订单（杜绝演
   assert.equal(store.dataMode, 'imported')
   rmSync(dir, { recursive: true, force: true })
 })
+
+/* ─────────── v0.4.1 清除重置 ─────────── */
+
+test('clearAllData：清空商品/订单/复盘/归档并持久化，快照可导回完整恢复', async () => {
+  const { store, dir } = await initStore()
+  // 基线：种子数据在位
+  assert.equal(store.listProducts({ page_size: 10000 }).total, 26)
+  assert.equal(store.listOrders({ page_size: 10000 }).total, 480)
+
+  const r = store.clearAllData()
+  assert.equal(r.products, 26)
+  assert.equal(r.orders, 480)
+  assert.equal(store.listProducts({ page_size: 10000 }).total, 0)
+  assert.equal(store.listOrders({ page_size: 10000 }).total, 0)
+  assert.equal(store.getMonthlyReport(), null)
+  assert.equal(store.getWeeklyReport(), null)
+  assert.equal(store.getPreviousMonthlyReport(), null)
+  assert.equal(store.getPreviousWeeklyReport(), null)
+  assert.equal(store.getModeInfo().canImported, false)
+
+  // 持久化落盘：新实例加载后仍为空
+  const store2 = new EcommerceStore(new MockAdapter(), {
+    file: join(dir, 'store.json'), seedOnEmpty: true, lowStockThreshold: 10,
+  })
+  await store2.init()
+  assert.equal(store2.listProducts({ page_size: 10000 }).total, 0)
+
+  // 快照回滚：importBackup(清空前快照) 全量恢复
+  const back = store2.importBackup(r.snapshot)
+  assert.equal(back.products, 26)
+  assert.equal(back.orders, 480)
+  assert.equal(store2.getModeInfo().mode, 'imported')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('clearAllData：空库上执行也安全（幂等，快照为空集合）', async () => {
+  const { store, dir } = await initStore()
+  store.clearAllData()
+  const r2 = store.clearAllData()
+  assert.equal(r2.products, 0)
+  assert.equal(r2.orders, 0)
+  const parsed = JSON.parse(r2.snapshot) as { products: unknown[]; orders: unknown[] }
+  assert.deepEqual(parsed.products, [])
+  assert.deepEqual(parsed.orders, [])
+  rmSync(dir, { recursive: true, force: true })
+})

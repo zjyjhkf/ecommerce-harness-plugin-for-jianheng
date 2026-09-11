@@ -102,6 +102,29 @@ async function importLocalFiles(files) {
   }
   return body.value;
 }
+async function clearAllData() {
+  const base = resolveApiBase();
+  const url = (base ? base : "") + "/ecommerce-api/clear-data";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    cache: "no-store"
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body === null || body.ok !== true || body.value === void 0) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return body.value;
+}
+function downloadSnapshot(filename, snapshotJson) {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([snapshotJson], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 function dataCenterUrl() {
   const base = resolveApiBase();
   return (base ? base : "") + "/ecommerce-api/data-center?v=20260904-r18";
@@ -685,6 +708,33 @@ function useShopDeskData() {
     },
     [notifyDcRefresh]
   );
+  const doClearData = React2.useCallback(async () => {
+    const ok = window.confirm(
+      "\u5C06\u6E05\u9664\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u5546\u54C1\u3001\u8BA2\u5355\u3001\u6708\u5EA6/\u5468\u5EA6\u590D\u76D8\u53CA\u5F52\u6863\uFF09\uFF0C\u6B64\u64CD\u4F5C\u5F71\u54CD\u6570\u636E\u4E2D\u53F0\u5168\u90E8\u9762\u677F\u3002\n\n\u70B9\u51FB\u300C\u786E\u5B9A\u300D\u7EE7\u7EED\u2014\u2014\u6E05\u7A7A\u524D\u4F1A\u81EA\u52A8\u4E0B\u8F7D\u4E00\u4EFD\u5B8C\u6574\u5907\u4EFD\u6587\u4EF6\uFF0C\u5BFC\u5165\u8BE5\u6587\u4EF6\u5373\u53EF\u6062\u590D\u3002"
+    );
+    if (!ok) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const r = await clearAllData();
+      if (!mountedRef.current) return;
+      const ts = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      downloadSnapshot(`ecommerce-backup-before-clear-${ts}.json`, r.snapshot);
+      setImportMsg({
+        ok: true,
+        text: `\u5DF2\u6E05\u9664 ${r.clearedProducts} \u6761\u5546\u54C1\u3001${r.clearedOrders} \u6761\u8BA2\u5355\u53CA\u5168\u90E8\u590D\u76D8\u6570\u636E\uFF1B\u5907\u4EFD\u5FEB\u7167\u5DF2\u81EA\u52A8\u4E0B\u8F7D\uFF0C\u5BFC\u56DE\u53EF\u6062\u590D`
+      });
+      notifyDcRefresh();
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setImportMsg({
+        ok: false,
+        text: `\u6E05\u9664\u5931\u8D25\uFF1A${err instanceof Error ? err.message : String(err)}`
+      });
+    } finally {
+      if (mountedRef.current) setImporting(false);
+    }
+  }, [notifyDcRefresh]);
   React2.useEffect(() => {
     const onMessage = (event) => {
       const data = event.data;
@@ -736,7 +786,8 @@ function useShopDeskData() {
     refreshDataCenter: notifyDcRefresh,
     fullscreen: fullscreen2,
     toggleFullscreen: toggleFs,
-    doExport
+    doExport,
+    doClearData
   };
 }
 function ShopDeskTab() {
@@ -782,6 +833,17 @@ function ShopDeskTab() {
       onClick: d.refreshDataCenter
     },
     "\u{1F504}"
+  ), /* @__PURE__ */ React2.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-icon-btn esd-icon-btn-danger",
+      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u81EA\u52A8\u4E0B\u8F7D\u5907\u4EFD\u5FEB\u7167\uFF0C\u5BFC\u56DE\u53EF\u6062\u590D\uFF09",
+      "aria-label": "\u6E05\u9664\u91CD\u7F6E\u6570\u636E",
+      onClick: () => void d.doClearData(),
+      disabled: d.importing
+    },
+    "\u{1F9F9}"
   ), /* @__PURE__ */ React2.createElement(
     "input",
     {
@@ -837,6 +899,17 @@ function ShopDeskPanel() {
     },
     d.importing ? "\u23F3" : "\u{1F4E5}"
   ), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn", title: "\u5237\u65B0\u6570\u636E", "aria-label": "\u5237\u65B0\u6570\u636E", onClick: d.refreshDataCenter }, "\u{1F504}"), /* @__PURE__ */ React2.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-icon-btn esd-icon-btn-danger",
+      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u81EA\u52A8\u4E0B\u8F7D\u5907\u4EFD\u5FEB\u7167\uFF0C\u5BFC\u56DE\u53EF\u6062\u590D\uFF09",
+      "aria-label": "\u6E05\u9664\u91CD\u7F6E\u6570\u636E",
+      onClick: () => void d.doClearData(),
+      disabled: d.importing
+    },
+    "\u{1F9F9}"
+  ), /* @__PURE__ */ React2.createElement(
     "input",
     {
       ref: d.fileInputRef,
@@ -1018,6 +1091,9 @@ var CSS = `
 }
 .esd-icon-btn:hover { background: var(--esd-accent-soft, rgba(43,184,163,.12)); border-color: var(--esd-accent-soft-2, rgba(43,184,163,.20)); }
 .esd-icon-btn:active { background: var(--esd-accent); color: #fff; border-color: var(--esd-accent); }
+/* v0.4.1 \u6E05\u9664\u91CD\u7F6E\u6309\u94AE\uFF1A\u7EA2\u8272\u8BED\u4E49\uFF0C\u660E\u786E\u5371\u9669\u64CD\u4F5C */
+.esd-icon-btn-danger:hover { background: rgba(220,76,76,.12); border-color: rgba(220,76,76,.35); color: #c0392b; }
+.esd-icon-btn-danger:active { background: #dc4c4c; color: #fff; border-color: #dc4c4c; }
 .esd-refresh-btn {
   border: 1px solid var(--esd-accent, #2bb8a3);
   background: #fff;

@@ -138,6 +138,9 @@ const CSS = `
 }
 .esd-icon-btn:hover { background: var(--esd-accent-soft, rgba(43,184,163,.12)); border-color: var(--esd-accent-soft-2, rgba(43,184,163,.20)); }
 .esd-icon-btn:active { background: var(--esd-accent); color: #fff; border-color: var(--esd-accent); }
+/* v0.4.1 清除重置按钮：红色语义，明确危险操作 */
+.esd-icon-btn-danger:hover { background: rgba(220,76,76,.12); border-color: rgba(220,76,76,.35); color: #c0392b; }
+.esd-icon-btn-danger:active { background: #dc4c4c; color: #fff; border-color: #dc4c4c; }
 .esd-refresh-btn {
   border: 1px solid var(--esd-accent, #2bb8a3);
   background: #fff;

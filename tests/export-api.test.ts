@@ -131,3 +131,44 @@ test('导出接口：CSV 带 BOM + 正确表头 + CRLF，scope 分流', async ()
   disposer()
   rmSync(dir, { recursive: true, force: true })
 })
+
+/* ─────────── v0.4.1 /ecommerce-api/clear-data ─────────── */
+
+test('clear-data 路由：POST 清空全部数据并返回清空前快照，GET 不误伤', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ecom-clear-'))
+  const store = new EcommerceStore(new MockAdapter(seedFixture), {
+    file: join(dir, 'store.json'), seedOnEmpty: true, lowStockThreshold: 10,
+  })
+  await store.init()
+
+  let handler: ((req: unknown, res: unknown) => void | Promise<void>) | null = null
+  const webServer: WebServerLike = {
+    port: 0,
+    register(r) {
+      handler = r.handler as (req: unknown, res: unknown) => void | Promise<void>
+      return () => {}
+    },
+    tapIndex(): () => void { return () => {} },
+  }
+  registerShopApi(webServer, store, {})
+
+  // GET 不应触发清除（仅 POST）→ 404 路由未命中语义
+  const get = await call(handler!, 'GET', '/ecommerce-api/clear-data')
+  assert.notEqual(get.status, 200)
+  assert.equal(store.listProducts({ page_size: 10000 }).total, 26, 'GET 后数据仍在')
+
+  const post = await call(handler!, 'POST', '/ecommerce-api/clear-data')
+  assert.equal(post.status, 200)
+  assert.equal(post.json?.ok, true)
+  const v = post.json?.value as { clearedProducts: number; clearedOrders: number; snapshot: string }
+  assert.equal(v.clearedProducts, 26)
+  assert.equal(v.clearedOrders, 480)
+  assert.equal(store.listProducts({ page_size: 10000 }).total, 0)
+  assert.equal(store.listOrders({ page_size: 10000 }).total, 0)
+
+  // 快照可导回（与 import_backup 同格式）
+  const back = store.importBackup(v.snapshot)
+  assert.equal(back.products, 26)
+  assert.equal(back.orders, 480)
+  rmSync(dir, { recursive: true, force: true })
+})

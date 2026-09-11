@@ -289,6 +289,21 @@ export function registerShopApi(
           })
           return
         }
+        if (pathname === '/ecommerce-api/clear-data' && req.method === 'POST') {
+          // v0.4.1 清除重置：清空全部已导入数据（商品/订单/月周复盘/归档），
+          // 响应带回清空前的全量备份快照 JSON，客户端落盘为文件即可完整回滚。
+          const r = store.clearAllData()
+          sendJson(res, 200, {
+            ok: true,
+            value: {
+              clearedProducts: r.products,
+              clearedOrders: r.orders,
+              snapshot: r.snapshot,
+              hint: `已清除 ${r.products} 条商品、${r.orders} 条订单及全部月/周复盘；清空前快照已随响应返回，下载保存即可恢复`,
+            },
+          })
+          return
+        }
         if (pathname === '/ecommerce-api/monthly-report') {
           // 月度复盘（30/60 天「月复盘」数据源，来自 7月月度复盘.xlsx 导入）
           sendJson(res, 200, { ok: true, value: store.getMonthlyReport(), revision: store.getReportRevision() })
