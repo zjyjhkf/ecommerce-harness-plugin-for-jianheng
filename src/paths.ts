@@ -42,3 +42,14 @@ export function resolveStoreFile(raw: string): string {
   const cleaned = raw.replace(/^\.?\/?(?:ecommerce-analyst-plugin\/)+/, '')
   return resolve(PLUGIN_ROOT, cleaned)
 }
+
+/**
+ * 把配置里的「目录」路径解析成绝对路径(相对路径锚定插件根,兼容历史重复插件名前缀)。
+ * 用于文件交换收件箱/结果箱等目录类配置。
+ */
+export function resolveDir(raw: string, fallback: string): string {
+  if (raw === '') return resolve(PLUGIN_ROOT, fallback)
+  if (isAbsolute(raw)) return raw
+  const cleaned = raw.replace(/^\.?\/?(?:ecommerce-analyst-plugin\/)+/, '')
+  return resolve(PLUGIN_ROOT, cleaned)
+}

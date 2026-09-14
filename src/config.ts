@@ -34,6 +34,15 @@ export interface Config {
     /** 低库存默认阈值 */
     lowStockThreshold: number
   }
+  /** 通用文件交换(上传→AI 处理→下载):inbox=收件箱(上传落点),outbox=结果箱(下载来源) */
+  files: {
+    /** 上传文件的收件目录(相对路径锚定插件根;部署时可指到共享工作区 /srv/dsh-share/inbox) */
+    inboxDir: string
+    /** 处理结果目录(相对路径锚定插件根;部署时可指到共享工作区 /srv/dsh-share/outbox) */
+    outboxDir: string
+    /** 单文件上传大小上限(字节) */
+    maxBytes: number
+  }
 }
 
 /** 插件运行时配置 schema（经 schemastery 校验后传入 apply） */
@@ -53,6 +62,11 @@ export const Config = z.object({
   inventory: z.object({
     lowStockThreshold: z.number().default(10),
   }),
+  files: z.object({
+    inboxDir: z.string().default('./data/files/inbox'),
+    outboxDir: z.string().default('./data/files/outbox'),
+    maxBytes: z.number().default(200 * 1024 * 1024),
+  }),
 })
 
 export const defaultConfig: Config = {
@@ -60,4 +74,9 @@ export const defaultConfig: Config = {
   platform: { name: 'mock', baseUrl: '', appKey: '', appSecret: '' },
   storage: { file: './data/store.json', seedOnEmpty: true },
   inventory: { lowStockThreshold: 10 },
+  files: {
+    inboxDir: './data/files/inbox',
+    outboxDir: './data/files/outbox',
+    maxBytes: 200 * 1024 * 1024,
+  },
 }

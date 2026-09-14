@@ -22,6 +22,7 @@ import {
   toggleFullscreen,
 } from './cockpit-bus.ts'
 import { BrandBadge } from './brand.tsx'
+import { FileExchange } from './FileExchange.tsx'
 import { valuePromptOf } from './skills.ts'
 
 /* ────────────── 渲染边界：面板内任何渲染错误不波及宿主 ────────────── */
@@ -69,6 +70,8 @@ export interface ShopDeskData {
   fullscreen: boolean
   toggleFullscreen: () => void
   doExport: (type: 'csv' | 'json', scope: 'products' | 'orders' | 'all') => void
+  showFiles: boolean
+  toggleFiles: () => void
 }
 
 function useShopDeskData(): ShopDeskData {
@@ -240,6 +243,12 @@ function useShopDeskData(): ShopDeskData {
     toggleFullscreen()
   }, [])
 
+  /* 文件交换条显隐 */
+  const [showFiles, setShowFiles] = React.useState(false)
+  const toggleFiles = React.useCallback((): void => {
+    setShowFiles((v) => !v)
+  }, [])
+
   return {
     open,
     importing,
@@ -254,6 +263,8 @@ function useShopDeskData(): ShopDeskData {
     toggleFullscreen: toggleFs,
     doExport,
     doClearData,
+    showFiles,
+    toggleFiles,
   }
 }
 
@@ -317,6 +328,15 @@ export function ShopDeskTab(): React.ReactElement {
             >
               🧹
             </button>
+            <button
+              type="button"
+              className="esd-icon-btn"
+              title="文件交换：上传文件交给 AI 处理，下载处理结果"
+              aria-label="文件交换"
+              onClick={d.toggleFiles}
+            >
+              📂
+            </button>
             <input
               ref={d.fileInputRef}
               type="file"
@@ -335,6 +355,8 @@ export function ShopDeskTab(): React.ReactElement {
               </button>
             </div>
           ) : null}
+
+          {d.showFiles ? <FileExchange /> : null}
 
           {/* 数据中台：唯一主体，展示复盘数据（月度 / 周度）与数据对比 */}
           <div className="esd-dc-frame">
@@ -431,6 +453,8 @@ export function ShopDeskPanel(): React.ReactElement {
                 </button>
               </div>
             ) : null}
+
+            {d.showFiles ? <FileExchange /> : null}
 
             {/* 数据中台：全屏面板唯一主体，展示复盘数据（月度 / 周度）与数据对比 */}
             <div className="esd-dc-frame">

@@ -193,7 +193,7 @@ var init_rest = __esm({
 
 // src/index.ts
 import { mkdirSync as mkdirSync2 } from "node:fs";
-import { dirname as dirname5, join as join4 } from "node:path";
+import { dirname as dirname5, join as join5 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/config.ts
@@ -213,13 +213,23 @@ var Config = z.object({
   }),
   inventory: z.object({
     lowStockThreshold: z.number().default(10)
+  }),
+  files: z.object({
+    inboxDir: z.string().default("./data/files/inbox"),
+    outboxDir: z.string().default("./data/files/outbox"),
+    maxBytes: z.number().default(200 * 1024 * 1024)
   })
 });
 var defaultConfig = {
   activation: "silent",
   platform: { name: "mock", baseUrl: "", appKey: "", appSecret: "" },
   storage: { file: "./data/store.json", seedOnEmpty: true },
-  inventory: { lowStockThreshold: 10 }
+  inventory: { lowStockThreshold: 10 },
+  files: {
+    inboxDir: "./data/files/inbox",
+    outboxDir: "./data/files/outbox",
+    maxBytes: 200 * 1024 * 1024
+  }
 };
 
 // src/paths.ts
@@ -240,6 +250,12 @@ function findPluginRoot(start) {
 var PLUGIN_ROOT = findPluginRoot(MODULE_DIR);
 function resolveStoreFile(raw) {
   if (raw === "") return resolve(PLUGIN_ROOT, "data", "store.json");
+  if (isAbsolute(raw)) return raw;
+  const cleaned = raw.replace(/^\.?\/?(?:ecommerce-analyst-plugin\/)+/, "");
+  return resolve(PLUGIN_ROOT, cleaned);
+}
+function resolveDir(raw, fallback) {
+  if (raw === "") return resolve(PLUGIN_ROOT, fallback);
   if (isAbsolute(raw)) return raw;
   const cleaned = raw.replace(/^\.?\/?(?:ecommerce-analyst-plugin\/)+/, "");
   return resolve(PLUGIN_ROOT, cleaned);
@@ -3472,6 +3488,164 @@ function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
   };
 }
 
+// src/files.ts
+import { createReadStream } from "node:fs";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { extname, join as join3, resolve as resolve2, sep } from "node:path";
+var CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "accept, content-type, origin",
+  "access-control-max-age": "600"
+};
+var MIME = {
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xls": "application/vnd.ms-excel",
+  ".csv": "text/csv",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".json": "application/json",
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".doc": "application/msword",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".zip": "application/zip",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".html": "text/html",
+  ".xml": "application/xml",
+  ".sql": "text/plain",
+  ".log": "text/plain"
+};
+function resolveFilesDirs(cfg) {
+  const inboxDir = process.env.ECOM_FILES_INBOX?.trim() || resolveDir(cfg.inboxDir, join3("data", "files", "inbox"));
+  const outboxDir = process.env.ECOM_FILES_OUTBOX?.trim() || resolveDir(cfg.outboxDir, join3("data", "files", "outbox"));
+  return { inboxDir, outboxDir, maxBytes: cfg.maxBytes };
+}
+function dirPath(dirs, dir) {
+  const base = dir === "outbox" ? dirs.outboxDir : dirs.inboxDir;
+  return resolve2(base);
+}
+function sanitizeName(raw) {
+  const base = String(raw ?? "").replace(/\\/g, "/").split("/").pop() ?? "";
+  const cleaned = base.replace(/[\u0000-\u001f]/g, "").trim();
+  if (cleaned === "" || cleaned === "." || cleaned === "..") throw new Error("\u975E\u6CD5\u6587\u4EF6\u540D");
+  return cleaned;
+}
+function targetPath(dirs, dir, name2) {
+  const root = dirPath(dirs, dir);
+  const target = join3(root, sanitizeName(name2));
+  if (target !== root && !target.startsWith(root + sep)) throw new Error("\u8DEF\u5F84\u8D8A\u754C");
+  return target;
+}
+function sendJson(res, status, body) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    ...CORS
+  });
+  res.end(JSON.stringify(body));
+}
+function sendPreflight(res) {
+  res.writeHead(204, { ...CORS });
+  res.end();
+}
+function readBody(req, maxBytes) {
+  return new Promise((resolve3, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error(`\u6587\u4EF6\u8D85\u8FC7\u5927\u5C0F\u4E0A\u9650(${Math.round(maxBytes / 1024 / 1024)}MB)`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve3(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+async function handleFilesRoute(req, res, pathname, query, dirs) {
+  if (req.method === "OPTIONS") {
+    sendPreflight(res);
+    return true;
+  }
+  try {
+    if (pathname === "/ecommerce-api/files/upload" && req.method === "POST") {
+      const name2 = sanitizeName(String(query.get("name") ?? ""));
+      await mkdir(dirPath(dirs, "inbox"), { recursive: true });
+      const target = targetPath(dirs, "inbox", name2);
+      const body = await readBody(req, dirs.maxBytes);
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(target, body);
+      const st = await stat(target);
+      sendJson(res, 200, {
+        ok: true,
+        value: { name: name2, size: st.size, dir: "inbox" },
+        hint: `\u5DF2\u4E0A\u4F20\u5230\u6536\u4EF6\u7BB1 inbox/${name2},\u53BB\u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406\u5373\u53EF`
+      });
+      return true;
+    }
+    if (pathname === "/ecommerce-api/files/list" && req.method === "GET") {
+      const dir = query.get("dir") === "outbox" ? "outbox" : "inbox";
+      await mkdir(dirPath(dirs, dir), { recursive: true });
+      const entries = await readdir(dirPath(dirs, dir), { withFileTypes: true });
+      const files = [];
+      for (const e of entries) {
+        if (!e.isFile()) continue;
+        const st = await stat(join3(dirPath(dirs, dir), e.name)).catch(() => null);
+        if (st === null) continue;
+        files.push({ name: e.name, size: st.size, modified: st.mtimeMs, dir });
+      }
+      files.sort((a, b) => b.modified - a.modified);
+      sendJson(res, 200, { ok: true, value: { dir, files } });
+      return true;
+    }
+    if (pathname === "/ecommerce-api/files/download" && req.method === "GET") {
+      const dir = query.get("dir") === "outbox" ? "outbox" : "inbox";
+      const name2 = sanitizeName(String(query.get("name") ?? ""));
+      const target = targetPath(dirs, dir, name2);
+      const st = await stat(target).catch(() => null);
+      if (st === null || !st.isFile()) {
+        sendJson(res, 404, { ok: false, error: { code: "NOT_FOUND", message: "\u6587\u4EF6\u4E0D\u5B58\u5728" } });
+        return true;
+      }
+      const mime = MIME[extname(name2).toLowerCase()] ?? "application/octet-stream";
+      res.writeHead(200, {
+        "content-type": mime,
+        "content-length": String(st.size),
+        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name2)}`,
+        "cache-control": "no-store",
+        ...CORS
+      });
+      createReadStream(target).pipe(res);
+      return true;
+    }
+    if (pathname === "/ecommerce-api/files/delete" && req.method === "POST") {
+      const dir = query.get("dir") === "outbox" ? "outbox" : "inbox";
+      const name2 = sanitizeName(String(query.get("name") ?? ""));
+      const target = targetPath(dirs, dir, name2);
+      await rm(target, { force: true });
+      sendJson(res, 200, { ok: true, value: { name: name2, dir } });
+      return true;
+    }
+  } catch (err) {
+    sendJson(res, 400, {
+      ok: false,
+      error: { code: "FILES_FAILED", message: err instanceof Error ? err.message : String(err) }
+    });
+    return true;
+  }
+  return false;
+}
+
 // src/shop-api.ts
 var CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -3479,7 +3653,7 @@ var CORS_HEADERS = {
   "access-control-allow-headers": "accept, content-type, origin",
   "access-control-max-age": "600"
 };
-function sendJson(res, status, body) {
+function sendJson2(res, status, body) {
   const text = JSON.stringify(body);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -3488,7 +3662,7 @@ function sendJson(res, status, body) {
   });
   res.end(text);
 }
-function sendPreflight(res) {
+function sendPreflight2(res) {
   res.writeHead(204, {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -3508,7 +3682,7 @@ function injectApiBase(webServer) {
   });
 }
 function readJsonBody(req) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const chunks = [];
     let size = 0;
     req.on("data", (chunk) => {
@@ -3523,7 +3697,7 @@ function readJsonBody(req) {
     req.on("end", () => {
       try {
         const text = Buffer.concat(chunks).toString("utf8");
-        resolve2(text ? JSON.parse(text) : {});
+        resolve3(text ? JSON.parse(text) : {});
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -3570,7 +3744,7 @@ function prewarmEvaluations(store, ctx) {
     void generateEvaluation(cycle + ":" + revision, summary, ctx);
   }
 }
-function registerShopApi(webServer, store, ctx = {}) {
+function registerShopApi(webServer, store, ctx = {}, filesDirs) {
   return webServer.register({
     kind: "prefix",
     path: "/ecommerce-api",
@@ -3580,14 +3754,14 @@ function registerShopApi(webServer, store, ctx = {}) {
       const query = new URL(raw, "http://localhost").searchParams;
       try {
         if (req.method === "OPTIONS") {
-          sendPreflight(res);
+          sendPreflight2(res);
           return;
         }
         if (pathname === "/ecommerce-api/import-batch" && req.method === "POST") {
           const body = await readJsonBody(req);
           const rawFiles = Array.isArray(body.files) ? body.files : [];
           if (rawFiles.length === 0) {
-            sendJson(res, 400, {
+            sendJson2(res, 400, {
               ok: false,
               error: { code: "NO_FILES", message: "\u672A\u6536\u5230\u4EFB\u4F55\u6587\u4EF6\uFF08files \u4E3A\u7A7A\uFF09" }
             });
@@ -3639,7 +3813,7 @@ function registerShopApi(webServer, store, ctx = {}) {
             store.mergeWeeklyReport(w);
           }
           prewarmEvaluations(store, ctx);
-          sendJson(res, 200, {
+          sendJson2(res, 200, {
             ok: true,
             value: {
               products: productCount,
@@ -3655,7 +3829,7 @@ function registerShopApi(webServer, store, ctx = {}) {
         }
         if (pathname === "/ecommerce-api/clear-data" && req.method === "POST") {
           const r = store.clearAllData();
-          sendJson(res, 200, {
+          sendJson2(res, 200, {
             ok: true,
             value: {
               clearedProducts: r.products,
@@ -3666,11 +3840,11 @@ function registerShopApi(webServer, store, ctx = {}) {
           return;
         }
         if (pathname === "/ecommerce-api/monthly-report") {
-          sendJson(res, 200, { ok: true, value: store.getMonthlyReport(), revision: store.getReportRevision() });
+          sendJson2(res, 200, { ok: true, value: store.getMonthlyReport(), revision: store.getReportRevision() });
           return;
         }
         if (pathname === "/ecommerce-api/weekly-report") {
-          sendJson(res, 200, { ok: true, value: store.getWeeklyReport(), revision: store.getReportRevision() });
+          sendJson2(res, 200, { ok: true, value: store.getWeeklyReport(), revision: store.getReportRevision() });
           return;
         }
         if (pathname === "/ecommerce-api/compare") {
@@ -3680,7 +3854,7 @@ function registerShopApi(webServer, store, ctx = {}) {
           const metric2 = query.get("metric") ?? void 0;
           const limit = Math.min(Math.max(Number(query.get("limit") ?? 100) || 100, 1), 1e3);
           const payload = buildComparePayload(store, cycle, kind, metric2, limit);
-          sendJson(res, 200, { ok: true, value: payload, revision: store.getReportRevision() });
+          sendJson2(res, 200, { ok: true, value: payload, revision: store.getReportRevision() });
           return;
         }
         if (pathname === "/ecommerce-api/evaluation") {
@@ -3689,11 +3863,11 @@ function registerShopApi(webServer, store, ctx = {}) {
           const cacheKey = cycle + ":" + revision;
           const summary = buildEvaluationSummary(cycle, store.getMonthlyReport(), store.getWeeklyReport());
           if (summary === null) {
-            sendJson(res, 200, { ok: true, value: { cycle, evaluation: "", source: "rule", pending: false } });
+            sendJson2(res, 200, { ok: true, value: { cycle, evaluation: "", source: "rule", pending: false } });
             return;
           }
           const entry = ensureEvaluation(cacheKey, summary, ctx);
-          sendJson(res, 200, {
+          sendJson2(res, 200, {
             ok: true,
             value: { cycle, evaluation: entry.text, source: entry.source, pending: entry.pending }
           });
@@ -3718,7 +3892,7 @@ function registerShopApi(webServer, store, ctx = {}) {
             const monthlyHistory = store.getMonthlyHistory();
             const weekly = store.getWeeklyReport();
             if (type === "json") {
-              sendJson(res, 200, { ok: true, value: { products, orders, monthlyHistory, weekly } });
+              sendJson2(res, 200, { ok: true, value: { products, orders, monthlyHistory, weekly } });
               return;
             }
             let csv = "";
@@ -3743,7 +3917,7 @@ function registerShopApi(webServer, store, ctx = {}) {
             }
             const dataLines = csv.split("\r\n").filter((l) => l.trim() !== "").length;
             if (csv === "" || dataLines === 0) {
-              sendJson(res, 400, {
+              sendJson2(res, 400, {
                 ok: false,
                 error: { code: "EXPORT_EMPTY", message: "\u5F53\u524D\u6CA1\u6709\u4EFB\u4F55\u53EF\u5BFC\u51FA\u7684\u6570\u636E\uFF1A\u8BF7\u5148\u5BFC\u5165\u5546\u54C1/\u8BA2\u5355\u8868\u683C\u6216\u6708\u5EA6/\u5468\u5EA6\u590D\u76D8 Excel" }
               });
@@ -3758,19 +3932,22 @@ function registerShopApi(webServer, store, ctx = {}) {
             res.end(csv);
             return;
           } catch (err) {
-            sendJson(res, 500, {
+            sendJson2(res, 500, {
               ok: false,
               error: { code: "EXPORT_FAILED", message: err instanceof Error ? err.message : String(err) }
             });
             return;
           }
         }
-        sendJson(res, 404, {
+        if (filesDirs !== void 0 && await handleFilesRoute(req, res, pathname, query, filesDirs)) {
+          return;
+        }
+        sendJson2(res, 404, {
           ok: false,
           error: { code: "NOT_FOUND", message: `unknown ecommerce-api path: ${pathname}` }
         });
       } catch (err) {
-        sendJson(res, 500, {
+        sendJson2(res, 500, {
           ok: false,
           error: {
             code: "INTERNAL",
@@ -4285,7 +4462,7 @@ function registerCompareTools(ctx, store) {
 
 // src/skills.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3, readdirSync } from "node:fs";
-import { dirname as dirname4, join as join3 } from "node:path";
+import { dirname as dirname4, join as join4 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var MODULE_DIR3 = dirname4(fileURLToPath3(import.meta.url));
 var SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -4310,8 +4487,8 @@ function parseFrontmatter(raw) {
   return { data, body: lines.slice(close + 1).join("\n") };
 }
 function resolveSkillsDir() {
-  for (const candidate of [join3(MODULE_DIR3, "skills"), join3(MODULE_DIR3, "..", "skills")]) {
-    if (existsSync3(join3(candidate, "keyword-research", "SKILL.md"))) return candidate;
+  for (const candidate of [join4(MODULE_DIR3, "skills"), join4(MODULE_DIR3, "..", "skills")]) {
+    if (existsSync3(join4(candidate, "keyword-research", "SKILL.md"))) return candidate;
   }
   return void 0;
 }
@@ -4352,7 +4529,7 @@ function createSkillsProvider(skillsDir) {
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const md = join3(skillsDir, entry.name, "SKILL.md");
+        const md = join4(skillsDir, entry.name, "SKILL.md");
         const skill = readSkill(md);
         if (skill === void 0) continue;
         candidates.push({
@@ -4396,7 +4573,8 @@ async function apply(ctx, config = {}) {
     activation: envActivation ?? config.activation ?? defaultConfig.activation,
     platform: { ...defaultConfig.platform, ...config.platform },
     storage: { ...defaultConfig.storage, ...config.storage },
-    inventory: { ...defaultConfig.inventory, ...config.inventory }
+    inventory: { ...defaultConfig.inventory, ...config.inventory },
+    files: { ...defaultConfig.files, ...config.files }
   };
   resolved.storage.file = ensureWritableStoreFile(resolved.storage.file);
   const adapter = await createAdapter({
@@ -4444,7 +4622,7 @@ async function apply(ctx, config = {}) {
   if (webServer === void 0) {
     console.warn("[ecommerce-analyst] webServer \u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u8DF3\u8FC7\u5E97\u94FA\u5DE5\u4F5C\u53F0 API \u6CE8\u518C");
   } else {
-    const disposeApi = registerShopApi(webServer, store, ctx);
+    const disposeApi = registerShopApi(webServer, store, ctx, resolveFilesDirs(resolved.files));
     ctx.effect(() => disposeApi, "ecommerce: shop api routes");
     const disposeBase = injectApiBase(webServer);
     if (disposeBase !== void 0) {
@@ -4470,7 +4648,7 @@ function ensureWritableStoreFile(raw) {
     mkdirSync2(dirname5(target), { recursive: true });
     return target;
   } catch (err) {
-    const fallback = join4(tmpdir(), "ecommerce-analyst-plugin", "data", "store.json");
+    const fallback = join5(tmpdir(), "ecommerce-analyst-plugin", "data", "store.json");
     console.warn(
       `[ecommerce-analyst] \u6301\u4E45\u5316\u76EE\u5F55\u4E0D\u53EF\u5199\uFF0C\u56DE\u9000\u7CFB\u7EDF\u4E34\u65F6\u76EE\u5F55\uFF1A${target} \u2192 ${fallback}\uFF08`,
       err instanceof Error ? err.message : String(err),

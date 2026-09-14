@@ -42,10 +42,10 @@ __export(index_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(index_exports);
-var React4 = __toESM(require("react"), 1);
+var React5 = __toESM(require("react"), 1);
 
 // src/client/ShopDeskPanel.tsx
-var React2 = __toESM(require("react"), 1);
+var React3 = __toESM(require("react"), 1);
 
 // src/client/data.ts
 function resolveApiBase() {
@@ -125,6 +125,49 @@ function exportData(type = "csv", scope = "all") {
   const base = resolveApiBase();
   const url = (base ? base : "") + `/ecommerce-api/export?type=${type}&scope=${scope}`;
   window.open(url, "_blank");
+}
+async function uploadFile(file) {
+  const base = resolveApiBase();
+  const url = (base ? base : "") + "/ecommerce-api/files/upload?name=" + encodeURIComponent(file.name);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", accept: "application/json" },
+      cache: "no-store",
+      body: await file.arrayBuffer()
+    });
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err));
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body === null || body.ok !== true || body.value === void 0) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return body.value;
+}
+async function listFiles(dir) {
+  const base = resolveApiBase();
+  const url = (base ? base : "") + "/ecommerce-api/files/list?dir=" + dir;
+  const res = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body === null || body.ok !== true) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return body.value?.files ?? [];
+}
+function downloadFileUrl(dir, name) {
+  const base = resolveApiBase();
+  return (base ? base : "") + "/ecommerce-api/files/download?dir=" + dir + "&name=" + encodeURIComponent(name);
+}
+async function deleteFile(dir, name) {
+  const base = resolveApiBase();
+  const url = (base ? base : "") + "/ecommerce-api/files/delete?dir=" + dir + "&name=" + encodeURIComponent(name);
+  const res = await fetch(url, { method: "POST", headers: { accept: "application/json" }, cache: "no-store" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body === null || body.ok !== true) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
+  }
 }
 
 // src/client/cockpit-bus.ts
@@ -552,6 +595,106 @@ function SkillIcon(props) {
   );
 }
 
+// src/client/FileExchange.tsx
+var React2 = __toESM(require("react"), 1);
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+function FileList({ title, entries, dir, busy, onDelete }) {
+  return /* @__PURE__ */ React2.createElement("div", { className: "esd-files-group" }, /* @__PURE__ */ React2.createElement("div", { className: "esd-files-group-title" }, title, /* @__PURE__ */ React2.createElement("span", { className: "esd-files-count" }, entries.length)), entries.length === 0 ? /* @__PURE__ */ React2.createElement("div", { className: "esd-files-empty" }, dir === "inbox" ? "\u6682\u65E0\u4E0A\u4F20\u6587\u4EF6" : "\u6682\u65E0\u5904\u7406\u7ED3\u679C") : /* @__PURE__ */ React2.createElement("ul", { className: "esd-files-list" }, entries.map((f) => /* @__PURE__ */ React2.createElement("li", { key: dir + ":" + f.name, className: "esd-files-item" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-files-name", title: f.name }, f.name), /* @__PURE__ */ React2.createElement("span", { className: "esd-files-size" }, fmtSize(f.size)), /* @__PURE__ */ React2.createElement(
+    "a",
+    {
+      className: "esd-files-act",
+      href: downloadFileUrl(dir, f.name),
+      download: f.name,
+      title: "\u4E0B\u8F7D\u5230\u672C\u673A"
+    },
+    "\u4E0B\u8F7D"
+  ), /* @__PURE__ */ React2.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-files-act esd-files-del",
+      title: "\u5220\u9664",
+      disabled: busy,
+      onClick: () => onDelete(dir, f.name)
+    },
+    "\u5220\u9664"
+  )))));
+}
+function FileExchange() {
+  const [inbox, setInbox] = React2.useState([]);
+  const [outbox, setOutbox] = React2.useState([]);
+  const [busy, setBusy] = React2.useState(false);
+  const [msg, setMsg] = React2.useState(null);
+  const inputRef = React2.useRef(null);
+  const mountedRef = React2.useRef(true);
+  const refresh = React2.useCallback(async () => {
+    try {
+      const [i, o] = await Promise.all([listFiles("inbox"), listFiles("outbox")]);
+      if (mountedRef.current) {
+        setInbox(i);
+        setOutbox(o);
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setMsg({ ok: false, text: "\u5237\u65B0\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
+      }
+    }
+  }, []);
+  React2.useEffect(() => {
+    mountedRef.current = true;
+    void refresh();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [refresh]);
+  const onPick = React2.useCallback(
+    async (event) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (files.length === 0) return;
+      setBusy(true);
+      setMsg(null);
+      let done = 0;
+      try {
+        for (const f of files) {
+          await uploadFile(f);
+          done++;
+        }
+        if (mountedRef.current) setMsg({ ok: true, text: `\u5DF2\u4E0A\u4F20 ${done} \u4E2A\u6587\u4EF6\u5230\u6536\u4EF6\u7BB1,\u53BB\u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406\u5373\u53EF` });
+        await refresh();
+      } catch (err) {
+        if (mountedRef.current) {
+          setMsg({ ok: false, text: "\u4E0A\u4F20\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
+        }
+      } finally {
+        if (mountedRef.current) setBusy(false);
+      }
+    },
+    [refresh]
+  );
+  const onDelete = React2.useCallback(
+    async (dir, name) => {
+      setBusy(true);
+      setMsg(null);
+      try {
+        await deleteFile(dir, name);
+        if (mountedRef.current) setMsg({ ok: true, text: `\u5DF2\u5220\u9664 ${name}` });
+        await refresh();
+      } catch (err) {
+        if (mountedRef.current) setMsg({ ok: false, text: "\u5220\u9664\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
+      } finally {
+        if (mountedRef.current) setBusy(false);
+      }
+    },
+    [refresh]
+  );
+  return /* @__PURE__ */ React2.createElement("div", { className: "esd-files" }, /* @__PURE__ */ React2.createElement("div", { className: "esd-files-head" }, /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn esd-files-upload", disabled: busy, onClick: () => inputRef.current?.click() }, busy ? "\u23F3" : "\u{1F4E4}", " \u4E0A\u4F20\u6587\u4EF6"), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn", disabled: busy, onClick: () => void refresh(), title: "\u5237\u65B0" }, "\u{1F504}"), /* @__PURE__ */ React2.createElement("span", { className: "esd-files-tip" }, "\u4E0A\u4F20\u5230\u6536\u4EF6\u7BB1 \u2192 \u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406 \u2192 \u7ED3\u679C\u4ECE\u300C\u5904\u7406\u7ED3\u679C\u300D\u4E0B\u8F7D"), /* @__PURE__ */ React2.createElement("input", { ref: inputRef, type: "file", multiple: true, style: { display: "none" }, onChange: (e) => void onPick(e) })), msg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (msg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, msg.text), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => setMsg(null) }, "\u5173\u95ED")) : null, /* @__PURE__ */ React2.createElement(FileList, { title: "\u6536\u4EF6\u7BB1 inbox", entries: inbox, dir: "inbox", busy, onDelete: (d, n) => void onDelete(d, n) }), /* @__PURE__ */ React2.createElement(FileList, { title: "\u5904\u7406\u7ED3\u679C outbox", entries: outbox, dir: "outbox", busy, onDelete: (d, n) => void onDelete(d, n) }));
+}
+
 // src/client/skills.ts
 var SKILL_MODULES = [
   {
@@ -615,7 +758,7 @@ function valuePromptOf(label, value, note) {
 }
 
 // src/client/ShopDeskPanel.tsx
-var Boundary = class extends React2.Component {
+var Boundary = class extends React3.Component {
   constructor() {
     super(...arguments);
     __publicField(this, "state", { error: null });
@@ -625,40 +768,40 @@ var Boundary = class extends React2.Component {
   }
   render() {
     if (this.state.error !== null) {
-      return /* @__PURE__ */ React2.createElement("div", { className: "esd-boundary-error" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0\u6E32\u67D3\u51FA\u9519\uFF1A", String(this.state.error.message ?? this.state.error));
+      return /* @__PURE__ */ React3.createElement("div", { className: "esd-boundary-error" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0\u6E32\u67D3\u51FA\u9519\uFF1A", String(this.state.error.message ?? this.state.error));
     }
     return this.props.children;
   }
 };
 var NARROW_QUERY = "(max-width: 900px)";
 function useShopDeskData() {
-  const [, force] = React2.useState(0);
-  React2.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
+  const [, force] = React3.useState(0);
+  React3.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
   const open = isCockpitOpen();
-  const setOpen = React2.useCallback((next) => {
+  const setOpen = React3.useCallback((next) => {
     if (next !== isCockpitOpen()) toggleCockpit();
   }, []);
-  const [importing, setImporting] = React2.useState(false);
-  const [importMsg, setImportMsg] = React2.useState(null);
-  const fileInputRef = React2.useRef(null);
-  const dcIframeRef = React2.useRef(null);
-  const notifyDcRefresh = React2.useCallback(() => {
+  const [importing, setImporting] = React3.useState(false);
+  const [importMsg, setImportMsg] = React3.useState(null);
+  const fileInputRef = React3.useRef(null);
+  const dcIframeRef = React3.useRef(null);
+  const notifyDcRefresh = React3.useCallback(() => {
     try {
       dcIframeRef.current?.contentWindow?.postMessage({ type: "ecommerce:refresh" }, "*");
     } catch {
     }
   }, []);
-  const [, forceFs] = React2.useState(0);
-  React2.useEffect(() => subscribeFullscreen(() => forceFs((n) => n + 1)), []);
+  const [, forceFs] = React3.useState(0);
+  React3.useEffect(() => subscribeFullscreen(() => forceFs((n) => n + 1)), []);
   const fullscreen2 = isFullscreen();
-  const mountedRef = React2.useRef(true);
-  React2.useEffect(() => {
+  const mountedRef = React3.useRef(true);
+  React3.useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
-  React2.useEffect(() => {
+  React3.useEffect(() => {
     const mq = window.matchMedia(NARROW_QUERY);
     const update = () => {
       if (mq.matches) setOpen(false);
@@ -669,10 +812,10 @@ function useShopDeskData() {
       mq.removeEventListener("change", update);
     };
   }, [setOpen]);
-  const openFilePicker = React2.useCallback(() => {
+  const openFilePicker = React3.useCallback(() => {
     fileInputRef.current?.click();
   }, []);
-  const handleFileChange = React2.useCallback(
+  const handleFileChange = React3.useCallback(
     async (event) => {
       const files = Array.from(event.target.files ?? []);
       event.target.value = "";
@@ -699,7 +842,7 @@ function useShopDeskData() {
     },
     [notifyDcRefresh]
   );
-  const doClearData = React2.useCallback(async () => {
+  const doClearData = React3.useCallback(async () => {
     const ok = window.confirm(
       "\u786E\u5B9A\u6E05\u9664\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF1F\n\u5546\u54C1\u3001\u8BA2\u5355\u3001\u6708\u5EA6/\u5468\u5EA6\u590D\u76D8\u53CA\u6570\u636E\u5BF9\u6BD4\u5F52\u6863\u5C06\u5168\u90E8\u6E05\u7A7A\uFF0C\u9762\u677F\u6062\u590D\u7A7A\u767D\u3002"
     );
@@ -724,7 +867,7 @@ function useShopDeskData() {
       if (mountedRef.current) setImporting(false);
     }
   }, [notifyDcRefresh]);
-  React2.useEffect(() => {
+  React3.useEffect(() => {
     const onMessage = (event) => {
       const data = event.data;
       if (data === null || typeof data !== "object") return;
@@ -757,11 +900,15 @@ function useShopDeskData() {
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
-  const doExport = React2.useCallback((type, scope) => {
+  const doExport = React3.useCallback((type, scope) => {
     exportData(type, scope);
   }, []);
-  const toggleFs = React2.useCallback(() => {
+  const toggleFs = React3.useCallback(() => {
     toggleFullscreen();
+  }, []);
+  const [showFiles, setShowFiles] = React3.useState(false);
+  const toggleFiles = React3.useCallback(() => {
+    setShowFiles((v) => !v);
   }, []);
   return {
     open,
@@ -776,12 +923,14 @@ function useShopDeskData() {
     fullscreen: fullscreen2,
     toggleFullscreen: toggleFs,
     doExport,
-    doClearData
+    doClearData,
+    showFiles,
+    toggleFiles
   };
 }
 function ShopDeskTab() {
   const d = useShopDeskData();
-  return /* @__PURE__ */ React2.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React2.createElement(Boundary, null, /* @__PURE__ */ React2.createElement("div", { className: "esd-tab-root" + (d.fullscreen ? " esd-panel-fullscreen" : "") }, /* @__PURE__ */ React2.createElement("div", { className: "esd-tab-toolbar" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-tab-title" }, /* @__PURE__ */ React2.createElement(BrandBadge, { size: 22 }), /* @__PURE__ */ React2.createElement("span", { className: "esd-tab-title-text" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0")), /* @__PURE__ */ React2.createElement(
+  return /* @__PURE__ */ React3.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React3.createElement(Boundary, null, /* @__PURE__ */ React3.createElement("div", { className: "esd-tab-root" + (d.fullscreen ? " esd-panel-fullscreen" : "") }, /* @__PURE__ */ React3.createElement("div", { className: "esd-tab-toolbar" }, /* @__PURE__ */ React3.createElement("span", { className: "esd-tab-title" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 22 }), /* @__PURE__ */ React3.createElement("span", { className: "esd-tab-title-text" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0")), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -791,7 +940,7 @@ function ShopDeskTab() {
       onClick: d.toggleFullscreen
     },
     d.fullscreen ? "\u{1F5D7}" : "\u26F6"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -801,7 +950,7 @@ function ShopDeskTab() {
       onClick: () => d.doExport("csv", "all")
     },
     "\u2B07"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -812,7 +961,7 @@ function ShopDeskTab() {
       disabled: d.importing
     },
     d.importing ? "\u23F3" : "\u{1F4E5}"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -822,7 +971,7 @@ function ShopDeskTab() {
       onClick: d.refreshDataCenter
     },
     "\u{1F504}"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -833,7 +982,17 @@ function ShopDeskTab() {
       disabled: d.importing
     },
     "\u{1F9F9}"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-icon-btn",
+      title: "\u6587\u4EF6\u4EA4\u6362\uFF1A\u4E0A\u4F20\u6587\u4EF6\u4EA4\u7ED9 AI \u5904\u7406\uFF0C\u4E0B\u8F7D\u5904\u7406\u7ED3\u679C",
+      "aria-label": "\u6587\u4EF6\u4EA4\u6362",
+      onClick: d.toggleFiles
+    },
+    "\u{1F4C2}"
+  ), /* @__PURE__ */ React3.createElement(
     "input",
     {
       ref: d.fileInputRef,
@@ -843,7 +1002,7 @@ function ShopDeskTab() {
       style: { display: "none" },
       onChange: (e) => void d.handleFileChange(e)
     }
-  )), d.importMsg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => d.setImportMsg(null) }, "\u5173\u95ED")) : null, /* @__PURE__ */ React2.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React2.createElement(
+  )), d.importMsg !== null ? /* @__PURE__ */ React3.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React3.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => d.setImportMsg(null) }, "\u5173\u95ED")) : null, d.showFiles ? /* @__PURE__ */ React3.createElement(FileExchange, null) : null, /* @__PURE__ */ React3.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React3.createElement(
     "iframe",
     {
       ref: d.dcIframeRef,
@@ -852,11 +1011,11 @@ function ShopDeskTab() {
       title: "\u7535\u5546\u6570\u636E\u4E2D\u53F0",
       loading: "eager"
     }
-  )), /* @__PURE__ */ React2.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React2.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09")))));
+  )), /* @__PURE__ */ React3.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React3.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09")))));
 }
 function ShopDeskPanel() {
   const d = useShopDeskData();
-  return /* @__PURE__ */ React2.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React2.createElement(Boundary, null, d.open ? /* @__PURE__ */ React2.createElement("aside", { className: "esd-panel" + (d.fullscreen ? " esd-panel-fullscreen" : ""), role: "complementary", "aria-label": "\u7535\u5546\u6570\u636E\u4E2D\u53F0" }, /* @__PURE__ */ React2.createElement("header", { className: "esd-header" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-header-logo" }, /* @__PURE__ */ React2.createElement(BrandBadge, { size: 24 })), /* @__PURE__ */ React2.createElement("h3", { className: "esd-header-title" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0"), /* @__PURE__ */ React2.createElement(
+  return /* @__PURE__ */ React3.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React3.createElement(Boundary, null, d.open ? /* @__PURE__ */ React3.createElement("aside", { className: "esd-panel" + (d.fullscreen ? " esd-panel-fullscreen" : ""), role: "complementary", "aria-label": "\u7535\u5546\u6570\u636E\u4E2D\u53F0" }, /* @__PURE__ */ React3.createElement("header", { className: "esd-header" }, /* @__PURE__ */ React3.createElement("span", { className: "esd-header-logo" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 24 })), /* @__PURE__ */ React3.createElement("h3", { className: "esd-header-title" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0"), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -866,7 +1025,7 @@ function ShopDeskPanel() {
       onClick: d.toggleFullscreen
     },
     d.fullscreen ? "\u{1F5D7}" : "\u26F6"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -876,7 +1035,7 @@ function ShopDeskPanel() {
       onClick: () => d.doExport("csv", "all")
     },
     "\u2B07"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -887,7 +1046,7 @@ function ShopDeskPanel() {
       disabled: d.importing
     },
     d.importing ? "\u23F3" : "\u{1F4E5}"
-  ), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn", title: "\u5237\u65B0\u6570\u636E", "aria-label": "\u5237\u65B0\u6570\u636E", onClick: d.refreshDataCenter }, "\u{1F504}"), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement("button", { type: "button", className: "esd-icon-btn", title: "\u5237\u65B0\u6570\u636E", "aria-label": "\u5237\u65B0\u6570\u636E", onClick: d.refreshDataCenter }, "\u{1F504}"), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -898,7 +1057,7 @@ function ShopDeskPanel() {
       disabled: d.importing
     },
     "\u{1F9F9}"
-  ), /* @__PURE__ */ React2.createElement(
+  ), /* @__PURE__ */ React3.createElement(
     "input",
     {
       ref: d.fileInputRef,
@@ -908,7 +1067,7 @@ function ShopDeskPanel() {
       style: { display: "none" },
       onChange: (e) => void d.handleFileChange(e)
     }
-  )), d.importMsg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React2.createElement(
+  )), d.importMsg !== null ? /* @__PURE__ */ React3.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React3.createElement(
     "button",
     {
       type: "button",
@@ -916,7 +1075,7 @@ function ShopDeskPanel() {
       onClick: () => d.setImportMsg(null)
     },
     "\u5173\u95ED"
-  )) : null, /* @__PURE__ */ React2.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React2.createElement(
+  )) : null, d.showFiles ? /* @__PURE__ */ React3.createElement(FileExchange, null) : null, /* @__PURE__ */ React3.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React3.createElement(
     "iframe",
     {
       ref: d.dcIframeRef,
@@ -925,14 +1084,14 @@ function ShopDeskPanel() {
       title: "\u7535\u5546\u6570\u636E\u4E2D\u53F0",
       loading: "eager"
     }
-  )), /* @__PURE__ */ React2.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React2.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09"))) : null));
+  )), /* @__PURE__ */ React3.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React3.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09"))) : null));
 }
 
 // src/client/SkillBar.tsx
-var React3 = __toESM(require("react"), 1);
+var React4 = __toESM(require("react"), 1);
 function SkillBar(props) {
   const variant = props.variant ?? "panel";
-  return /* @__PURE__ */ React3.createElement("div", { className: "esd-skillbar" + (variant === "dock" ? " esd-skillbar-dock" : "") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-skillbar-title" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 16, className: "esd-skillbar-logo" }), /* @__PURE__ */ React3.createElement("span", { className: "esd-skillbar-name" }, "\u6280\u80FD\u5206\u6790")), SKILL_MODULES.map((s) => /* @__PURE__ */ React3.createElement(
+  return /* @__PURE__ */ React4.createElement("div", { className: "esd-skillbar" + (variant === "dock" ? " esd-skillbar-dock" : "") }, /* @__PURE__ */ React4.createElement("span", { className: "esd-skillbar-title" }, /* @__PURE__ */ React4.createElement(BrandBadge, { size: 16, className: "esd-skillbar-logo" }), /* @__PURE__ */ React4.createElement("span", { className: "esd-skillbar-name" }, "\u6280\u80FD\u5206\u6790")), SKILL_MODULES.map((s) => /* @__PURE__ */ React4.createElement(
     "button",
     {
       key: s.id,
@@ -942,8 +1101,8 @@ function SkillBar(props) {
       "aria-label": `\u8C03\u7528\u300C${s.label}\u300D\u6280\u80FD`,
       onClick: () => props.onInvoke(s)
     },
-    /* @__PURE__ */ React3.createElement(SkillIcon, { name: s.icon, size: 15 }),
-    /* @__PURE__ */ React3.createElement("span", { className: "esd-skill-label" }, s.label)
+    /* @__PURE__ */ React4.createElement(SkillIcon, { name: s.icon, size: 15 }),
+    /* @__PURE__ */ React4.createElement("span", { className: "esd-skill-label" }, s.label)
   )));
 }
 
@@ -1828,6 +1987,97 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* \u2500\u2500 \u6587\u4EF6\u4EA4\u6362\u6761\uFF08\u4E0A\u4F20/\u5217\u8868/\u4E0B\u8F7D\uFF09 \u2500\u2500 */
+.esd-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.20));
+  background: var(--dsw-alias-bg-base, #ffffff);
+}
+.esd-files-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.esd-files-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+.esd-files-tip {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary, #666);
+}
+.esd-files-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
+}
+.esd-files-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 11px;
+  text-align: center;
+}
+.esd-files-empty {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #999);
+  padding: 4px 0;
+}
+.esd-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.esd-files-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.06));
+}
+.esd-files-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.esd-files-size {
+  color: var(--dsw-alias-label-secondary, #666);
+  white-space: nowrap;
+}
+.esd-files-act {
+  font-size: 12px;
+  color: var(--esd-accent-strong, #16a085);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.esd-files-del {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--dsw-alias-state-error-primary, #e5484d);
+}
+.esd-files-del:disabled { opacity: .5; cursor: default; }
 `;
 var injected = false;
 function injectStyles() {
@@ -1844,10 +2094,10 @@ function injectStyles() {
 // src/client/index.tsx
 var inject = ["slots"];
 function DataFooterLauncher() {
-  const [, force] = React4.useState(0);
-  React4.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
+  const [, force] = React5.useState(0);
+  React5.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
   const open = isCockpitOpen();
-  return React4.createElement(
+  return React5.createElement(
     "button",
     {
       type: "button",
@@ -1858,11 +2108,11 @@ function DataFooterLauncher() {
         toggleCockpit();
       }
     },
-    React4.createElement(BrandMark, { size: 16 })
+    React5.createElement(BrandMark, { size: 16 })
   );
 }
 function ComposerDockSkillBar() {
-  return React4.createElement(SkillBar, {
+  return React5.createElement(SkillBar, {
     variant: "dock",
     onInvoke: (skill) => {
       void fillConversationInput(skillInvocationToken(skill));

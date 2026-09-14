@@ -28,6 +28,7 @@ import type { MonthlyReport, Order, Product } from './types.ts'
 import { buildEvaluationSummary, callLlmForEvaluation, evaluationPrompt, ruleBasedEvaluation } from './data-evaluation.ts'
 import type { EvaluationSummary } from './data-evaluation.ts'
 import { buildComparePayload, isCompareCycle } from './compare-payload.ts'
+import { handleFilesRoute, type FilesConfig } from './files.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -195,6 +196,7 @@ export function registerShopApi(
   webServer: WebServerLike,
   store: EcommerceStore,
   ctx: { get?(name: string): unknown } = {},
+  filesDirs?: FilesConfig,
 ): () => void {
   return webServer.register({
     kind: 'prefix',
@@ -414,6 +416,9 @@ export function registerShopApi(
             })
             return
           }
+        }
+        if (filesDirs !== undefined && (await handleFilesRoute(req, res, pathname, query, filesDirs))) {
+          return
         }
         sendJson(res, 404, {
           ok: false,

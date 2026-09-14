@@ -138,3 +138,69 @@ export function exportData(type: 'csv' | 'json' = 'csv', scope: 'products' | 'or
   const url = (base ? base : '') + `/ecommerce-api/export?type=${type}&scope=${scope}`
   window.open(url, '_blank')
 }
+
+/* ────────────────────── 通用文件交换（上传/列表/下载/删除） ────────────────────── */
+
+export interface FileEntry {
+  name: string
+  size: number
+  modified: number
+  dir: 'inbox' | 'outbox'
+}
+
+export interface UploadResult {
+  name: string
+  size: number
+  dir: 'inbox'
+}
+
+/** 上传单个文件到服务器收件箱（原始字节体,服务端落盘） */
+export async function uploadFile(file: File): Promise<UploadResult> {
+  const base = resolveApiBase()
+  const url = (base ? base : '') + '/ecommerce-api/files/upload?name=' + encodeURIComponent(file.name)
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', accept: 'application/json' },
+      cache: 'no-store',
+      body: await file.arrayBuffer(),
+    })
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<UploadResult> | null
+  if (!res.ok || body === null || body.ok !== true || body.value === undefined) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+  return body.value
+}
+
+/** 列出收件箱/结果箱文件 */
+export async function listFiles(dir: 'inbox' | 'outbox'): Promise<FileEntry[]> {
+  const base = resolveApiBase()
+  const url = (base ? base : '') + '/ecommerce-api/files/list?dir=' + dir
+  const res = await fetch(url, { headers: { accept: 'application/json' }, cache: 'no-store' })
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<{ dir: string; files: FileEntry[] }> | null
+  if (!res.ok || body === null || body.ok !== true) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+  return body.value?.files ?? []
+}
+
+/** 下载地址(直接访问会触发浏览器下载,服务端带 content-disposition: attachment) */
+export function downloadFileUrl(dir: 'inbox' | 'outbox', name: string): string {
+  const base = resolveApiBase()
+  return (base ? base : '') + '/ecommerce-api/files/download?dir=' + dir + '&name=' + encodeURIComponent(name)
+}
+
+/** 删除收件箱/结果箱文件 */
+export async function deleteFile(dir: 'inbox' | 'outbox', name: string): Promise<void> {
+  const base = resolveApiBase()
+  const url = (base ? base : '') + '/ecommerce-api/files/delete?dir=' + dir + '&name=' + encodeURIComponent(name)
+  const res = await fetch(url, { method: 'POST', headers: { accept: 'application/json' }, cache: 'no-store' })
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<unknown> | null
+  if (!res.ok || body === null || body.ok !== true) {
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+}

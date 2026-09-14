@@ -29,6 +29,7 @@ import { registerStatsTools } from './tools/stats.ts'
 import { registerInventoryTools } from './tools/inventory.ts'
 import { registerBackupTools } from './tools/backup.ts'
 import { injectApiBase, registerShopApi } from './shop-api.ts'
+import { resolveFilesDirs } from './files.ts'
 import { registerExcelTools } from './tools/excel.ts'
 import { registerQaTool } from './tools/qa.ts'
 import { registerExportCsvTool } from './tools/export-csv.ts'
@@ -62,6 +63,7 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     platform: { ...defaultConfig.platform, ...config.platform },
     storage: { ...defaultConfig.storage, ...config.storage },
     inventory: { ...defaultConfig.inventory, ...config.inventory },
+    files: { ...defaultConfig.files, ...config.files },
   }
 
   // 持久化路径：相对路径锚定到插件目录（与 dsh 启动 CWD 无关），并在此刻探测可写性。
@@ -126,7 +128,7 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
   if (webServer === undefined) {
     console.warn('[ecommerce-analyst] webServer 服务不可用，跳过店铺工作台 API 注册')
   } else {
-    const disposeApi = registerShopApi(webServer, store, ctx)
+    const disposeApi = registerShopApi(webServer, store, ctx, resolveFilesDirs(resolved.files))
     ctx.effect(() => disposeApi, 'ecommerce: shop api routes')
     // 把 API base 注入 index.html（客户端无需猜测端口）
     const disposeBase = injectApiBase(webServer)

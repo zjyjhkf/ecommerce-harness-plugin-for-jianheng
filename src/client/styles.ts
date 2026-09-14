@@ -886,6 +886,97 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── 文件交换条（上传/列表/下载） ── */
+.esd-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.20));
+  background: var(--dsw-alias-bg-base, #ffffff);
+}
+.esd-files-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.esd-files-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+.esd-files-tip {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary, #666);
+}
+.esd-files-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
+}
+.esd-files-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 11px;
+  text-align: center;
+}
+.esd-files-empty {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #999);
+  padding: 4px 0;
+}
+.esd-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.esd-files-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.06));
+}
+.esd-files-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.esd-files-size {
+  color: var(--dsw-alias-label-secondary, #666);
+  white-space: nowrap;
+}
+.esd-files-act {
+  font-size: 12px;
+  color: var(--esd-accent-strong, #16a085);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.esd-files-del {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--dsw-alias-state-error-primary, #e5484d);
+}
+.esd-files-del:disabled { opacity: .5; cursor: default; }
 `;
 
 let injected = false
