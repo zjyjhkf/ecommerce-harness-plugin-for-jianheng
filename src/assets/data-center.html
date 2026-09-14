@@ -105,6 +105,9 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
 .kpi-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%}
 .kpi-card.blue::before{background:var(--accent)} .kpi-card.green::before{background:var(--green)}
 .kpi-card.teal::before{background:#0d8a78}
+/* 数据对比趋势 KPI：五张卡一行排满（毛利/费比各自独立），窄屏降两列 */
+.kpi-grid.five{grid-template-columns:repeat(5,1fr)}
+@media(max-width:900px){.kpi-grid.five{grid-template-columns:repeat(2,1fr)}}
 .kpi-card.cmp-trend-active{border-color:#0d8a78;box-shadow:0 0 0 2px rgba(13,138,120,.25)}
 .kpi-card.orange::before{background:var(--orange)} .kpi-card.purple::before{background:var(--purple)}
 .kpi-card.red::before{background:var(--red)} .kpi-card.teal::before{background:#2bb8a3}
@@ -440,10 +443,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
     <div class="kpi-grid" id="compareTrendKpi" style="display:none"></div>
     <div class="period-toggle" id="compareTrendToggle" style="display:none"></div>
     <div class="chart-row full" id="compareTrendBarRow" style="display:none">
-      <div class="chart-box"><div class="chart-title" id="compareTrendBarTitle">月度对比（每月不同色）</div><div class="chart-container" id="compareTrendBar" style="height:300px"></div></div>
-    </div>
-    <div class="chart-row full" id="compareTrendLineRow" style="display:none">
-      <div class="chart-box"><div class="chart-title" id="compareTrendLineTitle">随月份推进趋势</div><div class="chart-container" id="compareTrendLine" style="height:300px"></div></div>
+      <div class="chart-box"><div class="chart-title" id="compareTrendBarTitle">月度对比（柱=每月不同色 · 线=环比增速）</div><div class="chart-container" id="compareTrendBar" style="height:340px"></div></div>
     </div>
     <div class="period-toggle" id="compareKindToggle" style="display:none"></div>
     <div class="period-toggle" id="compareMetricToggle" style="display:none"></div>
@@ -2788,16 +2788,29 @@ function switchCompareTrendMetric(id){
   renderCompareTrend();
 }
 function hideTrendBlocks(){
-  ['compareTrendKpi','compareTrendToggle','compareTrendBarRow','compareTrendLineRow'].forEach(function(i){
+  ['compareTrendKpi','compareTrendToggle','compareTrendBarRow'].forEach(function(i){
     const el = document.getElementById(i); if (el) el.style.display = 'none';
   });
+}
+/** 趋势月份锚定（v0.4.5）：KPI 大字/高亮柱 = **最近导入的那个月**（当前月报），
+ *  不是字典序最新月——乱序补导（先导 8 月再导 7 月）时以导入事实为准；
+ *  上一月锚 = 锚点在时间序上的前一个月。折线/柱状 x 轴仍按月份自然升序（随月推进）。 */
+function cmpTrendAnchor(usable){
+  const cur = APP_DATA.monthlyReport && APP_DATA.monthlyReport.month;
+  let idx = -1;
+  if (cur) { for (let i = 0; i < usable.length; i++) { if (usable[i].month === cur) { idx = i; break; } } }
+  if (idx < 0) idx = usable.length - 1;
+  // 上一月锚 = 时间序相邻的前月；锚在最早月时退到相邻后月
+  const pidx = idx > 0 ? idx - 1 : (usable.length > 1 ? 1 : 0);
+  return { last: usable[idx], prev: usable[pidx], idx: idx };
 }
 function renderCompareTrend(){
   const pts = cmpTrendPoints();
   const usable = pts.filter(function(x){ return x && x.month; });
   if (usable.length < 2) { hideTrendBlocks(); return; } // 单月/无月：趋势区整体不出现（清除后必然 <2 → 不残留）
-  const last = usable[usable.length-1];
-  const prev = usable[usable.length-2];
+  const anchor = cmpTrendAnchor(usable);
+  const last = anchor.last;
+  const prev = anchor.prev;
   const defs = (comparePayload && Array.isArray(comparePayload.trendMetrics) && comparePayload.trendMetrics.length)
     ? comparePayload.trendMetrics
     : [{id:'netSales',label:'净销额',unit:'money'},{id:'skuCount',label:'产品规格数',unit:'number'},{id:'promoCost',label:'推广费',unit:'money'},{id:'grossProfit',label:'毛利',unit:'money'},{id:'feeRatio',label:'费比',unit:'pct'}];
@@ -2807,6 +2820,7 @@ function renderCompareTrend(){
   const kpi = document.getElementById('compareTrendKpi');
   if (kpi) {
     kpi.style.display = '';
+    kpi.className = 'kpi-grid five';
     kpi.innerHTML = defs.map(function(d){
       const a = last[d.id], b = prev[d.id];
       let deltaHtml = '';
@@ -2831,47 +2845,52 @@ function renderCompareTrend(){
     }).join('');
   }
   const def = cmpTrendMetricDef(compareTrendMetric);
-  // ③ 柱状图：每月一根柱、不同月份不同色，最新月高亮橙
+  // ③ v0.4.5 组合图（参考多月份.html）：一屏一图——柱=所选指标每月一根（每月不同色、
+  //    最近导入月高亮橙、柱顶数值），折线=环比增速%（右轴，随月份推进）；
+  //    替代旧版上下两张 100% 宽图，版面更紧凑，月份区分度靠柱色+折线点色保持。
   const barRow = document.getElementById('compareTrendBarRow');
   const barTitle = document.getElementById('compareTrendBarTitle');
   if (barRow && barTitle) {
     barRow.style.display = '';
-    barTitle.innerHTML = def.label + ' · 按月对比（每月不同色） <span class="badge">' + escAttr(usable[0].label) + '→' + escAttr(last.label) + '</span>';
-    const data = usable.map(function(x, i){
-      return { value: x[def.id] === null || x[def.id] === undefined ? null : Number(x[def.id]), itemStyle:{ color: cmpMonthColor(i, usable.length, i===usable.length-1), borderRadius:[4,4,0,0] } };
+    barTitle.innerHTML = def.label + ' · 按月对比柱状 + 环比折线 <span class="badge">' + escAttr(usable[0].label) + '→' + escAttr(usable[usable.length-1].label) + ' · ' + usable.length + ' 个月</span>';
+    const vals = usable.map(function(x){ return x[def.id] === null || x[def.id] === undefined ? null : Number(x[def.id]); });
+    const barData = vals.map(function(v, i){
+      return { value: v, itemStyle:{ color: i === anchor.idx ? '#e67e22' : cmpMonthColor(i, usable.length, false), borderRadius:[4,4,0,0] } };
+    });
+    const momData = vals.map(function(v, i){
+      if (i === 0 || v === null) return null;
+      const b = vals[i-1];
+      if (b === null || b === undefined || b === 0) return null;
+      return +((v - b) / Math.abs(b) * 100).toFixed(1);
     });
     registerChartClick('compareTrendBar', function(params){
       const x = usable[params.dataIndex]; if (!x) return null;
-      return { label: '数据对比 · ' + x.label + ' · ' + def.label, value: x.label + ' ' + def.label + ' ' + cmpVal(x[def.id], def.unit) };
+      const m = momData[params.dataIndex];
+      return { label: '数据对比 · ' + x.label + ' · ' + def.label, value: x.label + ' ' + def.label + ' ' + cmpVal(x[def.id], def.unit) + (m !== null && m !== undefined ? '（环比 ' + (m>=0?'+':'') + m + '%）' : '') };
     });
     getChart('compareTrendBar')?.setOption({
-      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:function(ps){ const p=ps[0]; const x=usable[p.dataIndex]; return (x?x.label:'') + '<br/>' + def.label + '：' + cmpVal(x&&x[def.id], def.unit); }},
-      grid:{left:10,right:16,top:36,bottom:24,containLabel:true},
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:function(ps){
+        let s = (ps[0] && usable[ps[0].dataIndex]) ? usable[ps[0].dataIndex].label : '';
+        for (let i=0;i<ps.length;i++){ const p=ps[i];
+          if (p.seriesType==='bar') s += '<br/>' + p.marker + def.label + '：' + cmpVal(p.value, def.unit);
+          else if (p.value !== null && p.value !== undefined) s += '<br/>' + p.marker + '环比增速：' + (p.value>=0?'+':'') + p.value + '%';
+        }
+        return s;
+      }},
+      legend:{data:[def.label,'环比增速%'],top:0,right:0,textStyle:{color:'#5f8087',fontSize:10}},
+      grid:{left:10,right:14,top:40,bottom:26,containLabel:true},
       xAxis:{type:'category',data:usable.map(function(x){return x.label;}),axisLabel:{color:'#5f8087',fontSize:10}},
-      yAxis:{type:'value',axisLabel:{color:'#5f8087',fontSize:9,formatter:function(v){return cmpBarAxisVal(v, def.unit);}},splitLine:{lineStyle:{color:'#e8f0ee'}}},
-      series:[{name:def.label,type:'bar',barMaxWidth:56,data:data,label:{show:true,position:'top',color:'#16343b',fontSize:9,formatter:function(p){return cmpBarAxisVal(p.value, def.unit);}}}]
-    }, true);
-  }
-  // ④ 折线图：同一指标随月份推进的走势
-  const lineRow = document.getElementById('compareTrendLineRow');
-  const lineTitle = document.getElementById('compareTrendLineTitle');
-  if (lineRow && lineTitle) {
-    lineRow.style.display = '';
-    lineTitle.innerHTML = def.label + ' · 随月份推进走势 <span class="badge">' + usable.length + ' 个月</span>';
-    registerChartClick('compareTrendLine', function(params){
-      const x = usable[params.dataIndex]; if (!x) return null;
-      return { label: '数据对比 · ' + x.label + ' · ' + def.label, value: x.label + ' ' + def.label + ' ' + cmpVal(x[def.id], def.unit) };
-    });
-    getChart('compareTrendLine')?.setOption({
-      tooltip:{trigger:'axis',formatter:function(ps){ const p=ps[0]; const x=usable[p.dataIndex]; return (x?x.label:'') + '<br/>' + def.label + '：' + cmpVal(x&&x[def.id], def.unit); }},
-      grid:{left:10,right:16,top:30,bottom:24,containLabel:true},
-      xAxis:{type:'category',boundaryGap:false,data:usable.map(function(x){return x.label;}),axisLabel:{color:'#5f8087',fontSize:10}},
-      yAxis:{type:'value',axisLabel:{color:'#5f8087',fontSize:9,formatter:function(v){return cmpBarAxisVal(v, def.unit);}},splitLine:{lineStyle:{color:'#e8f0ee'}}},
-      series:[{name:def.label,type:'line',smooth:true,symbolSize:8,connectNulls:false,
-        data:usable.map(function(x){return x[def.id]===null||x[def.id]===undefined?null:Number(x[def.id]);}),
-        lineStyle:{color:'#0d8a78',width:3},itemStyle:{color:function(p){return cmpMonthColor(p.dataIndex, usable.length, p.dataIndex===usable.length-1);}},
-        areaStyle:{color:'rgba(13,138,120,.08)'},
-        label:{show:true,color:'#16343b',fontSize:9,formatter:function(p){return cmpBarAxisVal(p.value, def.unit);}}}]
+      yAxis:[
+        { type:'value', name:def.unit==='pct'?'%':undefined, axisLabel:{color:'#5f8087',fontSize:9,formatter:function(v){return cmpBarAxisVal(v, def.unit);}}, splitLine:{lineStyle:{color:'#e8f0ee'}} },
+        { type:'value', name:'环比%', axisLabel:{color:'#5f8087',fontSize:9,formatter:'{value}%'}, splitLine:{show:false} }
+      ],
+      series:[
+        { name:def.label, type:'bar', barMaxWidth:64, data:barData,
+          label:{show:true,position:'top',color:'#16343b',fontSize:9,formatter:function(p){return cmpBarAxisVal(p.value, def.unit);}} },
+        { name:'环比增速%', type:'line', yAxisIndex:1, smooth:true, symbolSize:8, connectNulls:false, data:momData,
+          lineStyle:{color:'#40596b',width:2,type:'dashed'}, itemStyle:{color:function(p){return p.dataIndex===anchor.idx?'#e67e22':'#40596b';}},
+          label:{show:true,color:'#40596b',fontSize:9,formatter:function(p){return (p.value>=0?'+':'')+p.value+'%';}} }
+      ]
     }, true);
   }
 }
@@ -3008,8 +3027,60 @@ function renderCompareChart(result){
 }
 function payloadPeriodShort(result){ return (result.prevPeriod || '上期') + ' → ' + (result.currPeriod || '本期'); }
 
+// ===================== v0.4.5 统一空数据治理（根治「清除后图表/排行残留」） =====================
+// 根因：各视图空态分支只重写 KPI/表格，echarts canvas 不重绘 → 旧月份图形残留。
+// 方案：renderView 入口统一判定「当前周期无数据」→ 该视图 KPI、表格、全部图表画布
+// 逐一无条件重置为「暂无数据」占位再 return；导入/清除任何路径都走同一出口。
+function cycleDataEmpty(){
+  if (cycle === '7d') {
+    const w = APP_DATA.weeklyReport;
+    return !(w && ((w.platformLinks && w.platformLinks.length) || (w.systemProducts && w.systemProducts.length) || (w.systemSkus && w.systemSkus.length)));
+  }
+  return !APP_DATA.monthlyReport;
+}
+const EMPTY_IMPORT_HINT = '暂无导入数据：请在工作台导入月度复盘 4 份 Excel（30天周期）或「商品排名导出」3 份（7天周期），导入后面板即显示分析结果。';
+// 各视图渲染目标清单：charts=echarts 容器 id；kpis/tables=需重置的元素 id
+const VIEW_EMPTY_TARGETS = {
+  sales:      { charts:['salesPie','storeSalesChart','productSalesChart','ovRefundBar','ovCategoryBar','ovPromoBar'], kpis:[], tables:['salesThead','salesTbody','salesProductThead','salesProductTbody'] },
+  product:    { charts:[], kpis:['productKpi'], tables:['productDetailThead','productDetailTbody'] },
+  link:       { charts:['linkGrade','linkStatus'], kpis:['linkKpi'], tables:['linkThead','linkTbody'] },
+  newproduct: { charts:['newProductFunnel'], kpis:['newProductKpi'], tables:['npThead','npTbody'] },
+  promo:      { charts:['promoSpendDist','promoFeeDist','promoRoiDist'], kpis:['promoKpi'], tables:['promoThead','promoTbody'] },
+  refund:     { charts:['refundTrend'], kpis:['refundKpi'], tables:['refundAbnormalThead','refundAbnormalTbody','refundProductThead','refundProductTbody'] },
+  review:     { charts:['mrOverviewBar','mrRatingPie','mrStoreBar','mrFeeBar','mrProfitBar','wkOverviewCompare','wkLinkBar','wkLinkFunnel','wkProdBar','wkProdMargin','wkSkuBar','wkSkuFee','wkShopPie'], kpis:[], tables:[] },
+};
+function chartPlaceholder(id, msg){
+  const el = document.getElementById(id);
+  if (!el) return;
+  try { getChart(id)?.setOption({ title:{ text:msg, left:'center', top:'center', textStyle:{ color:'#6b8d94', fontSize:12 } }, series:[], xAxis:{show:false}, yAxis:{show:false} }, true); } catch (e) {}
+}
+function showEmptyNotice(view){
+  try { document.getElementById('moduleSummary').innerHTML = ''; } catch (e) {}
+  try { document.getElementById('salesPeriodToggle').innerHTML = ''; } catch (e) {}
+  if (view === 'review') {
+    const rc = document.getElementById('reviewContent');
+    if (rc) rc.innerHTML = '<div class="insight-bar"><span class="insight-title">暂无导入数据：</span>' + EMPTY_IMPORT_HINT + '</div>';
+  }
+  const t = VIEW_EMPTY_TARGETS[view];
+  if (!t) return;
+  t.charts.forEach(function(id){ chartPlaceholder(id, '暂无数据 · 请先导入'); });
+  t.kpis.forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = '<div class="kpi-card blue"><div class="kpi-label">暂无导入数据</div><div class="kpi-value">--</div><div class="kpi-sub">导入后自动显示</div></div>'; });
+  t.tables.forEach(function(id){
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id.endsWith('Thead')) el.innerHTML = '<th>说明</th>';
+    else el.innerHTML = '<tr><td>' + emptyState(EMPTY_IMPORT_HINT) + '</td></tr>';
+  });
+}
+
 function renderView(view){
   renderOverviewBar();
+  // v0.4.5：当前周期无数据（未导入或已清除）→ 统一空态重置，杜绝旧图表/排行残影
+  if (cycleDataEmpty() && view !== 'compare') {
+    document.getElementById('insightBar').innerHTML = '<span class="insight-title">数据中台：</span>暂无导入数据，等待导入后展示分析结果';
+    showEmptyNotice(view);
+    return;
+  }
   // 全局洞察条：销售视图由 renderSalesPeriod 更新；其它视图给模块上下文说明，避免停留「加载中」
   if (view !== 'sales') {
     const ctx = {
@@ -3021,7 +3092,7 @@ function renderView(view){
     document.getElementById('insightBar').innerHTML =
       '<span class="insight-title">' + (ctx[view] || '数据模块') + '：</span>当前模块' +
       (view === 'compare'
-        ? (cycle === '7d' ? '连续导入两期周数据后，对比上一周与本周同层级数据的增减与排行（同周期才可比）' : (APP_DATA.monthlyReport ? '连续导入两月后：顶部大字=最新月、小字=上一月（毛利/费比分开），指标按键切换「净销额/产品规格数/推广费/毛利/费比」按月柱状对比与折线走势' : '数据展示'))
+        ? (cycle === '7d' ? '连续导入两期周数据后，对比上一周与本周同层级数据的增减与排行（同周期才可比）' : (APP_DATA.monthlyReport ? '连续导入两月后：顶部大字=最近导入月、小字=相邻上月（毛利/费比分开），指标按键切换「净销额/产品规格数/推广费/毛利/费比」，柱状每月不同色+环比折线合为一图；导入三个月即对比三个月' : '数据展示'))
         : (view === 'review'
           ? (cycle === '7d' ? '展示导入的周复盘分析（数据 100% 来自周数据表）' : (APP_DATA.monthlyReport ? '展示导入的月度复盘分析与评级' : '数据展示'))
           : '数据展示')) + base;
@@ -3126,7 +3197,7 @@ function __dataSig(){
 // 变化判定优先采用服务端单调递增的 revision（任一报表导入即 +1，能捕获「行数不变但数值变化」的更新），
 // 无版本号时回退到内容指纹。force=true 强制重渲染；仅变化时重渲染以避免轮询闪烁。
 // 构建版本标记：随每次发版更新，用于面板右上角展示 + iframe 缓存失效（与 client data.ts 保持一致）
-const DC_VERSION = '2026-09-14.r21';
+const DC_VERSION = '2026-09-14.r22';
 
 // 右上角数据状态徽标：实时显示「版本 / 接口状态 / 当前周期 / 层级行数 / 服务端版本号 / 刷新时间」，
 // 便于直观确认面板是否加载到最新导入数据（排查「插入不同数据但显示相同」问题时一目了然）。

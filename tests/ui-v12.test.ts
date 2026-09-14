@@ -22,12 +22,32 @@ test('v0.4.0 [对比菜单必现] 数据变化后主动拉取对比并走 showMo
   assert.match(DC, /p\.showModule !== undefined\s*\?\s*p\.showModule/, 'updateCompareMenu 以服务端 showModule 为权威')
 })
 
-test('v0.4.0 [对比视图容器] 趋势 KPI/指标按键/按月柱状/随月折线容器全部声明', () => {
-  for (const id of ['compareTrendKpi', 'compareTrendToggle', 'compareTrendBarRow', 'compareTrendBar', 'compareTrendLineRow', 'compareTrendLine']) {
+test('v0.4.5 [对比视图容器] 趋势 KPI/指标按键/柱线合一图容器齐全，独立折线行已移除', () => {
+  for (const id of ['compareTrendKpi', 'compareTrendToggle', 'compareTrendBarRow', 'compareTrendBar']) {
     assert.ok(DC.includes(`id="${id}"`), `容器 #${id} 必须存在`)
   }
+  assert.ok(!DC.includes('id="compareTrendLineRow"'), '柱线合并后不再保留独立折线行（占满两行布局已废弃）')
+  assert.ok(!DC.includes("getChart('compareTrendLine')"), '独立折线图实例已移除')
   assert.match(DC, /function renderCompareTrend\(\)/, 'renderCompareTrend 存在')
   assert.match(DC, /function compareFrame\(\)\{[\s\S]{0,120}renderCompareTrend\(\);/, 'compareFrame 渲染链包含趋势')
+  assert.match(DC, /\.kpi-grid\.five\{grid-template-columns:repeat\(5,1fr\)\}/, '趋势 KPI 五卡一行网格')
+})
+
+test('v0.4.5 [柱线合一] compareTrendBar 一图含 bar+环比折线双系列、最近导入月锚定高亮', () => {
+  assert.match(DC, /function cmpTrendAnchor\(/, '锚点函数存在（KPI/高亮=最近导入月）')
+  assert.match(DC, /i === anchor\.idx \? '#e67e22'/, '锚定月柱高亮橙')
+  assert.match(DC, /series:\[\s*\{ name:def\.label, type:'bar'[\s\S]*\{ name:'环比增速%', type:'line', yAxisIndex:1/, '一图双系列：柱 + 右轴环比折线')
+})
+
+test('v0.4.5 [空数据治理] renderView 入口统一判空 → 视图全部图表/表格/KPI 占位重置', () => {
+  assert.match(DC, /function cycleDataEmpty\(\)/, '周期空数据判定存在')
+  assert.match(DC, /function showEmptyNotice\(view\)/, '统一空态函数存在')
+  assert.match(DC, /if \(cycleDataEmpty\(\) && view !== 'compare'\) \{[\s\S]{0,220}showEmptyNotice\(view\);\s*return;/, 'renderView 早退重置')
+  for (const id of ['salesPie', 'storeSalesChart', 'productSalesChart', 'ovRefundBar', 'ovCategoryBar', 'ovPromoBar']) {
+    assert.ok(DC.includes(`'${id}'`), `销售视图空态必须覆盖图表 #${id}（清除残留根因）`)
+  }
+  assert.ok(DC.includes("charts:['linkGrade','linkStatus']"), '商品明细图纳入空态清单')
+  assert.ok(DC.includes("'mrOverviewBar'"), '月度复盘图纳入空态清单')
 })
 
 test('v0.4.0 [趋势设计] 每月不同色柱状 + 最新月高亮；KPI 大字=最新月小字=上一月；毛利与费比独立卡', () => {
@@ -55,9 +75,9 @@ test('v0.4.0 [清除不残留] renderSidebarStats 同步顶部日期展示，清
   assert.match(DC, /无月报（含一键清除后）也要走一遍标签\/筛选\/侧栏刷新/, 'loadRealData 清除态仍刷新标签')
 })
 
-test('v0.4.0 [版本戳] data-center 与客户端 iframe URL 同步 r21，绕开 WebView 旧缓存', () => {
-  assert.ok(DC.includes("DC_VERSION = '2026-09-14.r21'"), 'DC_VERSION 已 bump')
-  assert.ok(DATA_TS.includes('?v=20260914-r21'), 'dataCenterUrl 版本参数同步')
+test('v0.4.0 [版本戳] data-center 与客户端 iframe URL 同步 r22，绕开 WebView 旧缓存', () => {
+  assert.ok(DC.includes("DC_VERSION = '2026-09-14.r22'"), 'DC_VERSION 已 bump')
+  assert.ok(DATA_TS.includes('?v=20260914-r22'), 'dataCenterUrl 版本参数同步')
 })
 
 test('v0.4.4 [对比按键交互] 不存在的 compareRender() 调用已根除，层级/指标切换走 frame+refresh', () => {
