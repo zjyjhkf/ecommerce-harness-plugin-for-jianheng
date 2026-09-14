@@ -4,7 +4,8 @@
  * 7 个跨境电商分析技能（来自 .dsh/skills/）横置排列成一行。
  * 两种形态：
  *  - variant="panel"：面板头部下方（ShopDeskPanel / ShopDeskTab），正常尺寸
- *  - variant="dock" ：会话 composer.dock 下方横条，紧凑可横向滚动
+ *  - variant="dock" ：会话输入区下方横条；**固定一行、7 个按键等比收缩**，
+ *    不横向滚动、不出现滚动条（宽度不足时标签用省略号，按键位置始终固定）
  */
 import * as React from 'react'
 import { SKILL_MODULES, type SkillModule } from './skills.ts'

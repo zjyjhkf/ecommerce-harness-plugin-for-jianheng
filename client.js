@@ -1862,6 +1862,7 @@ var CSS = `
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 10px;
+  overflow: hidden;              /* \u4EFB\u4F55\u5F62\u6001\u90FD\u4E0D\u51FA\u6EDA\u52A8\u6761 */
 }
 .esd-skillbar-title {
   display: inline-flex;
@@ -1892,13 +1893,12 @@ var CSS = `
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: background .15s, border-color .15s, color .15s, transform .12s ease;
+  transition: background .15s, border-color .15s, color .15s;
 }
 .esd-skill-btn:hover {
   background: var(--esd-accent-soft, rgba(43,184,163,.10));
   border-color: var(--esd-accent, #2bb8a3);
   color: var(--esd-accent-strong, #16a085);
-  transform: translateY(-1px);
 }
 .esd-skill-btn:active {
   background: var(--esd-accent, #2bb8a3);
@@ -1908,16 +1908,38 @@ var CSS = `
 .esd-skill-icon-svg { display: inline-flex; align-items: center; flex: none; color: var(--esd-accent, #2bb8a3); }
 .esd-skill-label { font-weight: 500; }
 
-/* dock \u5F62\u6001\uFF1A\u7D27\u51D1 + \u53EF\u6A2A\u5411\u6EDA\u52A8\uFF0C\u4E0D\u6491\u7206 composer \u4E0B\u65B9\u6A2A\u6761 */
+/* dock \u5F62\u6001\uFF1A7 \u4E2A\u6309\u952E\u300C\u56FA\u5B9A\u7F51\u683C\u300D\u2014\u2014\u4E0D\u6A2A\u5411\u6EDA\u52A8\u3001\u4E0D\u51FA\u6EDA\u52A8\u6761\u3001\u4E0D\u6ED1\u52A8\u3001\u4E0D\u6D6E\u52A8\u3002
+   \u4EE5\u524D\u662F overflow-x:auto + 4px \u81EA\u7ED8\u6EDA\u52A8\u6761\uFF1A\u4FA7\u680F\u4E00\u6253\u5F00\u538B\u7F29\u4E86\u8F93\u5165\u533A\u5BBD\u5EA6\uFF0C\u5C31\u4F1A\u51FA\u73B0
+   \u6ED1\u52A8\u680F\u3001\u6309\u952E\u8FD8\u80FD\u88AB\u62D6\u7740\u8D70\u3002\u73B0\u5728\u6539\u4E3A\uFF1A
+     \xB7 \u6BCF\u4E2A\u6309\u952E\u7ED9\u8DB3\u6700\u5C0F\u5BBD\u5EA6(88px)\uFF0C\u6807\u7B7E\u6C38\u8FDC\u53EF\u8BFB\uFF0C\u4E0D\u505A"\u7F29\u5230\u53EA\u5269\u56FE\u6807"\uFF1B
+     \xB7 \u4E00\u884C\u653E\u4E0D\u4E0B\u5C31\u6362\u5230\u4E0B\u4E00\u884C(flex-wrap)\uFF0C\u4EFB\u4F55\u5BBD\u5EA6\u4E0B\u90FD\u5B8C\u6574\u53EF\u89C1\uFF1B
+     \xB7 overflow:hidden + \u9690\u85CF\u6EDA\u52A8\u6761\uFF0C\u5F7B\u5E95\u6CA1\u6709\u6A2A\u5411\u6EDA\u52A8\u4E0E\u6ED1\u52A8\u3002 */
 .esd-skillbar-dock {
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow: hidden;              /* \u5173\u952E\uFF1A\u4E0D\u518D\u4EA7\u751F\u6A2A\u5411\u6EDA\u52A8 */
   padding: 4px 6px;
   gap: 6px;
+  scrollbar-width: none;         /* Firefox\uFF1A\u9690\u85CF\u6EDA\u52A8\u6761 */
+  -ms-overflow-style: none;
 }
-.esd-skillbar-dock::-webkit-scrollbar { height: 4px; }
-.esd-skillbar-dock::-webkit-scrollbar-thumb { background: rgba(128,128,128,.25); border-radius: 2px; }
-.esd-skillbar-dock .esd-skill-btn { height: 26px; padding: 0 10px; font-size: 11px; }
+.esd-skillbar-dock::-webkit-scrollbar { width: 0; height: 0; display: none; }
+/* \u8F93\u5165\u533A\u672C\u5C31\u4E0D\u5BBD\uFF0Cdock \u91CC\u628A\u300C\u6280\u80FD\u5206\u6790\u300D\u56DB\u4E2A\u5B57\u8BA9\u7ED9\u6309\u952E\uFF08\u54C1\u724C\u5C0F logo \u4ECD\u4FDD\u7559\u4F5C\u951A\u70B9\uFF09 */
+.esd-skillbar-dock .esd-skillbar-name { display: none; }
+.esd-skillbar-dock .esd-skillbar-title { flex: none; }
+.esd-skillbar-dock .esd-skill-btn {
+  flex: 0 1 auto;
+  min-width: 88px;               /* \u4FDD\u8BC1\u6807\u7B7E\u53EF\u8BFB\uFF0C\u4E0D\u4F1A\u88AB\u538B\u6210\u56FE\u6807 */
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+  justify-content: center;
+}
+.esd-skillbar-dock .esd-skill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* dock \u6280\u80FD\u6761\u968F\u4FA7\u8FB9\u680F\u5F00\u5173\u663E\u9690\uFF1Abody \u6253\u53EF\u9006\u7684 esd-cockpit-open \u6807\u8BB0\uFF08\u7531 cockpit-bus
    syncDockVisibility \u5728\u6253\u5F00\u65F6\u6DFB\u52A0\u3001\u5173\u95ED\u65F6\u79FB\u9664\uFF09\u3002\u6253\u5F00\u4FA7\u8FB9\u680F\u300C\u547C\u51FA\u300D\u6280\u80FD\u6761\uFF0C\u5173\u95ED\u540E

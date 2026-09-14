@@ -784,6 +784,7 @@ const CSS = `
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 10px;
+  overflow: hidden;              /* 任何形态都不出滚动条 */
 }
 .esd-skillbar-title {
   display: inline-flex;
@@ -814,13 +815,12 @@ const CSS = `
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: background .15s, border-color .15s, color .15s, transform .12s ease;
+  transition: background .15s, border-color .15s, color .15s;
 }
 .esd-skill-btn:hover {
   background: var(--esd-accent-soft, rgba(43,184,163,.10));
   border-color: var(--esd-accent, #2bb8a3);
   color: var(--esd-accent-strong, #16a085);
-  transform: translateY(-1px);
 }
 .esd-skill-btn:active {
   background: var(--esd-accent, #2bb8a3);
@@ -830,16 +830,38 @@ const CSS = `
 .esd-skill-icon-svg { display: inline-flex; align-items: center; flex: none; color: var(--esd-accent, #2bb8a3); }
 .esd-skill-label { font-weight: 500; }
 
-/* dock 形态：紧凑 + 可横向滚动，不撑爆 composer 下方横条 */
+/* dock 形态：7 个按键「固定网格」——不横向滚动、不出滚动条、不滑动、不浮动。
+   以前是 overflow-x:auto + 4px 自绘滚动条：侧栏一打开压缩了输入区宽度，就会出现
+   滑动栏、按键还能被拖着走。现在改为：
+     · 每个按键给足最小宽度(88px)，标签永远可读，不做"缩到只剩图标"；
+     · 一行放不下就换到下一行(flex-wrap)，任何宽度下都完整可见；
+     · overflow:hidden + 隐藏滚动条，彻底没有横向滚动与滑动。 */
 .esd-skillbar-dock {
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow: hidden;              /* 关键：不再产生横向滚动 */
   padding: 4px 6px;
   gap: 6px;
+  scrollbar-width: none;         /* Firefox：隐藏滚动条 */
+  -ms-overflow-style: none;
 }
-.esd-skillbar-dock::-webkit-scrollbar { height: 4px; }
-.esd-skillbar-dock::-webkit-scrollbar-thumb { background: rgba(128,128,128,.25); border-radius: 2px; }
-.esd-skillbar-dock .esd-skill-btn { height: 26px; padding: 0 10px; font-size: 11px; }
+.esd-skillbar-dock::-webkit-scrollbar { width: 0; height: 0; display: none; }
+/* 输入区本就不宽，dock 里把「技能分析」四个字让给按键（品牌小 logo 仍保留作锚点） */
+.esd-skillbar-dock .esd-skillbar-name { display: none; }
+.esd-skillbar-dock .esd-skillbar-title { flex: none; }
+.esd-skillbar-dock .esd-skill-btn {
+  flex: 0 1 auto;
+  min-width: 88px;               /* 保证标签可读，不会被压成图标 */
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+  justify-content: center;
+}
+.esd-skillbar-dock .esd-skill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* dock 技能条随侧边栏开关显隐：body 打可逆的 esd-cockpit-open 标记（由 cockpit-bus
    syncDockVisibility 在打开时添加、关闭时移除）。打开侧边栏「呼出」技能条，关闭后
