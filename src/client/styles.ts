@@ -887,96 +887,220 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ── 文件交换条（上传/列表/下载） ── */
-.esd-files {
+
+/* ────────────────── 「文件处理」整页（左：导入 / 右：导出） ────────────────── */
+
+/* 整页容器：overlay 形态盖住整个应用；page 形态填满会话内容区 */
+.esd-fd { pointer-events: auto; }
+.esd-fd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 3vh, 40px) clamp(12px, 3vw, 56px);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 82%, transparent);
+  backdrop-filter: blur(2px);
+}
+.esd-fd-page { width: 100%; height: 100%; padding: 12px; box-sizing: border-box; }
+
+.esd-fd-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.20));
-  background: var(--dsw-alias-bg-base, #ffffff);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.22));
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-base, #fff);
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0,0,0,.18));
 }
-.esd-files-head {
+.esd-fd-page .esd-fd-card { box-shadow: none; border-radius: 12px; }
+
+/* ── 头部 ── */
+.esd-fd-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.18));
+  background: linear-gradient(180deg, var(--esd-accent-soft, rgba(43,184,163,.12)), transparent);
 }
-.esd-files-upload {
+.esd-fd-title { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.esd-fd-title-text { letter-spacing: .3px; }
+.esd-fd-sub { font-size: 12px; color: var(--dsw-alias-label-secondary, #666); }
+.esd-fd-head-actions { margin-left: auto; display: inline-flex; gap: 8px; }
+
+/* ── 按钮（品牌描边小按钮，图标走 SecIcon） ── */
+.esd-fd-btn,
+.esd-fd-act {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 5px 10px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.28));
   border-radius: 8px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.esd-files-tip {
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary, #666);
+.esd-fd-btn:hover,
+.esd-fd-act:hover {
+  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+  border-color: var(--esd-accent, #2bb8a3);
 }
-.esd-files-group-title {
+.esd-fd-btn:disabled,
+.esd-fd-act:disabled { opacity: .5; cursor: default; }
+.esd-fd-act { padding: 3px 8px; }
+.esd-fd-act-danger { color: var(--dsw-alias-state-error-primary, #e5484d); }
+.esd-fd-act-danger:hover { background: rgba(229,72,77,.10); border-color: currentColor; }
+
+/* ── 主体两栏 ── */
+.esd-fd-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow: auto;
+}
+@media (max-width: 820px) { .esd-fd-body { grid-template-columns: minmax(0, 1fr); } }
+
+.esd-fd-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.18));
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.04));
+}
+.esd-fd-col-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 12px;
   color: var(--dsw-alias-label-primary, #1c1c1e);
 }
-.esd-files-count {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+.esd-fd-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.14));
   color: var(--esd-accent-strong, #16a085);
   font-size: 11px;
   text-align: center;
 }
-.esd-files-empty {
-  font-size: 12px;
-  color: var(--dsw-alias-label-tertiary, #999);
-  padding: 4px 0;
-}
-.esd-files-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+
+/* ── 拖放区 ── */
+.esd-fd-drop {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 132px;
+  padding: 16px;
+  border: 2px dashed var(--esd-accent, #2bb8a3);
+  border-radius: 12px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.08));
+  color: var(--esd-accent-strong, #16a085);
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s ease, transform .12s ease, border-color .15s ease;
 }
-.esd-files-item {
+.esd-fd-drop:hover { background: var(--esd-accent-soft-2, rgba(43,184,163,.18)); }
+.esd-fd-drop-over {
+  background: var(--esd-accent-soft-2, rgba(43,184,163,.22));
+  border-style: solid;
+  transform: scale(1.01);
+}
+.esd-fd-drop-main { font-size: 13px; font-weight: 600; }
+.esd-fd-drop-sub { font-size: 11px; color: var(--dsw-alias-label-secondary, #666); }
+
+.esd-fd-tip {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--esd-accent, #2bb8a3);
+  border-radius: 10px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.10));
+  color: var(--dsw-alias-label-primary, #1c1c1e);
   font-size: 12px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.06));
+  line-height: 1.5;
 }
-.esd-files-name {
+
+/* ── 文件列表 ── */
+.esd-fd-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
+}
+.esd-fd-list-hint { font-weight: 400; color: var(--dsw-alias-label-tertiary, #999); font-size: 11px; }
+.esd-fd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; overflow: auto; }
+.esd-fd-empty {
+  padding: 14px 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-tertiary, #999);
+  font-size: 12px;
+  text-align: center;
+}
+.esd-fd-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.16));
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 12px;
+}
+.esd-fd-item[draggable="true"] { cursor: grab; }
+.esd-fd-item[draggable="true"]:active { cursor: grabbing; }
+.esd-fd-item:hover { border-color: var(--esd-accent, #2bb8a3); }
+.esd-fd-item-out { border-left: 3px solid var(--esd-accent, #2bb8a3); }
+.esd-fd-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
 }
-.esd-files-size {
-  color: var(--dsw-alias-label-secondary, #666);
-  white-space: nowrap;
-}
-.esd-files-act {
+.esd-fd-meta { color: var(--dsw-alias-label-tertiary, #999); font-size: 11px; white-space: nowrap; }
+.esd-fd-path { font-size: 11px; color: var(--dsw-alias-label-tertiary, #999); }
+
+/* ── 状态条 ── */
+.esd-fd-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 16px 0;
+  padding: 9px 12px;
+  border-radius: 9px;
   font-size: 12px;
-  color: var(--esd-accent-strong, #16a085);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
 }
-.esd-files-del {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--dsw-alias-state-error-primary, #e5484d);
-}
-.esd-files-del:disabled { opacity: .5; cursor: default; }
+.esd-fd-msg-ok { background: var(--esd-accent-soft, rgba(43,184,163,.14)); color: var(--esd-accent-strong, #16a085); }
+.esd-fd-msg-bad { background: rgba(229,72,77,.12); color: var(--dsw-alias-state-error-primary, #e5484d); }
+.esd-fd-msg > span { flex: 1; min-width: 0; }
+
+
 `;
 
 let injected = false

@@ -45,7 +45,7 @@ module.exports = __toCommonJS(index_exports);
 var React5 = __toESM(require("react"), 1);
 
 // src/client/ShopDeskPanel.tsx
-var React3 = __toESM(require("react"), 1);
+var React2 = __toESM(require("react"), 1);
 
 // src/client/data.ts
 function resolveApiBase() {
@@ -185,9 +185,9 @@ function markOpened() {
     }
   }
 }
-function syncDockVisibility(open) {
+function syncDockVisibility(open2) {
   if (typeof document === "undefined") return;
-  document.body?.classList.toggle("esd-cockpit-open", open);
+  document.body?.classList.toggle("esd-cockpit-open", open2);
 }
 function toggleCockpit() {
   cockpitOpen = !cockpitOpen;
@@ -205,15 +205,15 @@ function subscribeCockpit(fn) {
     subscribers.delete(fn);
   };
 }
-function notify(open) {
+function notify(open2) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent("ecommerce:cockpit-toggle", { detail: { open } })
+      new CustomEvent("ecommerce:cockpit-toggle", { detail: { open: open2 } })
     );
   }
   for (const fn of subscribers) {
     try {
-      fn(open);
+      fn(open2);
     } catch {
     }
   }
@@ -554,6 +554,80 @@ function BrandMark(props) {
     }
   );
 }
+function SecIconPath(name) {
+  switch (name) {
+    case "overview":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M4 20 V12" }), /* @__PURE__ */ React.createElement("path", { d: "M10 20 V6" }), /* @__PURE__ */ React.createElement("path", { d: "M16 20 V14" }), /* @__PURE__ */ React.createElement("path", { d: "M22 20 V9" }));
+    case "todo":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("circle", { cx: "13", cy: "13", r: "8" }), /* @__PURE__ */ React.createElement("path", { d: "M13 9 V13 L16 15" }));
+    case "category":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "4", width: "7", height: "7", rx: "1.4" }), /* @__PURE__ */ React.createElement("rect", { x: "15", y: "4", width: "7", height: "7", rx: "1.4" }), /* @__PURE__ */ React.createElement("rect", { x: "4", y: "15", width: "7", height: "7", rx: "1.4" }), /* @__PURE__ */ React.createElement("rect", { x: "15", y: "15", width: "7", height: "7", rx: "1.4" }));
+    case "top":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("circle", { cx: "13", cy: "10", r: "5" }), /* @__PURE__ */ React.createElement("path", { d: "M13 15 L15 21 L13 19 L11 21 Z" }));
+    case "lowstock":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M13 3 L24 22 H2 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M13 10 V15" }), /* @__PURE__ */ React.createElement("path", { d: "M13 18.5 V19" }));
+    case "actions":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M5 7 H21" }), /* @__PURE__ */ React.createElement("path", { d: "M5 13 H21" }), /* @__PURE__ */ React.createElement("path", { d: "M5 19 H15" }));
+    case "brief":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M7 3 H18 L24 9 V23 H7 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M18 3 V9 H24" }), /* @__PURE__ */ React.createElement("path", { d: "M10 13 H21" }), /* @__PURE__ */ React.createElement("path", { d: "M10 17 H21" }));
+    case "mode":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M13 3 V8" }), /* @__PURE__ */ React.createElement("path", { d: "M13 18 V23" }), /* @__PURE__ */ React.createElement("path", { d: "M3 13 H8" }), /* @__PURE__ */ React.createElement("path", { d: "M18 13 H23" }), /* @__PURE__ */ React.createElement("path", { d: "M6 6 L9.5 9.5" }), /* @__PURE__ */ React.createElement("path", { d: "M16.5 16.5 L20 20" }), /* @__PURE__ */ React.createElement("path", { d: "M20 6 L16.5 9.5" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 16.5 L6 20" }));
+    case "product":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M13 3 L22 8 V18 L13 23 L4 18 V8 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M4 8 L13 13 L22 8" }), /* @__PURE__ */ React.createElement("path", { d: "M13 13 V23" }));
+    /* ── 文件处理页：上传（箭头入托盘） ── */
+    case "upload":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M13 17.5 V4.5" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 9.3 L13 4.5 L17.8 9.3" }), /* @__PURE__ */ React.createElement("path", { d: "M4.5 15.5 V19.5 A2 2 0 0 0 6.5 21.5 H19.5 A2 2 0 0 0 21.5 19.5 V15.5" }));
+    /* ── 下载（箭头出托盘） ── */
+    case "download":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M13 4.5 V17.5" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 12.7 L13 17.5 L17.8 12.7" }), /* @__PURE__ */ React.createElement("path", { d: "M4.5 15.5 V19.5 A2 2 0 0 0 6.5 21.5 H19.5 A2 2 0 0 0 21.5 19.5 V15.5" }));
+    /* ── 刷新（环形箭头） ── */
+    case "refresh":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M21 13 A8 8 0 1 1 18.4 7.2" }), /* @__PURE__ */ React.createElement("path", { d: "M21.5 3.5 V8.2 H16.8" }));
+    /* ── 删除（垃圾桶） ── */
+    case "trash":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M5 7.5 H21" }), /* @__PURE__ */ React.createElement("path", { d: "M10 7.5 V5.2 A1.2 1.2 0 0 1 11.2 4 H14.8 A1.2 1.2 0 0 1 16 5.2 V7.5" }), /* @__PURE__ */ React.createElement("path", { d: "M6.6 7.5 L7.7 20.2 A1.6 1.6 0 0 0 9.3 21.7 H16.7 A1.6 1.6 0 0 0 18.3 20.2 L19.4 7.5" }), /* @__PURE__ */ React.createElement("path", { d: "M11 11.5 V18" }), /* @__PURE__ */ React.createElement("path", { d: "M15 11.5 V18" }));
+    /* ── 文件（单页折角） ── */
+    case "file":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M6.5 3.5 H15 L20 8.5 V22.5 H6.5 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M15 3.5 V8.5 H20" }), /* @__PURE__ */ React.createElement("path", { d: "M10 13 H17" }), /* @__PURE__ */ React.createElement("path", { d: "M10 17 H17" }));
+    /* ── 文件夹 ── */
+    case "folder":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M3.5 7.5 A1.6 1.6 0 0 1 5.1 5.9 H10.2 L12.4 8.6 H20.9 A1.6 1.6 0 0 1 22.5 10.2 V19.6 A1.6 1.6 0 0 1 20.9 21.2 H5.1 A1.6 1.6 0 0 1 3.5 19.6 Z" }));
+    /* ── 收件箱（托盘 + 向下箭头） ── */
+    case "inbox":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M3.5 14.5 H8.4 L9.8 17 H16.2 L17.6 14.5 H22.5" }), /* @__PURE__ */ React.createElement("path", { d: "M5.4 14.5 L7.6 5.4 A1.6 1.6 0 0 1 9.2 4.2 H16.8 A1.6 1.6 0 0 1 18.4 5.4 L20.6 14.5 V19.6 A1.6 1.6 0 0 1 19 21.2 H7 A1.6 1.6 0 0 1 5.4 19.6 Z" }));
+    /* ── 结果箱（托盘 + 向上箭头） ── */
+    case "outbox":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M3.5 14.5 H8.4 L9.8 17 H16.2 L17.6 14.5 H22.5" }), /* @__PURE__ */ React.createElement("path", { d: "M5.4 14.5 L7.6 5.4 A1.6 1.6 0 0 1 9.2 4.2 H16.8 A1.6 1.6 0 0 1 18.4 5.4 L20.6 14.5 V19.6 A1.6 1.6 0 0 1 19 21.2 H7 A1.6 1.6 0 0 1 5.4 19.6 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M13 12.6 V6.4" }), /* @__PURE__ */ React.createElement("path", { d: "M10.4 9 L13 6.4 L15.6 9" }));
+    /* ── 拖出到本地（方框 + 外指箭头） ── */
+    case "dragexport":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M14.5 4.5 H6.4 A1.9 1.9 0 0 0 4.5 6.4 V19.6 A1.9 1.9 0 0 0 6.4 21.5 H19.6 A1.9 1.9 0 0 0 21.5 19.6 V11.5" }), /* @__PURE__ */ React.createElement("path", { d: "M15.5 3.5 H22.5 V10.5" }), /* @__PURE__ */ React.createElement("path", { d: "M22.5 3.5 L13.4 12.6" }));
+    /* ── 处理（齿轮） ── */
+    case "process":
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("circle", { cx: "13", cy: "13", r: "3.4" }), /* @__PURE__ */ React.createElement("path", { d: "M13 3.4 V6.2 M13 19.8 V22.6 M22.6 13 H19.8 M6.2 13 H3.4" }), /* @__PURE__ */ React.createElement("path", { d: "M19.8 6.2 L17.8 8.2 M8.2 17.8 L6.2 19.8 M19.8 19.8 L17.8 17.8 M8.2 8.2 L6.2 6.2" }));
+    default:
+      return /* @__PURE__ */ React.createElement("circle", { cx: "13", cy: "13", r: "8" });
+  }
+}
+function SecIcon(props) {
+  const size = props.size ?? 14;
+  return /* @__PURE__ */ React.createElement(
+    "svg",
+    {
+      className: "esd-sec-icon-svg",
+      viewBox: "0 0 26 26",
+      width: size,
+      height: size,
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": "true",
+      focusable: "false"
+    },
+    /* @__PURE__ */ React.createElement(SecIconPath, { name: props.name })
+  );
+}
 function SkillIconPath(name) {
   switch (name) {
     case "traffic":
@@ -594,105 +668,24 @@ function SkillIcon(props) {
     /* @__PURE__ */ React.createElement(SkillIconPath, { name: props.name })
   );
 }
-
-// src/client/FileExchange.tsx
-var React2 = __toESM(require("react"), 1);
-function fmtSize(n) {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / 1024 / 1024).toFixed(2) + " MB";
-}
-function FileList({ title, entries, dir, busy, onDelete }) {
-  return /* @__PURE__ */ React2.createElement("div", { className: "esd-files-group" }, /* @__PURE__ */ React2.createElement("div", { className: "esd-files-group-title" }, title, /* @__PURE__ */ React2.createElement("span", { className: "esd-files-count" }, entries.length)), entries.length === 0 ? /* @__PURE__ */ React2.createElement("div", { className: "esd-files-empty" }, dir === "inbox" ? "\u6682\u65E0\u4E0A\u4F20\u6587\u4EF6" : "\u6682\u65E0\u5904\u7406\u7ED3\u679C") : /* @__PURE__ */ React2.createElement("ul", { className: "esd-files-list" }, entries.map((f) => /* @__PURE__ */ React2.createElement("li", { key: dir + ":" + f.name, className: "esd-files-item" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-files-name", title: f.name }, f.name), /* @__PURE__ */ React2.createElement("span", { className: "esd-files-size" }, fmtSize(f.size)), /* @__PURE__ */ React2.createElement(
-    "a",
+function FileMark(props) {
+  const size = props.size ?? 16;
+  return /* @__PURE__ */ React.createElement(
+    "svg",
     {
-      className: "esd-files-act",
-      href: downloadFileUrl(dir, f.name),
-      download: f.name,
-      title: "\u4E0B\u8F7D\u5230\u672C\u673A"
+      className: props.className,
+      viewBox: "0 0 32 32",
+      width: size,
+      height: size,
+      "aria-hidden": "true",
+      focusable: "false",
+      style: { display: "block" }
     },
-    "\u4E0B\u8F7D"
-  ), /* @__PURE__ */ React2.createElement(
-    "button",
-    {
-      type: "button",
-      className: "esd-files-act esd-files-del",
-      title: "\u5220\u9664",
-      disabled: busy,
-      onClick: () => onDelete(dir, f.name)
-    },
-    "\u5220\u9664"
-  )))));
-}
-function FileExchange() {
-  const [inbox, setInbox] = React2.useState([]);
-  const [outbox, setOutbox] = React2.useState([]);
-  const [busy, setBusy] = React2.useState(false);
-  const [msg, setMsg] = React2.useState(null);
-  const inputRef = React2.useRef(null);
-  const mountedRef = React2.useRef(true);
-  const refresh = React2.useCallback(async () => {
-    try {
-      const [i, o] = await Promise.all([listFiles("inbox"), listFiles("outbox")]);
-      if (mountedRef.current) {
-        setInbox(i);
-        setOutbox(o);
-      }
-    } catch (err) {
-      if (mountedRef.current) {
-        setMsg({ ok: false, text: "\u5237\u65B0\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
-      }
-    }
-  }, []);
-  React2.useEffect(() => {
-    mountedRef.current = true;
-    void refresh();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [refresh]);
-  const onPick = React2.useCallback(
-    async (event) => {
-      const files = Array.from(event.target.files ?? []);
-      event.target.value = "";
-      if (files.length === 0) return;
-      setBusy(true);
-      setMsg(null);
-      let done = 0;
-      try {
-        for (const f of files) {
-          await uploadFile(f);
-          done++;
-        }
-        if (mountedRef.current) setMsg({ ok: true, text: `\u5DF2\u4E0A\u4F20 ${done} \u4E2A\u6587\u4EF6\u5230\u6536\u4EF6\u7BB1,\u53BB\u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406\u5373\u53EF` });
-        await refresh();
-      } catch (err) {
-        if (mountedRef.current) {
-          setMsg({ ok: false, text: "\u4E0A\u4F20\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
-        }
-      } finally {
-        if (mountedRef.current) setBusy(false);
-      }
-    },
-    [refresh]
+    /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("linearGradient", { id: "esd-filemark-g", x1: "0", y1: "0", x2: "1", y2: "1" }, /* @__PURE__ */ React.createElement("stop", { offset: "0%", stopColor: "#34c9b0" }), /* @__PURE__ */ React.createElement("stop", { offset: "100%", stopColor: "#1aa085" }))),
+    /* @__PURE__ */ React.createElement("circle", { cx: "16", cy: "16", r: "16", fill: "url(#esd-filemark-g)" }),
+    /* @__PURE__ */ React.createElement("g", { fill: "none", stroke: "#ffffff", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M11 8.5 H17.6 L20.4 11.3 V19.4 H11 Z" }), /* @__PURE__ */ React.createElement("path", { d: "M17.6 8.5 V11.3 H20.4" }), /* @__PURE__ */ React.createElement("path", { d: "M21 15.2 H14.4 L11.6 18 V23.5 H21 Z", opacity: "0.95" })),
+    /* @__PURE__ */ React.createElement("g", { fill: "none", stroke: "#ffffff", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M8.2 14.6 V20.6" }), /* @__PURE__ */ React.createElement("path", { d: "M6.4 18.8 L8.2 20.6 L10 18.8" }))
   );
-  const onDelete = React2.useCallback(
-    async (dir, name) => {
-      setBusy(true);
-      setMsg(null);
-      try {
-        await deleteFile(dir, name);
-        if (mountedRef.current) setMsg({ ok: true, text: `\u5DF2\u5220\u9664 ${name}` });
-        await refresh();
-      } catch (err) {
-        if (mountedRef.current) setMsg({ ok: false, text: "\u5220\u9664\u5931\u8D25:" + (err instanceof Error ? err.message : String(err)) });
-      } finally {
-        if (mountedRef.current) setBusy(false);
-      }
-    },
-    [refresh]
-  );
-  return /* @__PURE__ */ React2.createElement("div", { className: "esd-files" }, /* @__PURE__ */ React2.createElement("div", { className: "esd-files-head" }, /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn esd-files-upload", disabled: busy, onClick: () => inputRef.current?.click() }, busy ? "\u23F3" : "\u{1F4E4}", " \u4E0A\u4F20\u6587\u4EF6"), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn", disabled: busy, onClick: () => void refresh(), title: "\u5237\u65B0" }, "\u{1F504}"), /* @__PURE__ */ React2.createElement("span", { className: "esd-files-tip" }, "\u4E0A\u4F20\u5230\u6536\u4EF6\u7BB1 \u2192 \u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406 \u2192 \u7ED3\u679C\u4ECE\u300C\u5904\u7406\u7ED3\u679C\u300D\u4E0B\u8F7D"), /* @__PURE__ */ React2.createElement("input", { ref: inputRef, type: "file", multiple: true, style: { display: "none" }, onChange: (e) => void onPick(e) })), msg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (msg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, msg.text), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => setMsg(null) }, "\u5173\u95ED")) : null, /* @__PURE__ */ React2.createElement(FileList, { title: "\u6536\u4EF6\u7BB1 inbox", entries: inbox, dir: "inbox", busy, onDelete: (d, n) => void onDelete(d, n) }), /* @__PURE__ */ React2.createElement(FileList, { title: "\u5904\u7406\u7ED3\u679C outbox", entries: outbox, dir: "outbox", busy, onDelete: (d, n) => void onDelete(d, n) }));
 }
 
 // src/client/skills.ts
@@ -758,7 +751,7 @@ function valuePromptOf(label, value, note) {
 }
 
 // src/client/ShopDeskPanel.tsx
-var Boundary = class extends React3.Component {
+var Boundary = class extends React2.Component {
   constructor() {
     super(...arguments);
     __publicField(this, "state", { error: null });
@@ -768,40 +761,40 @@ var Boundary = class extends React3.Component {
   }
   render() {
     if (this.state.error !== null) {
-      return /* @__PURE__ */ React3.createElement("div", { className: "esd-boundary-error" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0\u6E32\u67D3\u51FA\u9519\uFF1A", String(this.state.error.message ?? this.state.error));
+      return /* @__PURE__ */ React2.createElement("div", { className: "esd-boundary-error" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0\u6E32\u67D3\u51FA\u9519\uFF1A", String(this.state.error.message ?? this.state.error));
     }
     return this.props.children;
   }
 };
 var NARROW_QUERY = "(max-width: 900px)";
 function useShopDeskData() {
-  const [, force] = React3.useState(0);
-  React3.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
-  const open = isCockpitOpen();
-  const setOpen = React3.useCallback((next) => {
+  const [, force] = React2.useState(0);
+  React2.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
+  const open2 = isCockpitOpen();
+  const setOpen = React2.useCallback((next) => {
     if (next !== isCockpitOpen()) toggleCockpit();
   }, []);
-  const [importing, setImporting] = React3.useState(false);
-  const [importMsg, setImportMsg] = React3.useState(null);
-  const fileInputRef = React3.useRef(null);
-  const dcIframeRef = React3.useRef(null);
-  const notifyDcRefresh = React3.useCallback(() => {
+  const [importing, setImporting] = React2.useState(false);
+  const [importMsg, setImportMsg] = React2.useState(null);
+  const fileInputRef = React2.useRef(null);
+  const dcIframeRef = React2.useRef(null);
+  const notifyDcRefresh = React2.useCallback(() => {
     try {
       dcIframeRef.current?.contentWindow?.postMessage({ type: "ecommerce:refresh" }, "*");
     } catch {
     }
   }, []);
-  const [, forceFs] = React3.useState(0);
-  React3.useEffect(() => subscribeFullscreen(() => forceFs((n) => n + 1)), []);
+  const [, forceFs] = React2.useState(0);
+  React2.useEffect(() => subscribeFullscreen(() => forceFs((n) => n + 1)), []);
   const fullscreen2 = isFullscreen();
-  const mountedRef = React3.useRef(true);
-  React3.useEffect(() => {
+  const mountedRef = React2.useRef(true);
+  React2.useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
-  React3.useEffect(() => {
+  React2.useEffect(() => {
     const mq = window.matchMedia(NARROW_QUERY);
     const update = () => {
       if (mq.matches) setOpen(false);
@@ -812,10 +805,10 @@ function useShopDeskData() {
       mq.removeEventListener("change", update);
     };
   }, [setOpen]);
-  const openFilePicker = React3.useCallback(() => {
+  const openFilePicker = React2.useCallback(() => {
     fileInputRef.current?.click();
   }, []);
-  const handleFileChange = React3.useCallback(
+  const handleFileChange = React2.useCallback(
     async (event) => {
       const files = Array.from(event.target.files ?? []);
       event.target.value = "";
@@ -842,7 +835,7 @@ function useShopDeskData() {
     },
     [notifyDcRefresh]
   );
-  const doClearData = React3.useCallback(async () => {
+  const doClearData = React2.useCallback(async () => {
     const ok = window.confirm(
       "\u786E\u5B9A\u6E05\u9664\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF1F\n\u5546\u54C1\u3001\u8BA2\u5355\u3001\u6708\u5EA6/\u5468\u5EA6\u590D\u76D8\u53CA\u6570\u636E\u5BF9\u6BD4\u5F52\u6863\u5C06\u5168\u90E8\u6E05\u7A7A\uFF0C\u9762\u677F\u6062\u590D\u7A7A\u767D\u3002"
     );
@@ -867,7 +860,7 @@ function useShopDeskData() {
       if (mountedRef.current) setImporting(false);
     }
   }, [notifyDcRefresh]);
-  React3.useEffect(() => {
+  React2.useEffect(() => {
     const onMessage = (event) => {
       const data = event.data;
       if (data === null || typeof data !== "object") return;
@@ -900,18 +893,14 @@ function useShopDeskData() {
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
-  const doExport = React3.useCallback((type, scope) => {
+  const doExport = React2.useCallback((type, scope) => {
     exportData(type, scope);
   }, []);
-  const toggleFs = React3.useCallback(() => {
+  const toggleFs = React2.useCallback(() => {
     toggleFullscreen();
   }, []);
-  const [showFiles, setShowFiles] = React3.useState(false);
-  const toggleFiles = React3.useCallback(() => {
-    setShowFiles((v) => !v);
-  }, []);
   return {
-    open,
+    open: open2,
     importing,
     importMsg,
     setImportMsg,
@@ -923,14 +912,12 @@ function useShopDeskData() {
     fullscreen: fullscreen2,
     toggleFullscreen: toggleFs,
     doExport,
-    doClearData,
-    showFiles,
-    toggleFiles
+    doClearData
   };
 }
 function ShopDeskTab() {
   const d = useShopDeskData();
-  return /* @__PURE__ */ React3.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React3.createElement(Boundary, null, /* @__PURE__ */ React3.createElement("div", { className: "esd-tab-root" + (d.fullscreen ? " esd-panel-fullscreen" : "") }, /* @__PURE__ */ React3.createElement("div", { className: "esd-tab-toolbar" }, /* @__PURE__ */ React3.createElement("span", { className: "esd-tab-title" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 22 }), /* @__PURE__ */ React3.createElement("span", { className: "esd-tab-title-text" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0")), /* @__PURE__ */ React3.createElement(
+  return /* @__PURE__ */ React2.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React2.createElement(Boundary, null, /* @__PURE__ */ React2.createElement("div", { className: "esd-tab-root" + (d.fullscreen ? " esd-panel-fullscreen" : "") }, /* @__PURE__ */ React2.createElement("div", { className: "esd-tab-toolbar" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-tab-title" }, /* @__PURE__ */ React2.createElement(BrandBadge, { size: 22 }), /* @__PURE__ */ React2.createElement("span", { className: "esd-tab-title-text" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0")), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -940,7 +927,7 @@ function ShopDeskTab() {
       onClick: d.toggleFullscreen
     },
     d.fullscreen ? "\u{1F5D7}" : "\u26F6"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -950,7 +937,7 @@ function ShopDeskTab() {
       onClick: () => d.doExport("csv", "all")
     },
     "\u2B07"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -961,7 +948,7 @@ function ShopDeskTab() {
       disabled: d.importing
     },
     d.importing ? "\u23F3" : "\u{1F4E5}"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -971,7 +958,7 @@ function ShopDeskTab() {
       onClick: d.refreshDataCenter
     },
     "\u{1F504}"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -982,17 +969,7 @@ function ShopDeskTab() {
       disabled: d.importing
     },
     "\u{1F9F9}"
-  ), /* @__PURE__ */ React3.createElement(
-    "button",
-    {
-      type: "button",
-      className: "esd-icon-btn",
-      title: "\u6587\u4EF6\u4EA4\u6362\uFF1A\u4E0A\u4F20\u6587\u4EF6\u4EA4\u7ED9 AI \u5904\u7406\uFF0C\u4E0B\u8F7D\u5904\u7406\u7ED3\u679C",
-      "aria-label": "\u6587\u4EF6\u4EA4\u6362",
-      onClick: d.toggleFiles
-    },
-    "\u{1F4C2}"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "input",
     {
       ref: d.fileInputRef,
@@ -1002,7 +979,7 @@ function ShopDeskTab() {
       style: { display: "none" },
       onChange: (e) => void d.handleFileChange(e)
     }
-  )), d.importMsg !== null ? /* @__PURE__ */ React3.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React3.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => d.setImportMsg(null) }, "\u5173\u95ED")) : null, d.showFiles ? /* @__PURE__ */ React3.createElement(FileExchange, null) : null, /* @__PURE__ */ React3.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React3.createElement(
+  )), d.importMsg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-refresh-btn", onClick: () => d.setImportMsg(null) }, "\u5173\u95ED")) : null, /* @__PURE__ */ React2.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React2.createElement(
     "iframe",
     {
       ref: d.dcIframeRef,
@@ -1011,11 +988,11 @@ function ShopDeskTab() {
       title: "\u7535\u5546\u6570\u636E\u4E2D\u53F0",
       loading: "eager"
     }
-  )), /* @__PURE__ */ React3.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React3.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09")))));
+  )), /* @__PURE__ */ React2.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React2.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09")))));
 }
 function ShopDeskPanel() {
   const d = useShopDeskData();
-  return /* @__PURE__ */ React3.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React3.createElement(Boundary, null, d.open ? /* @__PURE__ */ React3.createElement("aside", { className: "esd-panel" + (d.fullscreen ? " esd-panel-fullscreen" : ""), role: "complementary", "aria-label": "\u7535\u5546\u6570\u636E\u4E2D\u53F0" }, /* @__PURE__ */ React3.createElement("header", { className: "esd-header" }, /* @__PURE__ */ React3.createElement("span", { className: "esd-header-logo" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 24 })), /* @__PURE__ */ React3.createElement("h3", { className: "esd-header-title" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0"), /* @__PURE__ */ React3.createElement(
+  return /* @__PURE__ */ React2.createElement("div", { className: "esd-root" }, /* @__PURE__ */ React2.createElement(Boundary, null, d.open ? /* @__PURE__ */ React2.createElement("aside", { className: "esd-panel" + (d.fullscreen ? " esd-panel-fullscreen" : ""), role: "complementary", "aria-label": "\u7535\u5546\u6570\u636E\u4E2D\u53F0" }, /* @__PURE__ */ React2.createElement("header", { className: "esd-header" }, /* @__PURE__ */ React2.createElement("span", { className: "esd-header-logo" }, /* @__PURE__ */ React2.createElement(BrandBadge, { size: 24 })), /* @__PURE__ */ React2.createElement("h3", { className: "esd-header-title" }, "\u7535\u5546\u6570\u636E\u4E2D\u53F0"), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -1025,7 +1002,7 @@ function ShopDeskPanel() {
       onClick: d.toggleFullscreen
     },
     d.fullscreen ? "\u{1F5D7}" : "\u26F6"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -1035,7 +1012,7 @@ function ShopDeskPanel() {
       onClick: () => d.doExport("csv", "all")
     },
     "\u2B07"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -1046,7 +1023,7 @@ function ShopDeskPanel() {
       disabled: d.importing
     },
     d.importing ? "\u23F3" : "\u{1F4E5}"
-  ), /* @__PURE__ */ React3.createElement("button", { type: "button", className: "esd-icon-btn", title: "\u5237\u65B0\u6570\u636E", "aria-label": "\u5237\u65B0\u6570\u636E", onClick: d.refreshDataCenter }, "\u{1F504}"), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement("button", { type: "button", className: "esd-icon-btn", title: "\u5237\u65B0\u6570\u636E", "aria-label": "\u5237\u65B0\u6570\u636E", onClick: d.refreshDataCenter }, "\u{1F504}"), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -1057,17 +1034,7 @@ function ShopDeskPanel() {
       disabled: d.importing
     },
     "\u{1F9F9}"
-  ), /* @__PURE__ */ React3.createElement(
-    "button",
-    {
-      type: "button",
-      className: "esd-icon-btn",
-      title: "\u6587\u4EF6\u4EA4\u6362\uFF1A\u4E0A\u4F20\u6587\u4EF6\u4EA4\u7ED9 AI \u5904\u7406\uFF0C\u4E0B\u8F7D\u5904\u7406\u7ED3\u679C",
-      "aria-label": "\u6587\u4EF6\u4EA4\u6362",
-      onClick: d.toggleFiles
-    },
-    "\u{1F4C2}"
-  ), /* @__PURE__ */ React3.createElement(
+  ), /* @__PURE__ */ React2.createElement(
     "input",
     {
       ref: d.fileInputRef,
@@ -1077,7 +1044,7 @@ function ShopDeskPanel() {
       style: { display: "none" },
       onChange: (e) => void d.handleFileChange(e)
     }
-  )), d.importMsg !== null ? /* @__PURE__ */ React3.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React3.createElement(
+  )), d.importMsg !== null ? /* @__PURE__ */ React2.createElement("div", { className: "esd-import " + (d.importMsg.ok ? "esd-import-ok" : "esd-import-bad") }, /* @__PURE__ */ React2.createElement("span", { className: "esd-import-msg" }, d.importMsg.text), /* @__PURE__ */ React2.createElement(
     "button",
     {
       type: "button",
@@ -1085,7 +1052,7 @@ function ShopDeskPanel() {
       onClick: () => d.setImportMsg(null)
     },
     "\u5173\u95ED"
-  )) : null, d.showFiles ? /* @__PURE__ */ React3.createElement(FileExchange, null) : null, /* @__PURE__ */ React3.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React3.createElement(
+  )) : null, /* @__PURE__ */ React2.createElement("div", { className: "esd-dc-frame" }, /* @__PURE__ */ React2.createElement(
     "iframe",
     {
       ref: d.dcIframeRef,
@@ -1094,14 +1061,14 @@ function ShopDeskPanel() {
       title: "\u7535\u5546\u6570\u636E\u4E2D\u53F0",
       loading: "eager"
     }
-  )), /* @__PURE__ */ React3.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React3.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09"))) : null));
+  )), /* @__PURE__ */ React2.createElement("footer", { className: "esd-footer" }, /* @__PURE__ */ React2.createElement("span", null, "\u7535\u5546\u6570\u636E\u4E2D\u53F0 \xB7 \u590D\u76D8\u6570\u636E\u5206\u6790\uFF08\u6708\u5EA6 / \u5468\u5EA6 / \u6570\u636E\u5BF9\u6BD4\uFF09"))) : null));
 }
 
 // src/client/SkillBar.tsx
-var React4 = __toESM(require("react"), 1);
+var React3 = __toESM(require("react"), 1);
 function SkillBar(props) {
   const variant = props.variant ?? "panel";
-  return /* @__PURE__ */ React4.createElement("div", { className: "esd-skillbar" + (variant === "dock" ? " esd-skillbar-dock" : "") }, /* @__PURE__ */ React4.createElement("span", { className: "esd-skillbar-title" }, /* @__PURE__ */ React4.createElement(BrandBadge, { size: 16, className: "esd-skillbar-logo" }), /* @__PURE__ */ React4.createElement("span", { className: "esd-skillbar-name" }, "\u6280\u80FD\u5206\u6790")), SKILL_MODULES.map((s) => /* @__PURE__ */ React4.createElement(
+  return /* @__PURE__ */ React3.createElement("div", { className: "esd-skillbar" + (variant === "dock" ? " esd-skillbar-dock" : "") }, /* @__PURE__ */ React3.createElement("span", { className: "esd-skillbar-title" }, /* @__PURE__ */ React3.createElement(BrandBadge, { size: 16, className: "esd-skillbar-logo" }), /* @__PURE__ */ React3.createElement("span", { className: "esd-skillbar-name" }, "\u6280\u80FD\u5206\u6790")), SKILL_MODULES.map((s) => /* @__PURE__ */ React3.createElement(
     "button",
     {
       key: s.id,
@@ -1111,8 +1078,8 @@ function SkillBar(props) {
       "aria-label": `\u8C03\u7528\u300C${s.label}\u300D\u6280\u80FD`,
       onClick: () => props.onInvoke(s)
     },
-    /* @__PURE__ */ React4.createElement(SkillIcon, { name: s.icon, size: 15 }),
-    /* @__PURE__ */ React4.createElement("span", { className: "esd-skill-label" }, s.label)
+    /* @__PURE__ */ React3.createElement(SkillIcon, { name: s.icon, size: 15 }),
+    /* @__PURE__ */ React3.createElement("span", { className: "esd-skill-label" }, s.label)
   )));
 }
 
@@ -1998,96 +1965,220 @@ body:not(.esd-cockpit-open) .esd-skillbar-dock { display: none; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* \u2500\u2500 \u6587\u4EF6\u4EA4\u6362\u6761\uFF08\u4E0A\u4F20/\u5217\u8868/\u4E0B\u8F7D\uFF09 \u2500\u2500 */
-.esd-files {
+
+/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u300C\u6587\u4EF6\u5904\u7406\u300D\u6574\u9875\uFF08\u5DE6\uFF1A\u5BFC\u5165 / \u53F3\uFF1A\u5BFC\u51FA\uFF09 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+
+/* \u6574\u9875\u5BB9\u5668\uFF1Aoverlay \u5F62\u6001\u76D6\u4F4F\u6574\u4E2A\u5E94\u7528\uFF1Bpage \u5F62\u6001\u586B\u6EE1\u4F1A\u8BDD\u5185\u5BB9\u533A */
+.esd-fd { pointer-events: auto; }
+.esd-fd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 3vh, 40px) clamp(12px, 3vw, 56px);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 82%, transparent);
+  backdrop-filter: blur(2px);
+}
+.esd-fd-page { width: 100%; height: 100%; padding: 12px; box-sizing: border-box; }
+
+.esd-fd-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.20));
-  background: var(--dsw-alias-bg-base, #ffffff);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.22));
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-base, #fff);
+  box-shadow: var(--dsw-shadow-lv3, 0 12px 40px rgba(0,0,0,.18));
 }
-.esd-files-head {
+.esd-fd-page .esd-fd-card { box-shadow: none; border-radius: 12px; }
+
+/* \u2500\u2500 \u5934\u90E8 \u2500\u2500 */
+.esd-fd-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.18));
+  background: linear-gradient(180deg, var(--esd-accent-soft, rgba(43,184,163,.12)), transparent);
 }
-.esd-files-upload {
+.esd-fd-title { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.esd-fd-title-text { letter-spacing: .3px; }
+.esd-fd-sub { font-size: 12px; color: var(--dsw-alias-label-secondary, #666); }
+.esd-fd-head-actions { margin-left: auto; display: inline-flex; gap: 8px; }
+
+/* \u2500\u2500 \u6309\u94AE\uFF08\u54C1\u724C\u63CF\u8FB9\u5C0F\u6309\u94AE\uFF0C\u56FE\u6807\u8D70 SecIcon\uFF09 \u2500\u2500 */
+.esd-fd-btn,
+.esd-fd-act {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 5px 10px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.28));
   border-radius: 8px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.esd-files-tip {
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary, #666);
+.esd-fd-btn:hover,
+.esd-fd-act:hover {
+  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+  border-color: var(--esd-accent, #2bb8a3);
 }
-.esd-files-group-title {
+.esd-fd-btn:disabled,
+.esd-fd-act:disabled { opacity: .5; cursor: default; }
+.esd-fd-act { padding: 3px 8px; }
+.esd-fd-act-danger { color: var(--dsw-alias-state-error-primary, #e5484d); }
+.esd-fd-act-danger:hover { background: rgba(229,72,77,.10); border-color: currentColor; }
+
+/* \u2500\u2500 \u4E3B\u4F53\u4E24\u680F \u2500\u2500 */
+.esd-fd-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow: auto;
+}
+@media (max-width: 820px) { .esd-fd-body { grid-template-columns: minmax(0, 1fr); } }
+
+.esd-fd-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.18));
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.04));
+}
+.esd-fd-col-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 12px;
   color: var(--dsw-alias-label-primary, #1c1c1e);
 }
-.esd-files-count {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: var(--esd-accent-soft, rgba(43,184,163,.12));
+.esd-fd-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.14));
   color: var(--esd-accent-strong, #16a085);
   font-size: 11px;
   text-align: center;
 }
-.esd-files-empty {
-  font-size: 12px;
-  color: var(--dsw-alias-label-tertiary, #999);
-  padding: 4px 0;
-}
-.esd-files-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+
+/* \u2500\u2500 \u62D6\u653E\u533A \u2500\u2500 */
+.esd-fd-drop {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 132px;
+  padding: 16px;
+  border: 2px dashed var(--esd-accent, #2bb8a3);
+  border-radius: 12px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.08));
+  color: var(--esd-accent-strong, #16a085);
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s ease, transform .12s ease, border-color .15s ease;
 }
-.esd-files-item {
+.esd-fd-drop:hover { background: var(--esd-accent-soft-2, rgba(43,184,163,.18)); }
+.esd-fd-drop-over {
+  background: var(--esd-accent-soft-2, rgba(43,184,163,.22));
+  border-style: solid;
+  transform: scale(1.01);
+}
+.esd-fd-drop-main { font-size: 13px; font-weight: 600; }
+.esd-fd-drop-sub { font-size: 11px; color: var(--dsw-alias-label-secondary, #666); }
+
+.esd-fd-tip {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--esd-accent, #2bb8a3);
+  border-radius: 10px;
+  background: var(--esd-accent-soft, rgba(43,184,163,.10));
+  color: var(--dsw-alias-label-primary, #1c1c1e);
   font-size: 12px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: var(--dsw-alias-bg-subtle, rgba(128,128,128,.06));
+  line-height: 1.5;
 }
-.esd-files-name {
+
+/* \u2500\u2500 \u6587\u4EF6\u5217\u8868 \u2500\u2500 */
+.esd-fd-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
+}
+.esd-fd-list-hint { font-weight: 400; color: var(--dsw-alias-label-tertiary, #999); font-size: 11px; }
+.esd-fd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; overflow: auto; }
+.esd-fd-empty {
+  padding: 14px 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-tertiary, #999);
+  font-size: 12px;
+  text-align: center;
+}
+.esd-fd-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.16));
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--esd-accent-strong, #16a085);
+  font-size: 12px;
+}
+.esd-fd-item[draggable="true"] { cursor: grab; }
+.esd-fd-item[draggable="true"]:active { cursor: grabbing; }
+.esd-fd-item:hover { border-color: var(--esd-accent, #2bb8a3); }
+.esd-fd-item-out { border-left: 3px solid var(--esd-accent, #2bb8a3); }
+.esd-fd-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--dsw-alias-label-primary, #1c1c1e);
 }
-.esd-files-size {
-  color: var(--dsw-alias-label-secondary, #666);
-  white-space: nowrap;
-}
-.esd-files-act {
+.esd-fd-meta { color: var(--dsw-alias-label-tertiary, #999); font-size: 11px; white-space: nowrap; }
+.esd-fd-path { font-size: 11px; color: var(--dsw-alias-label-tertiary, #999); }
+
+/* \u2500\u2500 \u72B6\u6001\u6761 \u2500\u2500 */
+.esd-fd-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 16px 0;
+  padding: 9px 12px;
+  border-radius: 9px;
   font-size: 12px;
-  color: var(--esd-accent-strong, #16a085);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
 }
-.esd-files-del {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--dsw-alias-state-error-primary, #e5484d);
-}
-.esd-files-del:disabled { opacity: .5; cursor: default; }
+.esd-fd-msg-ok { background: var(--esd-accent-soft, rgba(43,184,163,.14)); color: var(--esd-accent-strong, #16a085); }
+.esd-fd-msg-bad { background: rgba(229,72,77,.12); color: var(--dsw-alias-state-error-primary, #e5484d); }
+.esd-fd-msg > span { flex: 1; min-width: 0; }
+
+
 `;
 var injected = false;
 function injectStyles() {
@@ -2101,25 +2192,295 @@ function injectStyles() {
   document.head.appendChild(el);
 }
 
+// src/client/FileDesk.tsx
+var React4 = __toESM(require("react"), 1);
+
+// src/client/filedesk-bus.ts
+var open = false;
+var subscribers2 = /* @__PURE__ */ new Set();
+function notify2() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("ecommerce:filedesk-toggle", { detail: { open } }));
+  }
+  for (const fn of subscribers2) {
+    try {
+      fn(open);
+    } catch {
+    }
+  }
+}
+function isFileDeskOpen() {
+  return open;
+}
+function toggleFileDesk() {
+  open = !open;
+  notify2();
+}
+function setFileDeskOpen(next) {
+  if (next === open) return;
+  open = next;
+  notify2();
+}
+function subscribeFileDesk(fn) {
+  subscribers2.add(fn);
+  return () => {
+    subscribers2.delete(fn);
+  };
+}
+
+// src/client/FileDesk.tsx
+var MIME = {
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+  csv: "text/csv",
+  txt: "text/plain",
+  md: "text/markdown",
+  json: "application/json",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  doc: "application/msword",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ppt: "application/vnd.ms-powerpoint",
+  zip: "application/zip",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  html: "text/html",
+  xml: "application/xml",
+  sql: "text/plain",
+  log: "text/plain"
+};
+function mimeOf(name) {
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+  return MIME[ext] ?? "application/octet-stream";
+}
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+function fmtTime(ms) {
+  try {
+    const d = new Date(ms);
+    const p = (v) => String(v).padStart(2, "0");
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+}
+function FileDesk(props) {
+  const variant = props.variant ?? "page";
+  const [inbox, setInbox] = React4.useState([]);
+  const [outbox, setOutbox] = React4.useState([]);
+  const [busy, setBusy] = React4.useState(false);
+  const [dragOver, setDragOver] = React4.useState(false);
+  const [msg, setMsg] = React4.useState(null);
+  const [loaded, setLoaded] = React4.useState(false);
+  const inputRef = React4.useRef(null);
+  const mountedRef = React4.useRef(true);
+  React4.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const refresh = React4.useCallback(async () => {
+    try {
+      const [i, o] = await Promise.all([listFiles("inbox"), listFiles("outbox")]);
+      if (!mountedRef.current) return;
+      setInbox(i);
+      setOutbox(o);
+      setLoaded(true);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setLoaded(true);
+      setMsg({ ok: false, text: "\u8BFB\u53D6\u6587\u4EF6\u5217\u8868\u5931\u8D25\uFF1A" + (err instanceof Error ? err.message : String(err)) });
+    }
+  }, []);
+  React4.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  const doUpload = React4.useCallback(
+    async (files) => {
+      if (files.length === 0) return;
+      setBusy(true);
+      setMsg(null);
+      const done = [];
+      const failed = [];
+      for (const f of files) {
+        try {
+          await uploadFile(f);
+          done.push(f.name);
+        } catch (err) {
+          failed.push(f.name + "\uFF08" + (err instanceof Error ? err.message : String(err)) + "\uFF09");
+        }
+      }
+      if (!mountedRef.current) return;
+      setBusy(false);
+      if (failed.length === 0) {
+        setMsg({ ok: true, text: `\u5DF2\u5BFC\u5165 ${done.length} \u4E2A\u6587\u4EF6\u5230\u6536\u4EF6\u7BB1\uFF1A${done.join("\u3001")}\u3002\u4E0B\u4E00\u6B65\u5728\u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406\uFF0C\u7ED3\u679C\u4F1A\u51FA\u73B0\u5728\u53F3\u4FA7\u3002` });
+      } else {
+        setMsg({
+          ok: done.length > 0,
+          text: `\u6210\u529F ${done.length} \u4E2A${done.length > 0 ? "\uFF08" + done.join("\u3001") + "\uFF09" : ""}\uFF1B\u5931\u8D25 ${failed.length} \u4E2A\uFF1A${failed.join("\uFF1B")}`
+        });
+      }
+      await refresh();
+    },
+    [refresh]
+  );
+  const onPick = React4.useCallback(
+    async (event) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      await doUpload(files);
+    },
+    [doUpload]
+  );
+  const onDrop = React4.useCallback(
+    async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setDragOver(false);
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      if (files.length > 0) await doUpload(files);
+    },
+    [doUpload]
+  );
+  const onDragOver = React4.useCallback((event) => {
+    if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setDragOver(true);
+    }
+  }, []);
+  const onDragLeave = React4.useCallback((event) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setDragOver(false);
+  }, []);
+  const onDragStart = React4.useCallback((event, file) => {
+    if (typeof window === "undefined") return;
+    const abs = new URL(downloadFileUrl(file.dir, file.name), window.location.origin).href;
+    event.dataTransfer.setData("DownloadURL", `${mimeOf(file.name)}:${file.name}:${abs}`);
+    event.dataTransfer.effectAllowed = "copy";
+  }, []);
+  const doDelete = React4.useCallback(
+    async (dir, name) => {
+      setBusy(true);
+      setMsg(null);
+      try {
+        await deleteFile(dir, name);
+        if (mountedRef.current) setMsg({ ok: true, text: `\u5DF2\u5220\u9664 ${name}` });
+        await refresh();
+      } catch (err) {
+        if (mountedRef.current) setMsg({ ok: false, text: "\u5220\u9664\u5931\u8D25\uFF1A" + (err instanceof Error ? err.message : String(err)) });
+      } finally {
+        if (mountedRef.current) setBusy(false);
+      }
+    },
+    [refresh]
+  );
+  const handToAi = React4.useCallback(async (name) => {
+    const r = await fillConversationInput(`\u8BF7\u5904\u7406 inbox/${name}\uFF0C\u5E76\u628A\u5904\u7406\u7ED3\u679C\u5199\u5230 outbox/`);
+    setMsg({
+      ok: r.sent,
+      text: r.sent ? `\u5DF2\u628A\u300C\u5904\u7406 inbox/${name}\u300D\u586B\u8FDB\u4F1A\u8BDD\u8F93\u5165\u6846\uFF0C\u8865\u5145\u8981\u6C42\u540E\u56DE\u8F66\u53D1\u9001` : "\u4F1A\u8BDD\u8F93\u5165\u6846\u672A\u5C31\u7EEA\uFF0C\u6307\u4EE4\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F"
+    });
+  }, []);
+  const head = /* @__PURE__ */ React4.createElement("header", { className: "esd-fd-head" }, /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-title" }, /* @__PURE__ */ React4.createElement(BrandBadge, { size: 22 }), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-title-text" }, "\u6587\u4EF6\u5904\u7406")), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-sub" }, "\u5BFC\u5165\u5230\u6536\u4EF6\u7BB1 \u2192 \u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406 \u2192 \u7ED3\u679C\u4ECE\u8FD9\u91CC\u53D6\u56DE"), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-head-actions" }, /* @__PURE__ */ React4.createElement("button", { type: "button", className: "esd-fd-btn", title: "\u5237\u65B0\u6587\u4EF6\u5217\u8868", "aria-label": "\u5237\u65B0\u6587\u4EF6\u5217\u8868", disabled: busy, onClick: () => void refresh() }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "refresh", size: 14 }), /* @__PURE__ */ React4.createElement("span", null, "\u5237\u65B0")), variant === "overlay" ? /* @__PURE__ */ React4.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-fd-btn",
+      title: "\u5173\u95ED",
+      "aria-label": "\u5173\u95ED\u6587\u4EF6\u5904\u7406",
+      onClick: () => props.onClose ? props.onClose() : setFileDeskOpen(false)
+    },
+    /* @__PURE__ */ React4.createElement("span", null, "\u5173\u95ED")
+  ) : null));
+  const body = /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-body" }, /* @__PURE__ */ React4.createElement("section", { className: "esd-fd-col", "aria-label": "\u6587\u4EF6\u5BFC\u5165" }, /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-col-title" }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "inbox", size: 15 }), /* @__PURE__ */ React4.createElement("span", null, "\u6587\u4EF6\u5BFC\u5165"), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-count" }, inbox.length)), /* @__PURE__ */ React4.createElement(
+    "div",
+    {
+      className: "esd-fd-drop" + (dragOver ? " esd-fd-drop-over" : ""),
+      onDrop: (e) => void onDrop(e),
+      onDragOver,
+      onDragLeave,
+      onClick: () => inputRef.current?.click(),
+      role: "button",
+      tabIndex: 0,
+      onKeyDown: (e) => {
+        if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+      },
+      "aria-label": "\u628A\u6587\u4EF6\u62D6\u5230\u8FD9\u91CC\u5BFC\u5165\uFF0C\u6216\u70B9\u51FB\u9009\u62E9\u6587\u4EF6"
+    },
+    /* @__PURE__ */ React4.createElement(SecIcon, { name: "upload", size: 26 }),
+    /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-drop-main" }, dragOver ? "\u677E\u5F00\u9F20\u6807\u5373\u53EF\u5BFC\u5165" : "\u628A\u6587\u4EF6\u62D6\u5230\u8FD9\u91CC"),
+    /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-drop-sub" }, "\u6216\u70B9\u51FB\u9009\u62E9\u6587\u4EF6 \xB7 \u652F\u6301\u4EFB\u610F\u683C\u5F0F")
+  ), /* @__PURE__ */ React4.createElement("input", { ref: inputRef, type: "file", multiple: true, style: { display: "none" }, onChange: (e) => void onPick(e) }), /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-list-head" }, /* @__PURE__ */ React4.createElement("span", null, "\u6536\u4EF6\u7BB1 inbox"), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-list-hint" }, busy ? "\u5904\u7406\u4E2D\u2026" : "\u5F85\u5904\u7406\u6587\u4EF6")), !loaded ? /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-empty" }, "\u8BFB\u53D6\u4E2D\u2026") : inbox.length === 0 ? /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-empty" }, "\u6682\u65E0\u6587\u4EF6\u3002\u62D6\u5165\u6587\u4EF6\u6216\u70B9\u51FB\u4E0A\u65B9\u533A\u57DF\u5BFC\u5165\u3002") : /* @__PURE__ */ React4.createElement("ul", { className: "esd-fd-list" }, inbox.map((f) => /* @__PURE__ */ React4.createElement("li", { key: "in:" + f.name, className: "esd-fd-item", draggable: true, onDragStart: (e) => onDragStart(e, f) }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "file", size: 14 }), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-name", title: f.name }, f.name), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-meta" }, fmtSize(f.size)), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-meta" }, fmtTime(f.modified)), /* @__PURE__ */ React4.createElement("button", { type: "button", className: "esd-fd-act", title: "\u628A\u5904\u7406\u6307\u4EE4\u586B\u8FDB\u4F1A\u8BDD\u8F93\u5165\u6846", disabled: busy, onClick: () => void handToAi(f.name) }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "process", size: 13 }), /* @__PURE__ */ React4.createElement("span", null, "\u4EA4\u7ED9 AI")), /* @__PURE__ */ React4.createElement("button", { type: "button", className: "esd-fd-act esd-fd-act-danger", title: "\u5220\u9664", disabled: busy, onClick: () => void doDelete("inbox", f.name) }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "trash", size: 13 })))))), /* @__PURE__ */ React4.createElement("section", { className: "esd-fd-col", "aria-label": "\u7ED3\u679C\u5BFC\u51FA" }, /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-col-title" }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "outbox", size: 15 }), /* @__PURE__ */ React4.createElement("span", null, "\u5904\u7406\u7ED3\u679C"), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-count" }, outbox.length)), /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-tip" }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "dragexport", size: 16 }), /* @__PURE__ */ React4.createElement("span", null, "\u628A\u53F3\u4FA7\u6587\u4EF6", /* @__PURE__ */ React4.createElement("strong", null, "\u76F4\u63A5\u62D6\u5230\u684C\u9762\u6216\u6587\u4EF6\u5939"), "\u5373\u53EF\u4FDD\u5B58\u5230\u672C\u673A\uFF1B\u4E5F\u53EF\u70B9\u300C\u4E0B\u8F7D\u300D\u3002")), /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-list-head" }, /* @__PURE__ */ React4.createElement("span", null, "\u7ED3\u679C\u7BB1 outbox"), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-list-hint" }, busy ? "\u5904\u7406\u4E2D\u2026" : "AI \u5904\u7406\u4EA7\u51FA")), !loaded ? /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-empty" }, "\u8BFB\u53D6\u4E2D\u2026") : outbox.length === 0 ? /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-empty" }, "\u6682\u65E0\u5904\u7406\u7ED3\u679C\u3002\u5DE6\u4FA7\u5BFC\u5165\u6587\u4EF6\u5E76\u5728\u4F1A\u8BDD\u91CC\u8BA9 AI \u5904\u7406\u540E\uFF0C\u7ED3\u679C\u4F1A\u51FA\u73B0\u5728\u8FD9\u91CC\u3002") : /* @__PURE__ */ React4.createElement("ul", { className: "esd-fd-list" }, outbox.map((f) => /* @__PURE__ */ React4.createElement("li", { key: "out:" + f.name, className: "esd-fd-item esd-fd-item-out", draggable: true, onDragStart: (e) => onDragStart(e, f) }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "file", size: 14 }), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-name", title: f.name }, f.name), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-meta" }, fmtSize(f.size)), /* @__PURE__ */ React4.createElement("span", { className: "esd-fd-meta" }, fmtTime(f.modified)), /* @__PURE__ */ React4.createElement(
+    "a",
+    {
+      className: "esd-fd-act",
+      href: downloadFileUrl("outbox", f.name),
+      download: f.name,
+      title: "\u4E0B\u8F7D\u5230\u672C\u673A",
+      onClick: (e) => e.stopPropagation()
+    },
+    /* @__PURE__ */ React4.createElement(SecIcon, { name: "download", size: 13 }),
+    /* @__PURE__ */ React4.createElement("span", null, "\u4E0B\u8F7D")
+  ), /* @__PURE__ */ React4.createElement("button", { type: "button", className: "esd-fd-act esd-fd-act-danger", title: "\u5220\u9664", disabled: busy, onClick: () => void doDelete("outbox", f.name) }, /* @__PURE__ */ React4.createElement(SecIcon, { name: "trash", size: 13 }))))), /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-path" }, "\u670D\u52A1\u5668\u5171\u4EAB\u76EE\u5F55\uFF1A/srv/dsh-share/outbox\uFF08\u4E5F\u53EF\u7ECF /share/outbox/ \u6D4F\u89C8\uFF09")));
+  return /* @__PURE__ */ React4.createElement("div", { className: "esd-fd esd-fd-" + variant }, /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-card" }, head, msg !== null ? /* @__PURE__ */ React4.createElement("div", { className: "esd-fd-msg " + (msg.ok ? "esd-fd-msg-ok" : "esd-fd-msg-bad") }, /* @__PURE__ */ React4.createElement("span", null, msg.text), /* @__PURE__ */ React4.createElement("button", { type: "button", className: "esd-fd-act", onClick: () => setMsg(null) }, "\u5173\u95ED")) : null, body));
+}
+
 // src/client/index.tsx
 var inject = ["slots"];
 function DataFooterLauncher() {
   const [, force] = React5.useState(0);
   React5.useEffect(() => subscribeCockpit(() => force((n) => n + 1)), []);
-  const open = isCockpitOpen();
+  const open2 = isCockpitOpen();
   return React5.createElement(
     "button",
     {
       type: "button",
-      className: "esd-footer-btn" + (open ? " esd-footer-btn-active" : ""),
-      title: open ? "\u6536\u8D77\u6570\u636E\u67E5\u770B" : "\u5C55\u5F00\u6570\u636E\u67E5\u770B",
-      "aria-label": open ? "\u6536\u8D77\u6570\u636E\u67E5\u770B" : "\u5C55\u5F00\u6570\u636E\u67E5\u770B",
+      className: "esd-footer-btn" + (open2 ? " esd-footer-btn-active" : ""),
+      title: open2 ? "\u6536\u8D77\u6570\u636E\u67E5\u770B" : "\u5C55\u5F00\u6570\u636E\u67E5\u770B",
+      "aria-label": open2 ? "\u6536\u8D77\u6570\u636E\u67E5\u770B" : "\u5C55\u5F00\u6570\u636E\u67E5\u770B",
       onClick: () => {
         toggleCockpit();
       }
     },
     React5.createElement(BrandMark, { size: 16 })
   );
+}
+function FileDeskLauncher() {
+  const [, force] = React5.useState(0);
+  React5.useEffect(() => subscribeFileDesk(() => force((n) => n + 1)), []);
+  const open2 = isFileDeskOpen();
+  return React5.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-footer-btn" + (open2 ? " esd-footer-btn-active" : ""),
+      title: open2 ? "\u6536\u8D77\u6587\u4EF6\u5904\u7406" : "\u6587\u4EF6\u5904\u7406",
+      "aria-label": open2 ? "\u6536\u8D77\u6587\u4EF6\u5904\u7406" : "\u6587\u4EF6\u5904\u7406",
+      onClick: () => {
+        toggleFileDesk();
+      }
+    },
+    React5.createElement(FileMark, { size: 16 })
+  );
+}
+function FileDeskTab() {
+  return React5.createElement(FileDesk, { variant: "page" });
+}
+function FileDeskOverlay() {
+  const [, force] = React5.useState(0);
+  React5.useEffect(() => subscribeFileDesk(() => force((n) => n + 1)), []);
+  if (!isFileDeskOpen()) return null;
+  return React5.createElement(FileDesk, { variant: "overlay", onClose: () => setFileDeskOpen(false) });
 }
 function ComposerDockSkillBar() {
   return React5.createElement(SkillBar, {
@@ -2170,6 +2531,42 @@ function apply(ctx) {
         label: "\u6570\u636E\u67E5\u770B"
       },
       ShopDeskPanel
+    )
+  );
+  ctx.slots.inject(
+    "sidebar.footer.action",
+    () => ctx.slots.register(
+      {
+        name: "sidebar.footer.action",
+        id: "ecommerce-filedesk-footer",
+        order: 101,
+        label: () => "\u6587\u4EF6\u5904\u7406"
+      },
+      FileDeskLauncher
+    )
+  );
+  ctx.slots.inject(
+    "conversation.view",
+    () => ctx.slots.register(
+      {
+        name: "conversation.view",
+        id: "ecommerce-filedesk-view",
+        order: 26,
+        label: () => "\u6587\u4EF6\u5904\u7406"
+      },
+      FileDeskTab
+    )
+  );
+  ctx.slots.inject(
+    "shell.overlay",
+    () => ctx.slots.register(
+      {
+        name: "shell.overlay",
+        id: "ecommerce-filedesk-overlay",
+        order: 111,
+        label: "\u6587\u4EF6\u5904\u7406"
+      },
+      FileDeskOverlay
     )
   );
   ctx.slots.inject(

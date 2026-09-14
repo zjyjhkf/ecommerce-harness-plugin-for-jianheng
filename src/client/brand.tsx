@@ -73,6 +73,17 @@ export type SecIconName =
   | 'brief'
   | 'mode'
   | 'product'
+  /* 文件处理页专用（与上面同款：26×26 网格、currentColor 描边、圆头圆角） */
+  | 'upload'
+  | 'download'
+  | 'refresh'
+  | 'trash'
+  | 'file'
+  | 'folder'
+  | 'inbox'
+  | 'outbox'
+  | 'dragexport'
+  | 'process'
 
 function SecIconPath(name: SecIconName): React.ReactElement {
   switch (name) {
@@ -152,6 +163,96 @@ function SecIconPath(name: SecIconName): React.ReactElement {
           <path d="M13 3 L22 8 V18 L13 23 L4 18 V8 Z" />
           <path d="M4 8 L13 13 L22 8" />
           <path d="M13 13 V23" />
+        </>
+      )
+    /* ── 文件处理页：上传（箭头入托盘） ── */
+    case 'upload':
+      return (
+        <>
+          <path d="M13 17.5 V4.5" />
+          <path d="M8.2 9.3 L13 4.5 L17.8 9.3" />
+          <path d="M4.5 15.5 V19.5 A2 2 0 0 0 6.5 21.5 H19.5 A2 2 0 0 0 21.5 19.5 V15.5" />
+        </>
+      )
+    /* ── 下载（箭头出托盘） ── */
+    case 'download':
+      return (
+        <>
+          <path d="M13 4.5 V17.5" />
+          <path d="M8.2 12.7 L13 17.5 L17.8 12.7" />
+          <path d="M4.5 15.5 V19.5 A2 2 0 0 0 6.5 21.5 H19.5 A2 2 0 0 0 21.5 19.5 V15.5" />
+        </>
+      )
+    /* ── 刷新（环形箭头） ── */
+    case 'refresh':
+      return (
+        <>
+          <path d="M21 13 A8 8 0 1 1 18.4 7.2" />
+          <path d="M21.5 3.5 V8.2 H16.8" />
+        </>
+      )
+    /* ── 删除（垃圾桶） ── */
+    case 'trash':
+      return (
+        <>
+          <path d="M5 7.5 H21" />
+          <path d="M10 7.5 V5.2 A1.2 1.2 0 0 1 11.2 4 H14.8 A1.2 1.2 0 0 1 16 5.2 V7.5" />
+          <path d="M6.6 7.5 L7.7 20.2 A1.6 1.6 0 0 0 9.3 21.7 H16.7 A1.6 1.6 0 0 0 18.3 20.2 L19.4 7.5" />
+          <path d="M11 11.5 V18" />
+          <path d="M15 11.5 V18" />
+        </>
+      )
+    /* ── 文件（单页折角） ── */
+    case 'file':
+      return (
+        <>
+          <path d="M6.5 3.5 H15 L20 8.5 V22.5 H6.5 Z" />
+          <path d="M15 3.5 V8.5 H20" />
+          <path d="M10 13 H17" />
+          <path d="M10 17 H17" />
+        </>
+      )
+    /* ── 文件夹 ── */
+    case 'folder':
+      return (
+        <>
+          <path d="M3.5 7.5 A1.6 1.6 0 0 1 5.1 5.9 H10.2 L12.4 8.6 H20.9 A1.6 1.6 0 0 1 22.5 10.2 V19.6 A1.6 1.6 0 0 1 20.9 21.2 H5.1 A1.6 1.6 0 0 1 3.5 19.6 Z" />
+        </>
+      )
+    /* ── 收件箱（托盘 + 向下箭头） ── */
+    case 'inbox':
+      return (
+        <>
+          <path d="M3.5 14.5 H8.4 L9.8 17 H16.2 L17.6 14.5 H22.5" />
+          <path d="M5.4 14.5 L7.6 5.4 A1.6 1.6 0 0 1 9.2 4.2 H16.8 A1.6 1.6 0 0 1 18.4 5.4 L20.6 14.5 V19.6 A1.6 1.6 0 0 1 19 21.2 H7 A1.6 1.6 0 0 1 5.4 19.6 Z" />
+        </>
+      )
+    /* ── 结果箱（托盘 + 向上箭头） ── */
+    case 'outbox':
+      return (
+        <>
+          <path d="M3.5 14.5 H8.4 L9.8 17 H16.2 L17.6 14.5 H22.5" />
+          <path d="M5.4 14.5 L7.6 5.4 A1.6 1.6 0 0 1 9.2 4.2 H16.8 A1.6 1.6 0 0 1 18.4 5.4 L20.6 14.5 V19.6 A1.6 1.6 0 0 1 19 21.2 H7 A1.6 1.6 0 0 1 5.4 19.6 Z" />
+          <path d="M13 12.6 V6.4" />
+          <path d="M10.4 9 L13 6.4 L15.6 9" />
+        </>
+      )
+    /* ── 拖出到本地（方框 + 外指箭头） ── */
+    case 'dragexport':
+      return (
+        <>
+          <path d="M14.5 4.5 H6.4 A1.9 1.9 0 0 0 4.5 6.4 V19.6 A1.9 1.9 0 0 0 6.4 21.5 H19.6 A1.9 1.9 0 0 0 21.5 19.6 V11.5" />
+          <path d="M15.5 3.5 H22.5 V10.5" />
+          <path d="M22.5 3.5 L13.4 12.6" />
+        </>
+      )
+    /* ── 处理（齿轮） ── */
+    case 'process':
+      return (
+        <>
+          <circle cx="13" cy="13" r="3.4" />
+          <path d="M13 3.4 V6.2 M13 19.8 V22.6 M22.6 13 H19.8 M6.2 13 H3.4" />
+          <path d="M19.8 6.2 L17.8 8.2 M8.2 17.8 L6.2 19.8 M19.8 19.8 L17.8 17.8 M8.2 8.2 L6.2 6.2" />
         </>
       )
     default:
@@ -260,6 +361,49 @@ export function SkillIcon(props: { name: SkillIconKey; size?: number }): React.R
       focusable="false"
     >
       <SkillIconPath name={props.name} />
+    </svg>
+  )
+}
+
+/* ────────────── 文件处理入口标记（与 BrandMark 同族：圆形按钮内的品牌色徽标） ────────────── */
+
+/**
+ * 左侧栏「文件处理」按钮的图标。
+ * 与既有 BrandMark（健衡学园圆形 Logo）同族：同样是圆形按钮内的一枚徽标，
+ * 但用品牌浅绿实底 + 白色描边的「文件互换」图形，避免与「数据查看」图标混淆；
+ * 不使用 emoji（emoji 在不同系统渲染差异大、观感也偏"通用 AI 味"）。
+ */
+export function FileMark(props: { size?: number; className?: string }): React.ReactElement {
+  const size = props.size ?? 16
+  return (
+    <svg
+      className={props.className}
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'block' }}
+    >
+      <defs>
+        <linearGradient id="esd-filemark-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#34c9b0" />
+          <stop offset="100%" stopColor="#1aa085" />
+        </linearGradient>
+      </defs>
+      {/* 圆形底色：与侧边栏圆形按钮同心，留 1px 视觉呼吸 */}
+      <circle cx="16" cy="16" r="16" fill="url(#esd-filemark-g)" />
+      {/* 两张交错的文件（上传 / 交付），白色描边 */}
+      <g fill="none" stroke="#ffffff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 8.5 H17.6 L20.4 11.3 V19.4 H11 Z" />
+        <path d="M17.6 8.5 V11.3 H20.4" />
+        <path d="M21 15.2 H14.4 L11.6 18 V23.5 H21 Z" opacity="0.95" />
+      </g>
+      {/* 双向箭头：表达"交给 AI 处理再取回" */}
+      <g fill="none" stroke="#ffffff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8.2 14.6 V20.6" />
+        <path d="M6.4 18.8 L8.2 20.6 L10 18.8" />
+      </g>
     </svg>
   )
 }

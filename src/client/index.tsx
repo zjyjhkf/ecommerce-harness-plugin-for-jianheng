@@ -14,7 +14,9 @@ import { ShopDeskPanel, ShopDeskTab } from './ShopDeskPanel.tsx'
 import { SkillBar } from './SkillBar.tsx'
 import { skillInvocationToken, type SkillModule } from './skills.ts'
 import { injectStyles } from './styles.ts'
-import { BrandMark } from './brand.tsx'
+import { BrandMark, FileMark } from './brand.tsx'
+import { FileDesk } from './FileDesk.tsx'
+import { isFileDeskOpen, setFileDeskOpen, subscribeFileDesk, toggleFileDesk } from './filedesk-bus.ts'
 import {
   fillConversationInput,
   isCockpitOpen,
@@ -64,6 +66,44 @@ function DataFooterLauncher(): React.ReactElement {
     },
     React.createElement(BrandMark, { size: 16 }),
   )
+}
+
+/**
+ * 左侧栏「文件处理」圆形入口。
+ * 与「数据查看」的 BrandMark 按钮同族（都是 sidebar.footer.action 里的圆形按钮），
+ * 但用品牌色徽标 FileMark 区分；不使用 emoji。
+ * 点击进入整页「文件处理」（左侧导入 / 右侧导出）。
+ */
+function FileDeskLauncher(): React.ReactElement {
+  const [, force] = React.useState(0)
+  React.useEffect(() => subscribeFileDesk(() => force((n) => n + 1)), [])
+  const open = isFileDeskOpen()
+  return React.createElement(
+    'button',
+    {
+      type: 'button',
+      className: 'esd-footer-btn' + (open ? ' esd-footer-btn-active' : ''),
+      title: open ? '收起文件处理' : '文件处理',
+      'aria-label': open ? '收起文件处理' : '文件处理',
+      onClick: (): void => {
+        toggleFileDesk()
+      },
+    },
+    React.createElement(FileMark, { size: 16 }),
+  )
+}
+
+/** conversation.view 标签形态：在会话内容区渲染整页「文件处理」 */
+function FileDeskTab(): React.ReactElement {
+  return React.createElement(FileDesk, { variant: 'page' })
+}
+
+/** shell.overlay 形态：左侧栏按钮打开的全屏整页 */
+function FileDeskOverlay(): React.ReactElement | null {
+  const [, force] = React.useState(0)
+  React.useEffect(() => subscribeFileDesk(() => force((n) => n + 1)), [])
+  if (!isFileDeskOpen()) return null
+  return React.createElement(FileDesk, { variant: 'overlay', onClose: () => setFileDeskOpen(false) })
 }
 
 /** 会话输入区（conversation.input.dock）横置技能条。
@@ -139,6 +179,45 @@ export function apply(ctx: ClientContext): void {
         label: '数据查看',
       },
       ShopDeskPanel,
+    ),
+  )
+
+  /* 左侧栏「文件处理」圆形入口（与「数据查看」入口并排同一个 footer 插槽） */
+  ctx.slots.inject('sidebar.footer.action', () =>
+    ctx.slots.register(
+      {
+        name: 'sidebar.footer.action',
+        id: 'ecommerce-filedesk-footer',
+        order: 101,
+        label: (): string => '文件处理',
+      },
+      FileDeskLauncher,
+    ),
+  )
+
+  /* 「文件处理」整页：与「数据查看」同族的 conversation.view 标签，点击即跳转 */
+  ctx.slots.inject('conversation.view', () =>
+    ctx.slots.register(
+      {
+        name: 'conversation.view',
+        id: 'ecommerce-filedesk-view',
+        order: 26,
+        label: (): string => '文件处理',
+      },
+      FileDeskTab,
+    ),
+  )
+
+  /* 左侧栏按钮打开的整页（shell.overlay 层，FileDesk 自身控制显隐） */
+  ctx.slots.inject('shell.overlay', () =>
+    ctx.slots.register(
+      {
+        name: 'shell.overlay',
+        id: 'ecommerce-filedesk-overlay',
+        order: 111,
+        label: '文件处理',
+      },
+      FileDeskOverlay,
     ),
   )
 
