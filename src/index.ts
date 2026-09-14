@@ -35,6 +35,7 @@ import { registerQaTool } from './tools/qa.ts'
 import { registerExportCsvTool } from './tools/export-csv.ts'
 import { registerModeTools } from './tools/mode.ts'
 import { registerCompareTools } from './tools/compare.ts'
+import { registerDataReportTools } from './tools/data-report.ts'
 import { registerPluginSkills } from './skills.ts'
 import { qaRuleDescription } from './qa-engine.ts'
 
@@ -107,6 +108,7 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
     registerExportCsvTool(ctx, store)
     registerModeTools(ctx, store)
     registerCompareTools(ctx, store)
+    registerDataReportTools(ctx, store)
   }
 
   // 技能层：把仓库 skills/*/SKILL.md 注册进 dsh 技能目录（/name 可调用 + 模型可自动调用）。
@@ -150,6 +152,13 @@ export async function apply(ctx: Context, config: Partial<ConfigShape> = {}): Pr
       name: 'ecommerce:qa-rules',
       order: -94,
       text: () => qaRuleDescription(),
+    })
+    // 数据来源纪律：把「面板数字只能来自导入文件、未导入不许编」写进系统提示，
+    // 并指定 ecommerce_data_report 为唯一取数入口（避免模型自己去翻 store.json 或凭记忆作答）
+    ctx.systemPrompt.section({
+      name: 'ecommerce:data-source',
+      order: -93,
+      text: () => dataSourcePrompt(store),
     })
   }
 }
@@ -208,5 +217,33 @@ function todayPrompt(store: EcommerceStore): string {
   parts.push(
     '用户询问店铺情况时，优先汇报以上待办；处理动作（发货/改库存/退款）执行前向用户确认。',
   )
+  return parts.join('\n')
+}
+/**
+ * 「数据来源纪律」系统提示（铁律：面板上的一切数字只能来自导入的文件）。
+ * 与数据中台面板同源同口径；未导入的周期一律如实说明，禁止用 0/示例/推测值填充。
+ * 取数唯一入口 = ecommerce_data_report（不要自己去解析 data/store.json，也不要凭记忆作答）。
+ */
+function dataSourcePrompt(store: EcommerceStore): string {
+  const history = store.getMonthlyHistory()
+  const weekly = store.getWeeklyReport()
+  const parts: string[] = ['【经营数据来源纪律】']
+  parts.push(
+    '「电商数据中台」面板上显示的每一个数字，都只来自用户导入的复盘 Excel（利润表 + 商品排名导出），' +
+      '没有任何内置示例数据。商品/订单库是另一套域，未导入表格时为空。',
+  )
+  if (history.length === 0 && weekly === null) {
+    parts.push('当前**尚未导入任何复盘数据**：面板各视图为空白占位。此时任何金额/排行都必须回答「未导入」，严禁给出具体数字或示例值。')
+  } else {
+    parts.push(
+      `当前已导入：月度 ${history.map((m) => m.month).join('、') || '（无）'}` +
+        `；周度 ${weekly ? weekly.period : '（无）'}。未列出的周期即「未导入」，不得给出其数字。`,
+    )
+  }
+  parts.push(
+    '回答任何销售额/退款/毛利/排行/门店/某月数据的问题前，**先调用 ecommerce_data_report** 取数（它返回的与面板同源同口径）；' +
+      '不要自己去解析 data/store.json，也不要依据记忆或估算作答。',
+  )
+  parts.push('工具的返回里会带「数据来源」行与已导入月份清单；若该工具说某月未导入，就照实转达，不得改用 0 或推测值。')
   return parts.join('\n')
 }

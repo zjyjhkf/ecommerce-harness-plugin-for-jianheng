@@ -1515,7 +1515,7 @@ var EcommerceStore = class {
   }
   overview(range = {}) {
     const revOrders = this.revenueOrders(range);
-    const revenue = revOrders.reduce((sum2, o) => sum2 + toCents(o.amount), 0);
+    const revenue = revOrders.reduce((sum3, o) => sum3 + toCents(o.amount), 0);
     const revenueYuan = fromCents(revenue);
     const total = this.orders.filter((o) => this.inRange(o, range)).length;
     const refunded = this.orders.filter(
@@ -3198,7 +3198,7 @@ var CORE_TREND_METRICS = [
 ];
 var round1 = (n) => Math.round(n * 10) / 10;
 function buildMonthTrendPoint(rep) {
-  const sum2 = function(rows, f) {
+  const sum3 = function(rows, f) {
     if (!rows || rows.length === 0) return null;
     let s = 0;
     for (const r of rows) s += Number(f(r)) || 0;
@@ -3211,11 +3211,11 @@ function buildMonthTrendPoint(rep) {
   const links = rep.platformLinks;
   const products = rep.systemProducts;
   const skus = rep.systemSkus;
-  const sales = sum2(stores, (r) => r.sales) ?? sum2(links, (r) => r.sales) ?? sum2(products, (r) => r.sales) ?? sum2(skus, (r) => r.sales);
-  const refund = sum2(stores, (r) => r.refund) ?? sum2(links, (r) => r.refundAmount) ?? sum2(products, (r) => r.refundAmount) ?? sum2(skus, (r) => r.refundAmount);
+  const sales = sum3(stores, (r) => r.sales) ?? sum3(links, (r) => r.sales) ?? sum3(products, (r) => r.sales) ?? sum3(skus, (r) => r.sales);
+  const refund = sum3(stores, (r) => r.refund) ?? sum3(links, (r) => r.refundAmount) ?? sum3(products, (r) => r.refundAmount) ?? sum3(skus, (r) => r.refundAmount);
   const netSales = sales === null ? null : sales - (refund ?? 0);
-  const grossProfit = sum2(stores, (r) => r.grossProfit) ?? sum2(links, (r) => r.grossProfit) ?? sum2(products, (r) => r.grossProfit) ?? sum2(skus, (r) => r.grossProfit);
-  const promoCost = sum2(stores, (r) => r.promoCost) ?? sum2(links, (r) => r.adSpend) ?? sum2(products, (r) => r.adSpend) ?? sum2(skus, (r) => r.adSpend);
+  const grossProfit = sum3(stores, (r) => r.grossProfit) ?? sum3(links, (r) => r.grossProfit) ?? sum3(products, (r) => r.grossProfit) ?? sum3(skus, (r) => r.grossProfit);
+  const promoCost = sum3(stores, (r) => r.promoCost) ?? sum3(links, (r) => r.adSpend) ?? sum3(products, (r) => r.adSpend) ?? sum3(skus, (r) => r.adSpend);
   const feeBase = netSales !== null && netSales > 0 ? netSales : sales !== null && sales > 0 ? sales : null;
   const feeRatio = promoCost !== null && feeBase !== null && feeBase > 0 ? round1(promoCost / feeBase * 100) : null;
   return {
@@ -4460,6 +4460,187 @@ function registerCompareTools(ctx, store) {
   }));
 }
 
+// src/tools/data-report.ts
+import { defineTool as defineTool11 } from "@deepseek-ai/dsh-tools";
+var yuan = (v) => "\xA5" + (Number(v) || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+var pct = (v) => (Number(v) || 0).toFixed(2) + "%";
+var int = (v) => Math.round(Number(v) || 0).toLocaleString("zh-CN");
+var sum2 = (rows, pick2) => rows.reduce((s, r) => s + (Number(pick2(r)) || 0), 0);
+function sourceLine(store, monthlies) {
+  const months = monthlies.map((m) => m.month).join("\u3001");
+  const weekly = store.getWeeklyReport();
+  const parts = [
+    `\u6570\u636E\u6765\u6E90:\u5DF2\u5BFC\u5165\u7684\u590D\u76D8 Excel(\u4E0E\u300C\u7535\u5546\u6570\u636E\u4E2D\u53F0\u300D\u9762\u677F\u540C\u6E90\u540C\u53E3\u5F84,\u4FEE\u8BA2\u53F7 ${store.getReportRevision()})`,
+    `\u5DF2\u5BFC\u5165\u6708\u5EA6:${months || "(\u65E0)"}`,
+    `\u5DF2\u5BFC\u5165\u5468\u5EA6:${weekly ? weekly.period : "(\u65E0)"}`,
+    "\u5546\u54C1/\u8BA2\u5355\u5E93\u662F\u53E6\u4E00\u5957\u57DF,\u4E0E\u590D\u76D8\u62A5\u8868\u4E92\u4E0D\u76F8\u901A(\u672A\u5BFC\u5165\u8868\u683C\u65F6\u4E3A\u7A7A)\u3002",
+    "\u672A\u5BFC\u5165\u7684\u5468\u671F\u4E00\u5F8B\u8FD4\u56DE\u300C\u672A\u5BFC\u5165\u300D\u2014\u2014\u4E0D\u5F97\u7528 0\u3001\u793A\u4F8B\u503C\u6216\u63A8\u6D4B\u503C\u4EE3\u66FF\u3002"
+  ];
+  return parts.join(" | ");
+}
+function pickMonthly(store, month) {
+  const history = store.getMonthlyHistory();
+  const current = store.getMonthlyReport();
+  if (history.length === 0) return { report: current, note: "\u5C1A\u65E0\u4EFB\u4F55\u6708\u5EA6\u590D\u76D8\u6570\u636E\u3002" };
+  if (month === void 0 || month.trim() === "") return { report: current, note: "" };
+  const key = month.trim();
+  const hit = history.find((r) => r.month === key || r.period.startsWith(key));
+  if (hit === void 0) {
+    return {
+      report: null,
+      note: `\u672A\u5BFC\u5165\u6708\u4EFD\u300C${key}\u300D:\u5DF2\u5BFC\u5165\u7684\u6708\u4EFD\u53EA\u6709 ${history.map((r) => r.month).join("\u3001")}\u3002\u8BF7\u52FF\u7ED9\u51FA\u8BE5\u6708\u7684\u4EFB\u4F55\u6570\u5B57\u3002`
+    };
+  }
+  return { report: hit, note: "" };
+}
+function overviewText(store) {
+  const history = store.getMonthlyHistory();
+  const current = store.getMonthlyReport();
+  const L = ["\u3010\u6570\u636E\u4E2D\u53F0 \xB7 \u5BFC\u5165\u603B\u89C8\u3011", sourceLine(store, history)];
+  if (current === null) {
+    L.push("\u5F53\u524D\u6CA1\u6709\u4EFB\u4F55\u5DF2\u5BFC\u5165\u7684\u6708\u5EA6\u590D\u76D8\u6570\u636E:\u9762\u677F\u5404\u89C6\u56FE\u5747\u4E3A\u7A7A\u767D\u5360\u4F4D\u3002\u82E5\u7528\u6237\u8BE2\u95EE\u6570\u636E,\u8BF7\u5982\u5B9E\u8BF4\u660E\u300C\u672A\u5BFC\u5165\u300D\u5E76\u5F15\u5BFC\u5176\u7528\u9762\u677F \u{1F4E5} \u5BFC\u5165\u3002");
+    return L.join("\n");
+  }
+  const sp = current.storeProfit ?? [];
+  const links = current.platformLinks ?? [];
+  const prods = current.systemProducts ?? [];
+  const skus = current.systemSkus ?? [];
+  L.push("");
+  L.push(`\u672C\u671F(\u6700\u8FD1\u5BFC\u5165):${current.period}  |  \u66F4\u65B0\u4E8E ${current.updatedAt}`);
+  L.push(`- \u5E97\u94FA\u5229\u6DA6\u884C:${sp.length} \u5BB6(\u5BFC\u5165\u8868\u5E97\u94FA\u6E05\u5355 ${current.shops.length} \u5BB6,\`\u9500\u552E\u989D\u4E3A 0\`\u7684\u5E97\u4E0D\u8FDB\u5165\u5229\u6DA6\u884C)`);
+  if (sp.length > 0) {
+    const sales = sum2(sp, (r) => r.sales);
+    const refund = sum2(sp, (r) => r.refund);
+    const gross = sum2(sp, (r) => r.grossProfit);
+    const promo = sum2(sp, (r) => r.promoCost);
+    L.push(`- \u9500\u552E\u989D\u5408\u8BA1 ${yuan(sales)}  |  \u9000\u6B3E\u5408\u8BA1 ${yuan(refund)}  |  \u6BDB\u5229\u5408\u8BA1 ${yuan(gross)}  |  \u6574\u4F53\u6BDB\u5229\u7387 ${sales > 0 ? pct(gross / sales * 100) : "\u2014"}  |  \u8D39\u6BD4 ${sales > 0 ? pct(promo / sales * 100) : "\u2014"}`);
+  }
+  L.push(`- \u5E73\u53F0\u8D27\u54C1(\u94FE\u63A5)${int(links.length)} \u884C  |  \u7CFB\u7EDF\u8D27\u54C1 ${int(prods.length)} \u884C  |  \u7CFB\u7EDF\u89C4\u683C(SKU)${int(skus.length)} \u884C`);
+  if (links.length > 0) {
+    L.push(`- \u94FE\u63A5\u53E3\u5F84 \u9500\u552E\u989D ${yuan(sum2(links, (r) => r.sales))}  |  \u51C0\u9500\u552E\u989D ${yuan(sum2(links, (r) => r.netSales))}  |  \u9000\u6B3E ${yuan(sum2(links, (r) => r.refundAmount))}`);
+  }
+  const prev = store.getPreviousMonthlyReport();
+  L.push("");
+  L.push(prev === null ? "\u4E0A\u4E00\u671F:\u65E0(\u4EC5\u5BFC\u5165\u4E00\u671F,\u6570\u636E\u5BF9\u6BD4\u4E0D\u53EF\u7528)" : `\u4E0A\u4E00\u671F:${prev.period}(\u6570\u636E\u5BF9\u6BD4\u53EF\u7528)`);
+  L.push(`\u6708\u5EA6\u5386\u53F2:${history.map((r) => r.month).join("\u3001")}`);
+  return L.join("\n");
+}
+function storesText(report, top) {
+  const rows = [...report.storeProfit ?? []].sort((a, b) => b.sales - a.sales);
+  const L = [`\u3010\u5E97\u94FA\u5229\u6DA6 \xB7 ${report.period}\u3011\u5171 ${rows.length} \u5BB6(\u6309\u9500\u552E\u989D\u964D\u5E8F,\u663E\u793A\u524D ${Math.min(top, rows.length)})`];
+  L.push(["\u95E8\u5E97", "\u9500\u552E\u6536\u5165", "\u6B63\u5411\u6536\u5165", "\u9000\u6B3E", "\u6BDB\u5229", "\u6BDB\u5229\u7387", "\u7269\u6D41\u8D39", "\u63A8\u5E7F\u8D39", "\u8D39\u6BD4"].join(" | "));
+  for (const r of rows.slice(0, top)) {
+    L.push([r.store, yuan(r.sales), yuan(r.positiveSales), yuan(r.refund), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.logisticsCost), yuan(r.promoCost), pct(r.feeRatio)].join(" | "));
+  }
+  const sales = sum2(rows, (r) => r.sales);
+  L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sales)} \xB7 \u9000\u6B3E ${yuan(sum2(rows, (r) => r.refund))} \xB7 \u6BDB\u5229 ${yuan(sum2(rows, (r) => r.grossProfit))}`);
+  return L.join("\n");
+}
+function productsText(report, top) {
+  const rows = [...report.systemProducts ?? []].sort((a, b) => b.sales - a.sales);
+  const L = [`\u3010\u7CFB\u7EDF\u8D27\u54C1(\u8D27\u54C1\u7EA7) \xB7 ${report.period}\u3011\u5171 ${rows.length} \u884C(\u6309\u9500\u552E\u989D\u964D\u5E8F,\u663E\u793A\u524D ${Math.min(top, rows.length)})`];
+  L.push(["\u8D27\u54C1\u540D\u79F0", "\u8D27\u54C1\u7F16\u53F7", "\u9500\u552E\u989D", "\u6BDB\u5229\u989D", "\u6BDB\u5229\u7387", "\u9000\u6B3E\u7387", "\u51C0\u9500\u552E\u989D", "\u63A8\u5E7F\u8D39", "\u5E73\u5747\u5355\u4EF7"].join(" | "));
+  for (const r of rows.slice(0, top)) {
+    L.push([r.name, r.code, yuan(r.sales), yuan(r.grossProfit), pct(r.grossMargin), pct(r.refundRate), yuan(r.netSales), yuan(r.adSpend), yuan(r.avgPrice)].join(" | "));
+  }
+  L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sum2(rows, (r) => r.sales))} \xB7 \u6BDB\u5229\u989D ${yuan(sum2(rows, (r) => r.grossProfit))} \xB7 \u51C0\u9500\u552E\u989D ${yuan(sum2(rows, (r) => r.netSales))}`);
+  return L.join("\n");
+}
+function linksText(report, top) {
+  const rows = [...report.platformLinks ?? []].sort((a, b) => b.sales - a.sales);
+  const real = rows.filter((r) => !r.linkName.startsWith("\uFF08\u65E0\u8EAB\u4EFD\u5360\u4F4D\u884C"));
+  const L = [`\u3010\u5E73\u53F0\u8D27\u54C1(\u94FE\u63A5\u7EA7) \xB7 ${report.period}\u3011\u5171 ${rows.length} \u884C(\u6309\u9500\u552E\u989D\u964D\u5E8F,\u663E\u793A\u524D ${Math.min(top, rows.length)})`];
+  L.push(["\u5E97\u94FA", "\u94FE\u63A5\u540D\u79F0", "\u94FE\u63A5ID", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u6BDB\u5229\u989D", "\u9000\u6B3E\u91D1\u989D", "\u51C0\u9500\u552E\u989D", "\u63A8\u5E7F\u8D39"].join(" | "));
+  for (const r of rows.slice(0, top)) {
+    L.push([r.shop, r.linkName, r.linkId, yuan(r.sales), int(r.salesCount), yuan(r.grossProfit), yuan(r.refundAmount), yuan(r.netSales), yuan(r.adSpend)].join(" | "));
+  }
+  L.push(`\u5408\u8BA1(\u542B\u5360\u4F4D\u884C\u7ED3\u8F6C):\u9500\u552E\u989D ${yuan(sum2(rows, (r) => r.sales))} \xB7 \u51C0\u9500\u552E\u989D ${yuan(sum2(rows, (r) => r.netSales))} \xB7 \u9000\u6B3E ${yuan(sum2(rows, (r) => r.refundAmount))}`);
+  L.push(`\u5176\u4E2D\u6709\u8EAB\u4EFD\u94FE\u63A5 ${real.length} \u884C;\u53E6\u6709\u65E0\u8EAB\u4EFD\u5360\u4F4D\u884C\u5DF2\u5408\u5E76\u4E3A 1 \u6761\u6807\u6CE8\u884C(\u5176\u6570\u503C\u8BA1\u5165\u5408\u8BA1,\u4E0D\u53C2\u4E0E\u6392\u884C)\u3002`);
+  return L.join("\n");
+}
+function skusText(report, top) {
+  const rows = [...report.systemSkus ?? []].sort((a, b) => b.sales - a.sales);
+  const L = [`\u3010\u7CFB\u7EDF\u89C4\u683C(SKU \u7EA7) \xB7 ${report.period}\u3011\u5171 ${rows.length} \u884C(\u6309\u9500\u552E\u989D\u964D\u5E8F,\u663E\u793A\u524D ${Math.min(top, rows.length)})`];
+  L.push(["\u7CFB\u7EDF\u8D27\u54C1\u540D\u79F0", "\u89C4\u683C\u540D\u79F0", "\u5546\u5BB6\u7F16\u7801", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u6BDB\u5229\u989D", "\u6BDB\u5229\u7387", "\u9000\u6B3E\u91D1\u989D", "\u51C0\u9500\u552E\u989D"].join(" | "));
+  for (const r of rows.slice(0, top)) {
+    L.push([r.name, r.specName, r.code, yuan(r.sales), int(r.salesCount), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.refundAmount), yuan(r.netSales)].join(" | "));
+  }
+  L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sum2(rows, (r) => r.sales))} \xB7 \u6BDB\u5229\u989D ${yuan(sum2(rows, (r) => r.grossProfit))} \xB7 \u9000\u6B3E ${yuan(sum2(rows, (r) => r.refundAmount))}`);
+  return L.join("\n");
+}
+function monthsText(store) {
+  const history = store.getMonthlyHistory();
+  const L = ["\u3010\u5DF2\u5BFC\u5165\u5468\u671F\u6E05\u5355\u3011", sourceLine(store, history)];
+  if (history.length === 0) return L.join("\n");
+  const cur = store.getMonthlyReport();
+  const prev = store.getPreviousMonthlyReport();
+  L.push("");
+  L.push(["\u6708\u4EFD", "\u5468\u671F", "\u5E97\u94FA\u884C", "\u8D27\u54C1", "\u94FE\u63A5", "\u89C4\u683C", "\u89D2\u8272"].join(" | "));
+  for (const m of history) {
+    const role = cur && m.period === cur.period ? "\u672C\u671F" : prev && m.period === prev.period ? "\u4E0A\u4E00\u671F" : "\u5386\u53F2\u5F52\u6863";
+    L.push([m.month, m.period, int((m.storeProfit ?? []).length), int((m.systemProducts ?? []).length), int((m.platformLinks ?? []).length), int((m.systemSkus ?? []).length), role].join(" | "));
+  }
+  return L.join("\n");
+}
+function registerDataReportTools(ctx, store) {
+  ctx.tools.register(defineTool11({
+    name: "ecommerce_data_report",
+    description: "\u8BFB\u53D6\u300C\u7535\u5546\u6570\u636E\u4E2D\u53F0\u300D\u5F53\u524D\u5DF2\u5BFC\u5165\u7684\u590D\u76D8\u6570\u636E(\u9762\u677F\u4E0A\u6BCF\u4E2A\u6570\u5B57\u7684\u552F\u4E00\u6765\u6E90,\u53E3\u5F84\u5B8C\u5168\u4E00\u81F4):\u5E97\u94FA\u5229\u6DA6/\u7CFB\u7EDF\u8D27\u54C1/\u5E73\u53F0\u94FE\u63A5/\u7CFB\u7EDF\u89C4\u683C/\u5468\u671F\u5BF9\u6BD4/\u5DF2\u5BFC\u5165\u6708\u4EFD\u6E05\u5355\u3002\u56DE\u7B54\u4EFB\u4F55\u300C\u9500\u552E\u989D/\u9000\u6B3E/\u6BDB\u5229/\u6392\u884C/\u67D0\u6708\u6570\u636E\u300D\u95EE\u9898\u524D\u5E94\u5148\u8C03\u7528\u672C\u5DE5\u5177\u53D6\u6570;\u672A\u5BFC\u5165\u7684\u5468\u671F\u4F1A\u660E\u786E\u8FD4\u56DE\u300C\u672A\u5BFC\u5165\u300D,\u4E0D\u5F97\u7528 0 \u6216\u63A8\u6D4B\u503C\u4EE3\u66FF\u3002",
+    parameters: {
+      view: {
+        type: "string",
+        enum: ["overview", "months", "storeProfit", "systemProducts", "platformLinks", "systemSkus", "compare"],
+        description: "\u8981\u8BFB\u7684\u89C6\u56FE:overview=\u603B\u89C8(\u9ED8\u8BA4)/months=\u5DF2\u5BFC\u5165\u6708\u4EFD\u6E05\u5355/storeProfit=\u5E97\u94FA\u5229\u6DA6/systemProducts=\u7CFB\u7EDF\u8D27\u54C1/platformLinks=\u5E73\u53F0\u94FE\u63A5/systemSkus=\u7CFB\u7EDF\u89C4\u683C/compare=\u5468\u671F\u5BF9\u6BD4"
+      },
+      month: { type: "string", description: "\u6307\u5B9A\u6708\u4EFD(\u5982 2026-07);\u7F3A\u7701=\u6700\u8FD1\u5BFC\u5165\u7684\u4E00\u671F\u3002\u672A\u5BFC\u5165\u7684\u6708\u4EFD\u4F1A\u660E\u786E\u62A5\u300C\u672A\u5BFC\u5165\u300D" },
+      top: { type: "number", description: "\u660E\u7EC6\u884C\u6570,\u9ED8\u8BA4 20,\u6700\u5927 200" },
+      cycle: { type: "string", enum: ["30d", "7d"], description: "\u4EC5 compare \u89C6\u56FE\u4F7F\u7528:30d=\u6708\u5EA6\u5BF9\u6BD4(\u9ED8\u8BA4)/7d=\u5468\u5EA6\u5BF9\u6BD4" },
+      kind: { type: "string", enum: ["platformLinks", "systemProducts", "systemSkus", "storeProfit"], description: "\u4EC5 compare \u89C6\u56FE\u4F7F\u7528:\u5BF9\u6BD4\u5C42\u7EA7" },
+      metric: { type: "string", description: "\u4EC5 compare \u89C6\u56FE\u4F7F\u7528:\u5BF9\u6BD4\u6307\u6807,\u5982 sales/netSales/grossProfit/refundRate/grossMargin/adSpend" }
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true, properties: {} },
+      render: (args, value) => {
+        const v = value;
+        const view = args.view ?? "overview";
+        return [{ type: "text", text: v.ok ? v.text : `[${view}] ${v.text}` }];
+      }
+    },
+    async execute(args) {
+      const view = ["overview", "months", "storeProfit", "systemProducts", "platformLinks", "systemSkus", "compare"].includes(args.view) ? args.view : "overview";
+      const top = Math.min(Math.max(args.top ?? 20, 1), 200);
+      const history = store.getMonthlyHistory();
+      if (view === "months") return asJsonObject({ ok: true, text: monthsText(store) });
+      if (view === "overview") {
+        return asJsonObject({ ok: true, text: overviewText(store) });
+      }
+      if (view === "compare") {
+        const cycle = args.cycle === "7d" ? "7d" : "30d";
+        const kind = args.kind !== void 0 && isCompareKind(args.kind) ? args.kind : void 0;
+        const payload = buildComparePayload(store, cycle, kind, args.metric, top);
+        const head2 = sourceLine(store, history) + "\n\n";
+        if (!payload.hasPrev) {
+          return asJsonObject({ ok: false, text: head2 + "\u6682\u65E0\u4E0A\u4E00\u671F\u6570\u636E\u53EF\u5BF9\u6BD4:\u9700\u8FDE\u7EED\u5BFC\u5165\u4E24\u4E2A\u5468\u671F(\u4E0A\u671F+\u672C\u671F)\u7684\u590D\u76D8 Excel \u540E,\u300C\u6570\u636E\u5BF9\u6BD4\u300D\u624D\u53EF\u7528\u3002\u8BF7\u52FF\u7F16\u9020\u4E0A\u671F\u6570\u5B57\u3002" });
+        }
+        if (!payload.result || payload.result.rows.length === 0) {
+          return asJsonObject({ ok: false, text: head2 + "\u5DF2\u5BFC\u5165\u4E24\u671F,\u4F46\u6240\u9009\u5C42\u7EA7/\u6307\u6807\u4E24\u4FA7\u7F3A\u5C11\u53EF\u6BD4\u6570\u636E,\u8BF7\u6362\u5C42\u7EA7\u6216\u6307\u6807\u518D\u8BD5\u3002" });
+        }
+        return asJsonObject({ ok: true, text: head2 + formatCompareText(payload.result, top) });
+      }
+      const { report, note } = pickMonthly(store, args.month);
+      const head = sourceLine(store, history) + "\n\n";
+      if (report === null) {
+        return asJsonObject({ ok: false, text: head + (note || "\u672A\u627E\u5230\u5BF9\u5E94\u6708\u4EFD\u7684\u5DF2\u5BFC\u5165\u6570\u636E\u3002") });
+      }
+      const prefix = note === "" ? head : head + note + "\n\n";
+      if (view === "storeProfit") return asJsonObject({ ok: true, text: prefix + storesText(report, top) });
+      if (view === "systemProducts") return asJsonObject({ ok: true, text: prefix + productsText(report, top) });
+      if (view === "platformLinks") return asJsonObject({ ok: true, text: prefix + linksText(report, top) });
+      return asJsonObject({ ok: true, text: prefix + skusText(report, top) });
+    }
+  }));
+}
+
 // src/skills.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3, readdirSync } from "node:fs";
 import { dirname as dirname4, join as join4 } from "node:path";
@@ -4607,6 +4788,7 @@ async function apply(ctx, config = {}) {
     registerExportCsvTool(ctx, store);
     registerModeTools(ctx, store);
     registerCompareTools(ctx, store);
+    registerDataReportTools(ctx, store);
   }
   const disposeSkills = registerPluginSkills(ctx);
   if (disposeSkills === void 0) {
@@ -4639,6 +4821,11 @@ async function apply(ctx, config = {}) {
       name: "ecommerce:qa-rules",
       order: -94,
       text: () => qaRuleDescription()
+    });
+    ctx.systemPrompt.section({
+      name: "ecommerce:data-source",
+      order: -93,
+      text: () => dataSourcePrompt(store)
     });
   }
 }
@@ -4686,6 +4873,26 @@ function todayPrompt(store) {
   parts.push(
     "\u7528\u6237\u8BE2\u95EE\u5E97\u94FA\u60C5\u51B5\u65F6\uFF0C\u4F18\u5148\u6C47\u62A5\u4EE5\u4E0A\u5F85\u529E\uFF1B\u5904\u7406\u52A8\u4F5C\uFF08\u53D1\u8D27/\u6539\u5E93\u5B58/\u9000\u6B3E\uFF09\u6267\u884C\u524D\u5411\u7528\u6237\u786E\u8BA4\u3002"
   );
+  return parts.join("\n");
+}
+function dataSourcePrompt(store) {
+  const history = store.getMonthlyHistory();
+  const weekly = store.getWeeklyReport();
+  const parts = ["\u3010\u7ECF\u8425\u6570\u636E\u6765\u6E90\u7EAA\u5F8B\u3011"];
+  parts.push(
+    "\u300C\u7535\u5546\u6570\u636E\u4E2D\u53F0\u300D\u9762\u677F\u4E0A\u663E\u793A\u7684\u6BCF\u4E00\u4E2A\u6570\u5B57\uFF0C\u90FD\u53EA\u6765\u81EA\u7528\u6237\u5BFC\u5165\u7684\u590D\u76D8 Excel\uFF08\u5229\u6DA6\u8868 + \u5546\u54C1\u6392\u540D\u5BFC\u51FA\uFF09\uFF0C\u6CA1\u6709\u4EFB\u4F55\u5185\u7F6E\u793A\u4F8B\u6570\u636E\u3002\u5546\u54C1/\u8BA2\u5355\u5E93\u662F\u53E6\u4E00\u5957\u57DF\uFF0C\u672A\u5BFC\u5165\u8868\u683C\u65F6\u4E3A\u7A7A\u3002"
+  );
+  if (history.length === 0 && weekly === null) {
+    parts.push("\u5F53\u524D**\u5C1A\u672A\u5BFC\u5165\u4EFB\u4F55\u590D\u76D8\u6570\u636E**\uFF1A\u9762\u677F\u5404\u89C6\u56FE\u4E3A\u7A7A\u767D\u5360\u4F4D\u3002\u6B64\u65F6\u4EFB\u4F55\u91D1\u989D/\u6392\u884C\u90FD\u5FC5\u987B\u56DE\u7B54\u300C\u672A\u5BFC\u5165\u300D\uFF0C\u4E25\u7981\u7ED9\u51FA\u5177\u4F53\u6570\u5B57\u6216\u793A\u4F8B\u503C\u3002");
+  } else {
+    parts.push(
+      `\u5F53\u524D\u5DF2\u5BFC\u5165\uFF1A\u6708\u5EA6 ${history.map((m) => m.month).join("\u3001") || "\uFF08\u65E0\uFF09"}\uFF1B\u5468\u5EA6 ${weekly ? weekly.period : "\uFF08\u65E0\uFF09"}\u3002\u672A\u5217\u51FA\u7684\u5468\u671F\u5373\u300C\u672A\u5BFC\u5165\u300D\uFF0C\u4E0D\u5F97\u7ED9\u51FA\u5176\u6570\u5B57\u3002`
+    );
+  }
+  parts.push(
+    "\u56DE\u7B54\u4EFB\u4F55\u9500\u552E\u989D/\u9000\u6B3E/\u6BDB\u5229/\u6392\u884C/\u95E8\u5E97/\u67D0\u6708\u6570\u636E\u7684\u95EE\u9898\u524D\uFF0C**\u5148\u8C03\u7528 ecommerce_data_report** \u53D6\u6570\uFF08\u5B83\u8FD4\u56DE\u7684\u4E0E\u9762\u677F\u540C\u6E90\u540C\u53E3\u5F84\uFF09\uFF1B\u4E0D\u8981\u81EA\u5DF1\u53BB\u89E3\u6790 data/store.json\uFF0C\u4E5F\u4E0D\u8981\u4F9D\u636E\u8BB0\u5FC6\u6216\u4F30\u7B97\u4F5C\u7B54\u3002"
+  );
+  parts.push("\u5DE5\u5177\u7684\u8FD4\u56DE\u91CC\u4F1A\u5E26\u300C\u6570\u636E\u6765\u6E90\u300D\u884C\u4E0E\u5DF2\u5BFC\u5165\u6708\u4EFD\u6E05\u5355\uFF1B\u82E5\u8BE5\u5DE5\u5177\u8BF4\u67D0\u6708\u672A\u5BFC\u5165\uFF0C\u5C31\u7167\u5B9E\u8F6C\u8FBE\uFF0C\u4E0D\u5F97\u6539\u7528 0 \u6216\u63A8\u6D4B\u503C\u3002");
   return parts.join("\n");
 }
 export {
