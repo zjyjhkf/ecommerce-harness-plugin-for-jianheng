@@ -974,6 +974,10 @@ var EcommerceStore = class {
   previousMonthlyReport = null;
   /** 上一期周复盘（导入新周期时归档）：同上 */
   previousWeeklyReport = null;
+  /** 月度复盘多月份归档（按 period upsert，最多保留 12 个月）：供「数据对比」
+   *  的月度趋势柱状/折线使用。连续导入越多个月份，趋势点越多。随持久化保存/恢复，
+   *  「一键清除」连同本归档一起清空（清除后趋势与对比模块必须消失）。 */
+  monthlyHistory = [];
   /** 报表数据单调递增版本号：任一报表（月/周）导入或替换即 +1，供前端判断「数据是否真正变化」，
    *  避免仅靠行数/周期这类粗粒度指纹漏掉「数值变化但行数相同」的插入更新。 */
   reportRevision = 0;
@@ -995,6 +999,8 @@ var EcommerceStore = class {
           this.weeklyReport = data.weeklyReport ?? null;
           this.previousMonthlyReport = data.previousMonthlyReport ?? null;
           this.previousWeeklyReport = data.previousWeeklyReport ?? null;
+          this.monthlyHistory = Array.isArray(data.monthlyHistory) ? data.monthlyHistory : [];
+          this.rebuildMonthlyHistoryFallback();
           if (Number.isFinite(data.reportRevision)) this.reportRevision = Number(data.reportRevision);
           const imported = this.adapter.name === "rest" ? "rest" : data.meta?.dataMode === "imported" ? "imported" : "demo";
           this.dataMode = imported;
@@ -1032,6 +1038,7 @@ var EcommerceStore = class {
             weeklyReport: this.weeklyReport,
             previousMonthlyReport: this.previousMonthlyReport,
             previousWeeklyReport: this.previousWeeklyReport,
+            monthlyHistory: this.monthlyHistory,
             reportRevision: this.reportRevision,
             meta: { dataMode: this.dataMode, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }
           },
@@ -1053,7 +1060,8 @@ var EcommerceStore = class {
         monthlyReport: this.monthlyReport,
         weeklyReport: this.weeklyReport,
         previousMonthlyReport: this.previousMonthlyReport,
-        previousWeeklyReport: this.previousWeeklyReport
+        previousWeeklyReport: this.previousWeeklyReport,
+        monthlyHistory: this.monthlyHistory
       },
       null,
       2
@@ -1071,6 +1079,8 @@ var EcommerceStore = class {
     this.weeklyReport = data.weeklyReport ?? null;
     this.previousMonthlyReport = data.previousMonthlyReport ?? null;
     this.previousWeeklyReport = data.previousWeeklyReport ?? null;
+    this.monthlyHistory = Array.isArray(data.monthlyHistory) ? data.monthlyHistory : [];
+    this.rebuildMonthlyHistoryFallback();
     this.dataMode = "imported";
     this.productsSource = "imported";
     this.ordersSource = "imported";
@@ -1192,6 +1202,7 @@ var EcommerceStore = class {
   /** 写入月度复盘（来自 JSON 完整月报导入）。新周期写入时归档上一期。 */
   setMonthlyReport(report) {
     this.adoptMonthly(report);
+    this.archiveToMonthlyHistory();
     this.reportRevision += 1;
     this.save();
   }
@@ -1204,6 +1215,7 @@ var EcommerceStore = class {
     }
     const incoming = mergeMonthly(this.monthlyReport, part);
     this.monthlyReport = incoming;
+    this.archiveToMonthlyHistory();
     this.reportRevision += 1;
     this.save();
   }
@@ -1222,6 +1234,7 @@ var EcommerceStore = class {
       this.previousMonthlyReport = this.monthlyReport;
     }
     this.monthlyReport = report;
+    this.archiveToMonthlyHistory();
     this.reportRevision += 1;
     this.save();
   }
@@ -1232,6 +1245,20 @@ var EcommerceStore = class {
     }
     this.monthlyReport = report;
   }
+  /** 把当前月报按 period upsert 进多月份归档（升序、保留最近 12 个月）：
+   *  数据对比的「月份柱状 + 折线趋势」据此渲染；重复导入同月数据 → 覆盖该月条目。 */
+  archiveToMonthlyHistory() {
+    const cur = this.monthlyReport;
+    if (cur === null || !cur.period) return;
+    const clone = structuredClone(cur);
+    const idx = this.monthlyHistory.findIndex((r) => r.period === clone.period);
+    if (idx >= 0) this.monthlyHistory[idx] = clone;
+    else {
+      this.monthlyHistory.push(clone);
+      this.monthlyHistory.sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0);
+      if (this.monthlyHistory.length > 12) this.monthlyHistory.splice(0, this.monthlyHistory.length - 12);
+    }
+  }
   /** 读取月度复盘（无导入记录返回 null） */
   getMonthlyReport() {
     return this.monthlyReport;
@@ -1239,6 +1266,21 @@ var EcommerceStore = class {
   /** 读取上一期月度复盘（未连续导入第二期返回 null）：供数据对比用 */
   getPreviousMonthlyReport() {
     return this.previousMonthlyReport;
+  }
+  /** 读取多月份月度复盘归档（升序，含当前期）：供数据对比的月份趋势柱状/折线用 */
+  getMonthlyHistory() {
+    return this.monthlyHistory;
+  }
+  /** 兼容兜底：历史里没有当前期/上一期时（旧版持久化文件、老备份导入），把它们并进去 */
+  rebuildMonthlyHistoryFallback() {
+    for (const rep of [this.previousMonthlyReport, this.monthlyReport]) {
+      if (rep === null || !rep.period) continue;
+      if (!this.monthlyHistory.some((r) => r.period === rep.period)) {
+        this.monthlyHistory.push(structuredClone(rep));
+      }
+    }
+    this.monthlyHistory.sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0);
+    if (this.monthlyHistory.length > 12) this.monthlyHistory.splice(0, this.monthlyHistory.length - 12);
   }
   /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节）。
    *  新周期文件先到时归档上一期，后续同周期文件继续补章节（不重复归档）。 */
@@ -1309,6 +1351,7 @@ var EcommerceStore = class {
     this.weeklyReport = null;
     this.previousMonthlyReport = null;
     this.previousWeeklyReport = null;
+    this.monthlyHistory = [];
     this.reportRevision += 1;
     this.save();
     return cleared;
@@ -2866,6 +2909,74 @@ function productsToCsv(products) {
     products.map((p) => [p.sku, p.name, p.category, p.price, p.stock, p.status, p.created_at, p.updated_at])
   );
 }
+function joinCsvBlocks(blocks) {
+  const clean = blocks.filter((b) => b.length > 0).map((b) => b.charCodeAt(0) === 65279 ? b.slice(1) : b).join("\r\n\r\n");
+  return clean === "" ? "" : "\uFEFF" + clean;
+}
+function monthlyReportToCsv(rep) {
+  const blocks = [];
+  if (rep.storeProfit && rep.storeProfit.length > 0) {
+    blocks.push(toCsv(
+      ["\u5E97\u94FA", "\u9500\u552E\u6536\u5165", "\u9000\u6B3E", "\u51C0\u9500", "\u6BDB\u5229", "\u6BDB\u5229\u7387%", "\u63A8\u5E7F\u8D39", "\u7269\u6D41\u8D39", "\u8D39\u6BD4%"],
+      rep.storeProfit.map((s) => [s.store, s.sales, s.refund, (Number(s.sales) || 0) - (Number(s.refund) || 0), s.grossProfit, s.grossMargin, s.promoCost, s.logisticsCost, s.feeRatio])
+    ));
+  }
+  if (rep.platformLinks && rep.platformLinks.length > 0) {
+    blocks.push(toCsv(
+      ["\u5E97\u94FA", "\u94FE\u63A5\u540D\u79F0", "\u94FE\u63A5ID", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u51C0\u9500", "\u6BDB\u5229", "\u6BDB\u5229\u7387%", "\u9000\u6B3E\u989D", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39", "\u5BA2\u5355\u4EF7"],
+      rep.platformLinks.map((l) => [l.shop, l.linkName, l.linkId, l.sales, l.salesCount, l.netSales, l.grossProfit, l.grossMargin ?? "", l.refundAmount, l.refundRate, l.adSpend, l.avgPrice ?? ""])
+    ));
+  }
+  if (rep.systemProducts && rep.systemProducts.length > 0) {
+    blocks.push(toCsv(
+      ["\u8D27\u54C1\u540D\u79F0", "\u5546\u5BB6\u7F16\u7801", "\u54C1\u724C", "\u5206\u7C7B", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u51C0\u9500", "\u6BDB\u5229", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39"],
+      rep.systemProducts.map((p) => [p.name, p.code, p.brand ?? "", p.category ?? "", p.sales, p.salesCount ?? "", p.netSales, p.grossProfit, p.refundRate, p.adSpend ?? ""])
+    ));
+  }
+  if (rep.systemSkus && rep.systemSkus.length > 0) {
+    blocks.push(toCsv(
+      ["\u8D27\u54C1\u540D\u79F0", "\u89C4\u683C\u540D\u79F0", "\u5546\u5BB6\u7F16\u7801", "\u5206\u7C7B", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u51C0\u9500", "\u6BDB\u5229", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39"],
+      rep.systemSkus.map((s) => [s.name, s.specName, s.code, s.category ?? "", s.sales, s.salesCount, s.netSales, s.grossProfit, s.refundRate, s.adSpend ?? ""])
+    ));
+  }
+  return joinCsvBlocks(blocks);
+}
+function weeklyReportToCsv(rep) {
+  const blocks = [];
+  if (rep.platformLinks && rep.platformLinks.length > 0) {
+    blocks.push(toCsv(
+      ["\u5E97\u94FA", "\u94FE\u63A5\u540D\u79F0", "\u94FE\u63A5ID", "\u9500\u552E\u989D", "\u9500\u552E\u4EF6\u6570", "\u51C0\u9500", "\u9000\u6B3E\u989D", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39"],
+      rep.platformLinks.map((l) => [l.shop, l.linkName, l.linkId, l.sales, l.salesCount, l.netSales, l.refundAmount, l.refundRate, l.adSpend])
+    ));
+  }
+  if (rep.systemProducts && rep.systemProducts.length > 0) {
+    blocks.push(toCsv(
+      ["\u8D27\u54C1\u540D\u79F0", "\u5546\u5BB6\u7F16\u7801", "\u54C1\u724C", "\u9500\u552E\u989D", "\u51C0\u9500", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39"],
+      rep.systemProducts.map((p) => [p.name, p.code, p.brand ?? "", p.sales, p.netSales, p.refundRate, p.adSpend ?? ""])
+    ));
+  }
+  if (rep.systemSkus && rep.systemSkus.length > 0) {
+    blocks.push(toCsv(
+      ["\u8D27\u54C1\u540D\u79F0", "\u89C4\u683C\u540D\u79F0", "\u5546\u5BB6\u7F16\u7801", "\u9500\u552E\u989D", "\u51C0\u9500", "\u9000\u6B3E\u7387%", "\u63A8\u5E7F\u8D39"],
+      rep.systemSkus.map((s) => [s.name, s.specName, s.code, s.sales, s.netSales, s.refundRate, s.adSpend ?? ""])
+    ));
+  }
+  return joinCsvBlocks(blocks);
+}
+function reportsToCsv(monthlyHistory, weekly) {
+  const blocks = [];
+  for (const rep of monthlyHistory) {
+    blocks.push(toCsv(["\u671F\u95F4"], [[`\u6708\u5EA6\u590D\u76D8 ${rep.period || rep.month}`]]));
+    const body = monthlyReportToCsv(rep);
+    if (body) blocks.push(body);
+  }
+  if (weekly !== null) {
+    blocks.push(toCsv(["\u671F\u95F4"], [[`\u5468\u590D\u76D8 ${weekly.period}`]]));
+    const body = weeklyReportToCsv(weekly);
+    if (body) blocks.push(body);
+  }
+  return joinCsvBlocks(blocks);
+}
 function ordersToCsv(orders) {
   return toCsv(
     ["order_id", "buyer", "sku", "product_name", "quantity", "amount", "status", "created_at", "shipped_at", "tracking_no", "carrier", "refund_reason"],
@@ -3043,50 +3154,69 @@ var metric = (id, label, unit, wavg = false, weight = "sales") => ({
   wavg,
   weight
 });
+var CORE_ROW_METRICS = [
+  metric("sales", "\u9500\u552E\u989D", "money"),
+  metric("netSales", "\u51C0\u9500\u989D", "money"),
+  metric("grossProfit", "\u6BDB\u5229", "money"),
+  metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
+  metric("refundRate", "\u9000\u6B3E\u7387", "pct", true)
+];
 var COMPARE_METRICS = {
-  platformLinks: [
-    metric("sales", "\u9500\u552E\u989D", "money"),
-    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
-    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
-    metric("salesCount", "\u9500\u552E\u4EF6\u6570", "number"),
-    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
-    metric("refundAmount", "\u9000\u6B3E\u91D1\u989D", "money"),
-    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
-    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
-    metric("views", "\u6D4F\u89C8\u91CF", "number"),
-    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "salesCount")
-  ],
-  systemProducts: [
-    metric("sales", "\u9500\u552E\u989D", "money"),
-    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
-    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
-    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
-    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
-    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
-    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "sales")
-  ],
-  systemSkus: [
-    metric("sales", "\u9500\u552E\u989D", "money"),
-    metric("salesCount", "\u9500\u552E\u4EF6\u6570", "number"),
-    metric("netSales", "\u51C0\u9500\u552E\u989D", "money"),
-    metric("grossProfit", "\u6BDB\u5229\u989D", "money"),
-    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
-    metric("refundAmount", "\u9000\u6B3E\u91D1\u989D", "money"),
-    metric("refundRate", "\u9000\u6B3E\u7387", "pct", true),
-    metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
-    metric("avgPrice", "\u5BA2\u5355\u4EF7", "money", true, "salesCount")
-  ],
+  platformLinks: CORE_ROW_METRICS,
+  systemProducts: CORE_ROW_METRICS,
+  systemSkus: CORE_ROW_METRICS,
   storeProfit: [
     metric("sales", "\u9500\u552E\u6536\u5165", "money"),
-    metric("positiveSales", "\u6B63\u5411\u9500\u552E\u6536\u5165", "money"),
-    metric("refund", "\u9000\u6B3E", "money"),
+    metric("netSales", "\u51C0\u9500\u989D", "money"),
     metric("grossProfit", "\u6BDB\u5229", "money"),
-    metric("grossMargin", "\u6BDB\u5229\u7387", "pct", true),
-    metric("promoCost", "\u8FD0\u8425\u63A8\u5E7F\u8D39", "money"),
-    metric("logisticsCost", "\u4ED3\u5E93\u7269\u6D41\u8D39", "money"),
+    metric("promoCost", "\u63A8\u5E7F\u8D39", "money"),
     metric("feeRatio", "\u8D39\u6BD4", "pct", true)
   ]
 };
+var CORE_TREND_METRICS = [
+  { id: "netSales", label: "\u51C0\u9500\u989D", unit: "money" },
+  { id: "skuCount", label: "\u4EA7\u54C1\u89C4\u683C\u6570", unit: "number" },
+  { id: "promoCost", label: "\u63A8\u5E7F\u8D39", unit: "money" },
+  { id: "grossProfit", label: "\u6BDB\u5229", unit: "money" },
+  { id: "feeRatio", label: "\u8D39\u6BD4", unit: "pct" }
+];
+var round1 = (n) => Math.round(n * 10) / 10;
+function buildMonthTrendPoint(rep) {
+  const sum2 = function(rows, f) {
+    if (!rows || rows.length === 0) return null;
+    let s = 0;
+    for (const r of rows) s += Number(f(r)) || 0;
+    return s;
+  };
+  const month = rep.month || String(rep.period || "").slice(0, 7);
+  const mm = Number(month.slice(5, 7));
+  const label = Number.isFinite(mm) && mm > 0 ? mm + "\u6708" : month;
+  const stores = rep.storeProfit;
+  const links = rep.platformLinks;
+  const products = rep.systemProducts;
+  const skus = rep.systemSkus;
+  const sales = sum2(stores, (r) => r.sales) ?? sum2(links, (r) => r.sales) ?? sum2(products, (r) => r.sales) ?? sum2(skus, (r) => r.sales);
+  const refund = sum2(stores, (r) => r.refund) ?? sum2(links, (r) => r.refundAmount) ?? sum2(products, (r) => r.refundAmount) ?? sum2(skus, (r) => r.refundAmount);
+  const netSales = sales === null ? null : sales - (refund ?? 0);
+  const grossProfit = sum2(stores, (r) => r.grossProfit) ?? sum2(links, (r) => r.grossProfit) ?? sum2(products, (r) => r.grossProfit) ?? sum2(skus, (r) => r.grossProfit);
+  const promoCost = sum2(stores, (r) => r.promoCost) ?? sum2(links, (r) => r.adSpend) ?? sum2(products, (r) => r.adSpend) ?? sum2(skus, (r) => r.adSpend);
+  const feeBase = netSales !== null && netSales > 0 ? netSales : sales !== null && sales > 0 ? sales : null;
+  const feeRatio = promoCost !== null && feeBase !== null && feeBase > 0 ? round1(promoCost / feeBase * 100) : null;
+  return {
+    period: rep.period || "",
+    month,
+    label,
+    sales,
+    netSales,
+    grossProfit,
+    promoCost,
+    feeRatio,
+    skuCount: skus ? skus.length : null
+  };
+}
+function buildMonthTrend(history) {
+  return history.filter((r) => r !== null && typeof r.period === "string" && r.period !== "").slice().sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0).map(buildMonthTrendPoint);
+}
 function listCompareMetrics(kind) {
   return COMPARE_METRICS[kind] ?? [];
 }
@@ -3314,6 +3444,7 @@ function isCompareKind(v) {
 function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
   const prevReport = cycle === "7d" ? store.getPreviousWeeklyReport() : store.getPreviousMonthlyReport();
   const currReport = cycle === "7d" ? store.getWeeklyReport() : store.getMonthlyReport();
+  const trend = cycle === "30d" ? buildMonthTrend(store.getMonthlyHistory()) : [];
   const kinds = reportKindsAvail(cycle, prevReport, currReport);
   const effectiveKind = kind !== void 0 && isCompareKind(kind) ? kind : pickCompareKind(cycle, prevReport, currReport);
   const defs = listCompareMetrics(effectiveKind);
@@ -3332,7 +3463,12 @@ function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
     currPeriod: currReport && currReport.period || "",
     kinds,
     metrics: defs.map((m) => ({ id: m.id, label: m.label, unit: m.unit })),
-    result
+    result,
+    trend,
+    trendMetrics: CORE_TREND_METRICS,
+    // 模块出现条件（严格隔离）：30d 需连续导入 ≥2 个月归档；7d 需存在上一期且两期有可比对象。
+    // 一键清除后归档为空 → hasPrev=false、trend=[]、result=null → showModule=false，菜单必隐藏。
+    showModule: cycle === "30d" ? trend.length >= 2 : prevReport !== null && result !== null
   };
 }
 
@@ -3579,8 +3715,10 @@ function registerShopApi(webServer, store, ctx = {}) {
           try {
             const products = store.listProducts({ page_size: 1e4 }).items;
             const orders = store.listOrders({ page_size: 1e4 }).items;
+            const monthlyHistory = store.getMonthlyHistory();
+            const weekly = store.getWeeklyReport();
             if (type === "json") {
-              sendJson(res, 200, { ok: true, value: { products, orders } });
+              sendJson(res, 200, { ok: true, value: { products, orders, monthlyHistory, weekly } });
               return;
             }
             let csv = "";
@@ -3591,9 +3729,25 @@ function registerShopApi(webServer, store, ctx = {}) {
             } else if (scope === "orders") {
               csv = ordersToCsv(orders);
               filename = "ecommerce-orders.csv";
+            } else if (scope === "reports") {
+              csv = reportsToCsv(monthlyHistory, weekly);
+              filename = "ecommerce-reports.csv";
             } else {
-              csv = productsToCsv(products) + "\r\n\r\n" + ordersToCsv(orders);
+              const blocks = [];
+              if (products.length > 0) blocks.push(productsToCsv(products));
+              if (orders.length > 0) blocks.push(ordersToCsv(orders));
+              const repCsv = reportsToCsv(monthlyHistory, weekly);
+              if (repCsv !== "") blocks.push(repCsv);
+              csv = joinCsvBlocks(blocks);
               filename = "ecommerce-all.csv";
+            }
+            const dataLines = csv.split("\r\n").filter((l) => l.trim() !== "").length;
+            if (csv === "" || dataLines === 0) {
+              sendJson(res, 400, {
+                ok: false,
+                error: { code: "EXPORT_EMPTY", message: "\u5F53\u524D\u6CA1\u6709\u4EFB\u4F55\u53EF\u5BFC\u51FA\u7684\u6570\u636E\uFF1A\u8BF7\u5148\u5BFC\u5165\u5546\u54C1/\u8BA2\u5355\u8868\u683C\u6216\u6708\u5EA6/\u5468\u5EA6\u590D\u76D8 Excel" }
+              });
+              return;
             }
             res.writeHead(200, {
               "content-type": "text/csv; charset=utf-8",

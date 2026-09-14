@@ -12,12 +12,16 @@
 import type { EcommerceStore } from './store.ts'
 import {
   buildCompare,
+  buildMonthTrend,
+  CORE_TREND_METRICS,
   listCompareMetrics,
   pickCompareKind,
   reportKindsAvail,
   type CompareCycle,
   type CompareKind,
   type CompareResult,
+  type MonthTrendPoint,
+  type TrendMetricDef,
 } from './compare.ts'
 
 export interface ComparePayload {
@@ -27,6 +31,12 @@ export interface ComparePayload {
   kinds: Array<{ kind: CompareKind; label: string; prev: number; curr: number }>
   metrics: Array<{ id: string; label: string; unit: string }>
   result: CompareResult | null
+  /** 月度趋势（30d）：多月份归档按升序聚合；7d 无月度趋势 → 空数组 */
+  trend: MonthTrendPoint[]
+  /** 趋势核心指标按键目录（净销额/产品规格数/推广费/毛利/费比） */
+  trendMetrics: TrendMetricDef[]
+  /** 是否满足「数据对比模块出现」条件：至少两期归档（连续导入两月） */
+  showModule: boolean
 }
 
 const CYCLES: CompareCycle[] = ['30d', '7d']
@@ -49,6 +59,8 @@ export function buildComparePayload(
 ): ComparePayload {
   const prevReport = cycle === '7d' ? store.getPreviousWeeklyReport() : store.getPreviousMonthlyReport()
   const currReport = cycle === '7d' ? store.getWeeklyReport() : store.getMonthlyReport()
+  // 月度趋势仅 30d 有意义：多月份归档（含当前期）升序聚合；7d 返回空数组
+  const trend: MonthTrendPoint[] = cycle === '30d' ? buildMonthTrend(store.getMonthlyHistory()) : []
   const kinds = reportKindsAvail(cycle, prevReport, currReport)
   // 有效 kind：显式给定且在该周期层级内；否则自动挑选两期都有数据的层级
   const effectiveKind: CompareKind = kind !== undefined && isCompareKind(kind) ? kind : pickCompareKind(cycle, prevReport, currReport)
@@ -69,6 +81,11 @@ export function buildComparePayload(
     kinds,
     metrics: defs.map((m) => ({ id: m.id, label: m.label, unit: m.unit })),
     result,
+    trend,
+    trendMetrics: CORE_TREND_METRICS,
+    // 模块出现条件（严格隔离）：30d 需连续导入 ≥2 个月归档；7d 需存在上一期且两期有可比对象。
+    // 一键清除后归档为空 → hasPrev=false、trend=[]、result=null → showModule=false，菜单必隐藏。
+    showModule: cycle === '30d' ? trend.length >= 2 : prevReport !== null && result !== null,
   }
 }
 

@@ -103,50 +103,107 @@ const metric = (id: string, label: string, unit: CompareUnit, wavg = false, weig
   weight,
 })
 
-/** 各层级可选对比指标目录（字段名与 types.ts 行对象字段一致，缺失自动跳过） */
+/** 各层级可选对比指标目录（字段名与 types.ts 行对象字段一致，缺失自动跳过）。
+ *  v0.4.0 精简：删除正向销售收入/仓库物流费/毛利率/客单价/浏览量/销售件数等非核心按键，
+ *  全层级统一保留核心五类——销售额 / 净销额 / 毛利 / 推广费 / 退款率（利润表层级再加费比）。 */
+const CORE_ROW_METRICS: CompareMetricDef[] = [
+  metric('sales', '销售额', 'money'),
+  metric('netSales', '净销额', 'money'),
+  metric('grossProfit', '毛利', 'money'),
+  metric('adSpend', '推广费', 'money'),
+  metric('refundRate', '退款率', 'pct', true),
+]
 export const COMPARE_METRICS: Record<CompareKind, CompareMetricDef[]> = {
-  platformLinks: [
-    metric('sales', '销售额', 'money'),
-    metric('netSales', '净销售额', 'money'),
-    metric('grossProfit', '毛利额', 'money'),
-    metric('salesCount', '销售件数', 'number'),
-    metric('grossMargin', '毛利率', 'pct', true),
-    metric('refundAmount', '退款金额', 'money'),
-    metric('refundRate', '退款率', 'pct', true),
-    metric('adSpend', '推广费', 'money'),
-    metric('views', '浏览量', 'number'),
-    metric('avgPrice', '客单价', 'money', true, 'salesCount'),
-  ],
-  systemProducts: [
-    metric('sales', '销售额', 'money'),
-    metric('netSales', '净销售额', 'money'),
-    metric('grossProfit', '毛利额', 'money'),
-    metric('grossMargin', '毛利率', 'pct', true),
-    metric('refundRate', '退款率', 'pct', true),
-    metric('adSpend', '推广费', 'money'),
-    metric('avgPrice', '客单价', 'money', true, 'sales'),
-  ],
-  systemSkus: [
-    metric('sales', '销售额', 'money'),
-    metric('salesCount', '销售件数', 'number'),
-    metric('netSales', '净销售额', 'money'),
-    metric('grossProfit', '毛利额', 'money'),
-    metric('grossMargin', '毛利率', 'pct', true),
-    metric('refundAmount', '退款金额', 'money'),
-    metric('refundRate', '退款率', 'pct', true),
-    metric('adSpend', '推广费', 'money'),
-    metric('avgPrice', '客单价', 'money', true, 'salesCount'),
-  ],
+  platformLinks: CORE_ROW_METRICS,
+  systemProducts: CORE_ROW_METRICS,
+  systemSkus: CORE_ROW_METRICS,
   storeProfit: [
     metric('sales', '销售收入', 'money'),
-    metric('positiveSales', '正向销售收入', 'money'),
-    metric('refund', '退款', 'money'),
+    metric('netSales', '净销额', 'money'),
     metric('grossProfit', '毛利', 'money'),
-    metric('grossMargin', '毛利率', 'pct', true),
-    metric('promoCost', '运营推广费', 'money'),
-    metric('logisticsCost', '仓库物流费', 'money'),
+    metric('promoCost', '推广费', 'money'),
     metric('feeRatio', '费比', 'pct', true),
   ],
+}
+
+// ─────────────────────────── 月度趋势（数据对比：柱状按月对比 + 折线随月推进） ───────────────────────────
+
+/** 趋势核心指标按键（用户指定：净销额/产品规格数/推广费 + 拆开的毛利与费比 + 销售额兜底） */
+export interface TrendMetricDef {
+  id: 'netSales' | 'skuCount' | 'promoCost' | 'grossProfit' | 'feeRatio' | 'sales'
+  label: string
+  unit: CompareUnit
+}
+export const CORE_TREND_METRICS: TrendMetricDef[] = [
+  { id: 'netSales', label: '净销额', unit: 'money' },
+  { id: 'skuCount', label: '产品规格数', unit: 'number' },
+  { id: 'promoCost', label: '推广费', unit: 'money' },
+  { id: 'grossProfit', label: '毛利', unit: 'money' },
+  { id: 'feeRatio', label: '费比', unit: 'pct' },
+]
+
+/** 单个月份的趋势聚合点（缺失数据源的字段为 null，前端跳过该月柱/点） */
+export interface MonthTrendPoint {
+  period: string
+  /** 月份标签，如 "2026-07" */
+  month: string
+  /** 展示短标签，如 "7月" */
+  label: string
+  sales: number | null
+  netSales: number | null
+  grossProfit: number | null
+  promoCost: number | null
+  feeRatio: number | null
+  skuCount: number | null
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10
+
+/** 从单份月报聚合出趋势点：
+ *  店铺/收入/毛利/推广优先取「利润表」（storeProfit 完整月份）；
+ *  缺利润表时回退「商品排名导出」行汇总；净销 = 销售收入 − 退款。 */
+export function buildMonthTrendPoint(rep: MonthlyReport): MonthTrendPoint {
+  const sum = function <T>(rows: T[] | undefined, f: (r: T) => number): number | null {
+    if (!rows || rows.length === 0) return null
+    let s = 0
+    for (const r of rows) s += Number(f(r)) || 0
+    return s
+  }
+  const month = rep.month || String(rep.period || '').slice(0, 7)
+  const mm = Number(month.slice(5, 7))
+  const label = Number.isFinite(mm) && mm > 0 ? mm + '月' : month
+  const stores = rep.storeProfit
+  const links = rep.platformLinks
+  const products = rep.systemProducts
+  const skus = rep.systemSkus
+  // 收入口径：利润表销售收入 → 回退排名销售额（任一层级）
+  const sales = sum(stores, (r) => r.sales) ?? sum(links, (r) => r.sales) ?? sum(products, (r) => r.sales) ?? sum(skus, (r) => r.sales)
+  const refund = sum(stores, (r) => r.refund) ?? sum(links, (r) => r.refundAmount) ?? sum(products, (r) => r.refundAmount) ?? sum(skus, (r) => r.refundAmount)
+  const netSales = sales === null ? null : sales - (refund ?? 0)
+  const grossProfit = sum(stores, (r) => r.grossProfit) ?? sum(links, (r) => r.grossProfit) ?? sum(products, (r) => r.grossProfit) ?? sum(skus, (r) => r.grossProfit)
+  const promoCost = sum(stores, (r) => r.promoCost) ?? sum(links, (r) => r.adSpend) ?? sum(products, (r) => r.adSpend) ?? sum(skus, (r) => r.adSpend)
+  const feeBase = netSales !== null && netSales > 0 ? netSales : sales !== null && sales > 0 ? sales : null
+  const feeRatio = promoCost !== null && feeBase !== null && feeBase > 0 ? round1((promoCost / feeBase) * 100) : null
+  return {
+    period: rep.period || '',
+    month,
+    label,
+    sales,
+    netSales,
+    grossProfit,
+    promoCost,
+    feeRatio,
+    skuCount: skus ? skus.length : null,
+  }
+}
+
+/** 对多月份归档按升序产出趋势点序列（数据对比视图的柱状/折线数据源） */
+export function buildMonthTrend(history: MonthlyReport[]): MonthTrendPoint[] {
+  return history
+    .filter((r) => r !== null && typeof r.period === 'string' && r.period !== '')
+    .slice()
+    .sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0))
+    .map(buildMonthTrendPoint)
 }
 
 export function listCompareMetrics(kind: CompareKind): CompareMetricDef[] {

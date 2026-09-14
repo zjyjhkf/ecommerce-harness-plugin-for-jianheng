@@ -100,23 +100,25 @@ test('buildCompare：身份键降级（链接无 linkId → linkName|shop；货�
   assert.equal(r2?.summary.delta, -20)
 })
 
-test('buildCompare：比率指标按销售额加权汇总（毛利率，pp 差值、无增减率）', () => {
+// v0.4.0 说明：对比指标目录精简（grossMargin 等按键已删），本用例改用保留的核心比率
+// 指标 refundRate（同为按销售额加权 pct），继续锁定「加权汇总 + pp 差值 + 不输出相对增减率」引擎能力。
+test('buildCompare：比率指标按销售额加权汇总（退款率，pp 差值、无增减率）', () => {
   const prev = monthlyProducts('2026-06-01~2026-06-30', [
-    { name: 'P1', code: 'P1', sales: 100, grossMargin: 10 },
-    { name: 'P2', code: 'P2', sales: 300, grossMargin: 30 },
+    { name: 'P1', code: 'P1', sales: 100, refundRate: 10 },
+    { name: 'P2', code: 'P2', sales: 300, refundRate: 30 },
   ])
   const curr = monthlyProducts('2026-07-01~2026-07-31', [
-    { name: 'P1', code: 'P1', sales: 100, grossMargin: 20 },
-    { name: 'P2', code: 'P2', sales: 300, grossMargin: 30 },
-    { name: 'P3', code: 'P3', sales: 100, grossMargin: 50 },
+    { name: 'P1', code: 'P1', sales: 100, refundRate: 20 },
+    { name: 'P2', code: 'P2', sales: 300, refundRate: 30 },
+    { name: 'P3', code: 'P3', sales: 100, refundRate: 50 },
   ])
-  const r = buildCompare({ cycle: '30d', kind: 'systemProducts', metricId: 'grossMargin', prevReport: prev, currReport: curr })
-  assert.ok(r, '毛利率对比非 null')
+  const r = buildCompare({ cycle: '30d', kind: 'systemProducts', metricId: 'refundRate', prevReport: prev, currReport: curr })
+  assert.ok(r, '退款率对比非 null')
   const s = r!.summary
   // 上期 (10*100+30*300)/400 = 25；本期 (20*100+30*300+50*100)/500 = 32
   assert.ok(Math.abs(s.prevTotal - 25) < 1e-9)
   assert.ok(Math.abs(s.currTotal - 32) < 1e-9)
-  assert.ok(Math.abs(s.delta - 7) < 1e-9, '毛利率差值 7pp')
+  assert.ok(Math.abs(s.delta - 7) < 1e-9, '退款率差值 7pp')
   assert.equal(s.deltaPct, null, '比率指标不输出相对增减率')
   assert.equal(r!.unit, 'pct')
 })

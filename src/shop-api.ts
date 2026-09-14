@@ -21,7 +21,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EcommerceStore } from './store.ts'
 import { parseImportFile } from './import-parse.ts'
 import { renderDataCenter } from './data-center.ts'
-import { ordersToCsv, productsToCsv } from './csv-util.ts'
+import { joinCsvBlocks, ordersToCsv, productsToCsv, reportsToCsv } from './csv-util.ts'
 import type { MonthlyParseResult } from './monthly-report.ts'
 import type { WeeklyParseResult } from './weekly-report.ts'
 import type { MonthlyReport, Order, Product } from './types.ts'
@@ -355,14 +355,19 @@ export function registerShopApi(
           return
         }
         if (pathname === '/ecommerce-api/export' && req.method === 'GET') {
-          // 数据导出：?type=csv&scope=products|orders|all（或 ?type=json）
+          // 数据导出：?type=csv&scope=products|orders|reports|all（或 ?type=json）
+          // ⚠ v0.4.0：复盘报表（月度归档+周复盘）纳入导出。此前只导商品/订单——
+          // 而用户数据主体是导入的复盘 Excel（不进商品/订单表），导致导出的 CSV 只有表头、
+          // 看起来"完全空"。scope=all = 商品+订单+全部复盘报表。
           const type = query.get('type') ?? 'csv'
           const scope = query.get('scope') ?? 'all'
           try {
             const products = store.listProducts({ page_size: 10000 }).items
             const orders = store.listOrders({ page_size: 10000 }).items
+            const monthlyHistory = store.getMonthlyHistory()
+            const weekly = store.getWeeklyReport()
             if (type === 'json') {
-              sendJson(res, 200, { ok: true, value: { products, orders } })
+              sendJson(res, 200, { ok: true, value: { products, orders, monthlyHistory, weekly } })
               return
             }
             let csv = ''
@@ -373,9 +378,26 @@ export function registerShopApi(
             } else if (scope === 'orders') {
               csv = ordersToCsv(orders)
               filename = 'ecommerce-orders.csv'
+            } else if (scope === 'reports') {
+              csv = reportsToCsv(monthlyHistory, weekly)
+              filename = 'ecommerce-reports.csv'
             } else {
-              csv = productsToCsv(products) + '\r\n\r\n' + ordersToCsv(orders)
+              const blocks: string[] = []
+              if (products.length > 0) blocks.push(productsToCsv(products))
+              if (orders.length > 0) blocks.push(ordersToCsv(orders))
+              const repCsv = reportsToCsv(monthlyHistory, weekly)
+              if (repCsv !== '') blocks.push(repCsv)
+              csv = joinCsvBlocks(blocks)
               filename = 'ecommerce-all.csv'
+            }
+            // 空判定：csv 只剩表头行（含 BOM 时 ≥2 个非空行才算有数据）→ 明确报错而不是给个空文件
+            const dataLines = csv.split('\r\n').filter((l) => l.trim() !== '').length
+            if (csv === '' || dataLines === 0) {
+              sendJson(res, 400, {
+                ok: false,
+                error: { code: 'EXPORT_EMPTY', message: '当前没有任何可导出的数据：请先导入商品/订单表格或月度/周度复盘 Excel' },
+              })
+              return
             }
             res.writeHead(200, {
               'content-type': 'text/csv; charset=utf-8',

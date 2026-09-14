@@ -21,11 +21,20 @@ export const SRC_DC = resolve(ROOT, 'src', 'assets', 'data-center.html')
 export const M_DIR = 'C:/Users/31253/Desktop/file for jianheng/月度数据'
 export const W_DIR = 'C:/Users/31253/Desktop/file for jianheng/周度数据'
 
+/** 7 月度（2026-07）：9.11 起源文件移入「7月度数据」子目录 */
 export const MONTHLY_FILES = {
-  links: `${M_DIR}/7月链接销售表新.xlsx`,
-  products: `${M_DIR}/7月货品销售表新.xlsx`,
-  skus: `${M_DIR}/7月货品规格销售表新.xlsx`,
-  profit: `${M_DIR}/7月店铺销售表新.xlsx`,
+  links: `${M_DIR}/7月度数据/7月链接销售表新.xlsx`,
+  products: `${M_DIR}/7月度数据/7月货品销售表新.xlsx`,
+  skus: `${M_DIR}/7月度数据/7月货品规格销售表新.xlsx`,
+  profit: `${M_DIR}/7月度数据/7月店铺销售表新.xlsx`,
+}
+
+/** 8 月度（2026-08）：「连续导入两月 → 数据对比出现」场景的第二期（文件名与 7 月不同） */
+export const AUGUST_FILES = {
+  links: `${M_DIR}/8月度数据/8月链接销售数据表.xlsx`,
+  products: `${M_DIR}/8月度数据/8月系统货品销售数据表.xlsx`,
+  skus: `${M_DIR}/8月度数据/8月货品规格销售数据表.xlsx`,
+  profit: `${M_DIR}/8月度数据/8月店铺销售数据.xlsx`,
 }
 
 /* ───────────────────────── 断言与输出工具 ───────────────────────── */

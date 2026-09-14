@@ -72,6 +72,10 @@ export class EcommerceStore {
   private previousMonthlyReport: MonthlyReport | null = null
   /** 上一期周复盘（导入新周期时归档）：同上 */
   private previousWeeklyReport: WeeklyReport | null = null
+  /** 月度复盘多月份归档（按 period upsert，最多保留 12 个月）：供「数据对比」
+   *  的月度趋势柱状/折线使用。连续导入越多个月份，趋势点越多。随持久化保存/恢复，
+   *  「一键清除」连同本归档一起清空（清除后趋势与对比模块必须消失）。 */
+  private monthlyHistory: MonthlyReport[] = []
   /** 报表数据单调递增版本号：任一报表（月/周）导入或替换即 +1，供前端判断「数据是否真正变化」，
    *  避免仅靠行数/周期这类粗粒度指纹漏掉「数值变化但行数相同」的插入更新。 */
   private reportRevision = 0
@@ -94,6 +98,7 @@ export class EcommerceStore {
           weeklyReport?: WeeklyReport | null
           previousMonthlyReport?: MonthlyReport | null
           previousWeeklyReport?: WeeklyReport | null
+          monthlyHistory?: MonthlyReport[]
           reportRevision?: number
           meta?: { dataMode?: string; updatedAt?: string }
         }
@@ -107,6 +112,9 @@ export class EcommerceStore {
           this.weeklyReport = data.weeklyReport ?? null
           this.previousMonthlyReport = data.previousMonthlyReport ?? null
           this.previousWeeklyReport = data.previousWeeklyReport ?? null
+          // 多月份归档：旧版持久化文件没有该字段 → 用「上一期+当前期」推导兜底，保证升级后趋势不断档
+          this.monthlyHistory = Array.isArray(data.monthlyHistory) ? data.monthlyHistory : []
+          this.rebuildMonthlyHistoryFallback()
           if (Number.isFinite(data.reportRevision)) this.reportRevision = Number(data.reportRevision)
           const imported =
             this.adapter.name === 'rest'
@@ -153,6 +161,7 @@ export class EcommerceStore {
             weeklyReport: this.weeklyReport,
             previousMonthlyReport: this.previousMonthlyReport,
             previousWeeklyReport: this.previousWeeklyReport,
+            monthlyHistory: this.monthlyHistory,
             reportRevision: this.reportRevision,
             meta: { dataMode: this.dataMode, updatedAt: new Date().toISOString() },
           },
@@ -176,6 +185,7 @@ export class EcommerceStore {
         weeklyReport: this.weeklyReport,
         previousMonthlyReport: this.previousMonthlyReport,
         previousWeeklyReport: this.previousWeeklyReport,
+        monthlyHistory: this.monthlyHistory,
       },
       null,
       2,
@@ -191,6 +201,7 @@ export class EcommerceStore {
       weeklyReport?: WeeklyReport | null
       previousMonthlyReport?: MonthlyReport | null
       previousWeeklyReport?: WeeklyReport | null
+      monthlyHistory?: MonthlyReport[]
     }
     if (!Array.isArray(data.products) || !Array.isArray(data.orders)) {
       throw new Error('备份文件格式不正确：缺少 products/orders 数组')
@@ -201,6 +212,8 @@ export class EcommerceStore {
     this.weeklyReport = data.weeklyReport ?? null
     this.previousMonthlyReport = data.previousMonthlyReport ?? null
     this.previousWeeklyReport = data.previousWeeklyReport ?? null
+    this.monthlyHistory = Array.isArray(data.monthlyHistory) ? data.monthlyHistory : []
+    this.rebuildMonthlyHistoryFallback()
     this.dataMode = 'imported'
     this.productsSource = 'imported'
     this.ordersSource = 'imported'
@@ -333,6 +346,7 @@ export class EcommerceStore {
   /** 写入月度复盘（来自 JSON 完整月报导入）。新周期写入时归档上一期。 */
   setMonthlyReport(report: MonthlyReport | null): void {
     this.adoptMonthly(report)
+    this.archiveToMonthlyHistory()
     this.reportRevision += 1
     this.save()
   }
@@ -347,6 +361,7 @@ export class EcommerceStore {
     }
     const incoming = mergeMonthly(this.monthlyReport, part)
     this.monthlyReport = incoming
+    this.archiveToMonthlyHistory()
     this.reportRevision += 1
     this.save()
   }
@@ -367,6 +382,7 @@ export class EcommerceStore {
       this.previousMonthlyReport = this.monthlyReport
     }
     this.monthlyReport = report
+    this.archiveToMonthlyHistory()
     this.reportRevision += 1
     this.save()
   }
@@ -385,6 +401,21 @@ export class EcommerceStore {
     this.monthlyReport = report
   }
 
+  /** 把当前月报按 period upsert 进多月份归档（升序、保留最近 12 个月）：
+   *  数据对比的「月份柱状 + 折线趋势」据此渲染；重复导入同月数据 → 覆盖该月条目。 */
+  private archiveToMonthlyHistory(): void {
+    const cur = this.monthlyReport
+    if (cur === null || !cur.period) return
+    const clone = structuredClone(cur)
+    const idx = this.monthlyHistory.findIndex((r) => r.period === clone.period)
+    if (idx >= 0) this.monthlyHistory[idx] = clone
+    else {
+      this.monthlyHistory.push(clone)
+      this.monthlyHistory.sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0))
+      if (this.monthlyHistory.length > 12) this.monthlyHistory.splice(0, this.monthlyHistory.length - 12)
+    }
+  }
+
   /** 读取月度复盘（无导入记录返回 null） */
   getMonthlyReport(): MonthlyReport | null {
     return this.monthlyReport
@@ -393,6 +424,23 @@ export class EcommerceStore {
   /** 读取上一期月度复盘（未连续导入第二期返回 null）：供数据对比用 */
   getPreviousMonthlyReport(): MonthlyReport | null {
     return this.previousMonthlyReport
+  }
+
+  /** 读取多月份月度复盘归档（升序，含当前期）：供数据对比的月份趋势柱状/折线用 */
+  getMonthlyHistory(): MonthlyReport[] {
+    return this.monthlyHistory
+  }
+
+  /** 兼容兜底：历史里没有当前期/上一期时（旧版持久化文件、老备份导入），把它们并进去 */
+  private rebuildMonthlyHistoryFallback(): void {
+    for (const rep of [this.previousMonthlyReport, this.monthlyReport]) {
+      if (rep === null || !rep.period) continue
+      if (!this.monthlyHistory.some((r) => r.period === rep.period)) {
+        this.monthlyHistory.push(structuredClone(rep))
+      }
+    }
+    this.monthlyHistory.sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0))
+    if (this.monthlyHistory.length > 12) this.monthlyHistory.splice(0, this.monthlyHistory.length - 12)
   }
 
   /** 合并周复盘章节（三份「商品排名导出」分次导入，按展示形式覆盖对应章节）。
@@ -472,6 +520,7 @@ export class EcommerceStore {
     this.weeklyReport = null
     this.previousMonthlyReport = null
     this.previousWeeklyReport = null
+    this.monthlyHistory = []
     this.reportRevision += 1
     this.save()
     return cleared

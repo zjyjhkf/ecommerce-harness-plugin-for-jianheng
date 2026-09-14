@@ -128,7 +128,7 @@ export async function clearAllData(): Promise<ClearDataResult> {
  *  带 ?v= 版本号强制 iframe 每次发版后走全新 URL，绕过桌面端 WebView 对旧 HTML 的激进缓存。 */
 export function dataCenterUrl(): string {
   const base = resolveApiBase()
-  return (base ? base : '') + '/ecommerce-api/data-center?v=20260911-r19'
+  return (base ? base : '') + '/ecommerce-api/data-center?v=20260914-r20'
 }
 
 /** 导出数据（CSV 或 JSON）——触发浏览器下载 */
