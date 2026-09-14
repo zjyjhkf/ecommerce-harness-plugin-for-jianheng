@@ -118,7 +118,7 @@ async function clearAllData() {
 }
 function dataCenterUrl() {
   const base = resolveApiBase();
-  return (base ? base : "") + "/ecommerce-api/data-center?v=20260914-r20";
+  return (base ? base : "") + "/ecommerce-api/data-center?v=20260914-r21";
 }
 function exportData(type = "csv", scope = "all") {
   if (typeof window === "undefined") return;
@@ -827,7 +827,7 @@ function ShopDeskTab() {
     {
       type: "button",
       className: "esd-icon-btn esd-icon-btn-danger",
-      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u81EA\u52A8\u4E0B\u8F7D\u5907\u4EFD\u5FEB\u7167\uFF0C\u5BFC\u56DE\u53EF\u6062\u590D\uFF09",
+      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u5546\u54C1/\u8BA2\u5355/\u6708\u5468\u590D\u76D8/\u5BF9\u6BD4\u5F52\u6863\u5168\u90E8\u6E05\u7A7A\uFF0C\u9762\u677F\u6062\u590D\u7A7A\u767D\uFF09",
       "aria-label": "\u6E05\u9664\u91CD\u7F6E\u6570\u636E",
       onClick: () => void d.doClearData(),
       disabled: d.importing
@@ -892,7 +892,7 @@ function ShopDeskPanel() {
     {
       type: "button",
       className: "esd-icon-btn esd-icon-btn-danger",
-      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u81EA\u52A8\u4E0B\u8F7D\u5907\u4EFD\u5FEB\u7167\uFF0C\u5BFC\u56DE\u53EF\u6062\u590D\uFF09",
+      title: "\u6E05\u9664\u91CD\u7F6E\u5F53\u524D\u6240\u6709\u5DF2\u5BFC\u5165\u6570\u636E\uFF08\u5546\u54C1/\u8BA2\u5355/\u6708\u5468\u590D\u76D8/\u5BF9\u6BD4\u5F52\u6863\u5168\u90E8\u6E05\u7A7A\uFF0C\u9762\u677F\u6062\u590D\u7A7A\u767D\uFF09",
       "aria-label": "\u6E05\u9664\u91CD\u7F6E\u6570\u636E",
       onClick: () => void d.doClearData(),
       disabled: d.importing

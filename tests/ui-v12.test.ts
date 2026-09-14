@@ -55,7 +55,35 @@ test('v0.4.0 [清除不残留] renderSidebarStats 同步顶部日期展示，清
   assert.match(DC, /无月报（含一键清除后）也要走一遍标签\/筛选\/侧栏刷新/, 'loadRealData 清除态仍刷新标签')
 })
 
-test('v0.4.0 [版本戳] data-center 与客户端 iframe URL 同步 r20，绕开 WebView 旧缓存', () => {
-  assert.ok(DC.includes("DC_VERSION = '2026-09-14.r20'"), 'DC_VERSION 已 bump')
-  assert.ok(DATA_TS.includes('?v=20260914-r20'), 'dataCenterUrl 版本参数同步')
+test('v0.4.0 [版本戳] data-center 与客户端 iframe URL 同步 r21，绕开 WebView 旧缓存', () => {
+  assert.ok(DC.includes("DC_VERSION = '2026-09-14.r21'"), 'DC_VERSION 已 bump')
+  assert.ok(DATA_TS.includes('?v=20260914-r21'), 'dataCenterUrl 版本参数同步')
+})
+
+test('v0.4.4 [对比按键交互] 不存在的 compareRender() 调用已根除，层级/指标切换走 frame+refresh', () => {
+  assert.doesNotMatch(DC, /compareRender\(\)/, '禁止再调用未定义的 compareRender()（旧版按键点击即 ReferenceError）')
+  assert.match(
+    DC,
+    /function switchCompareKind\(kind\)\{[\s\S]{0,220}compareFrame\(\);[\s\S]{0,120}void compareRefresh\(\);/,
+    '层级切换必须先本地重绘再向服务端拉取',
+  )
+  assert.match(
+    DC,
+    /function switchCompareMetric\(metric\)\{[\s\S]{0,220}compareFrame\(\);[\s\S]{0,120}void compareRefresh\(\);/,
+    '指标切换必须先本地重绘再向服务端拉取',
+  )
+})
+
+test('v0.4.4 [对比跳转入口] 销售概览模块速览含「数据对比」卡，显隐与菜单同源（showModule）', () => {
+  assert.ok(DC.includes('id="cmpSummaryCard"'), '数据对比跳转卡存在（默认隐藏）')
+  assert.match(DC, /onclick="switchView\(&#39;compare&#39;\)|onclick="switchView\(\\'compare\\'\)/, '卡片点击跳转对比视图')
+  const um = DC.slice(DC.indexOf('function updateCompareMenu()'), DC.indexOf('function compareRefresh'))
+  assert.match(um, /getElementById\('cmpSummaryCard'\)[\s\S]{0,80}display = has/, 'updateCompareMenu 同步跳转卡显隐（与菜单同一判定）')
+})
+
+test('v0.4.4 [清除按钮文案] 工作台清除键不再宣称下载备份（与 v0.4.2 纯清除语义一致）', () => {
+  assert.doesNotMatch(DATA_TS, /自动下载备份快照/)
+  const SHOP_DESK = readFileSync(resolve(ROOT, 'src', 'client', 'ShopDeskPanel.tsx'), 'utf8')
+  assert.doesNotMatch(SHOP_DESK, /自动下载备份快照，导回可恢复/, 'tooltip 与「纯清除」行为一致')
+  assert.match(SHOP_DESK, /doClearData/, '清除按钮仍挂在纯清除流程上')
 })

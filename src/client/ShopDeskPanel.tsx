@@ -310,7 +310,7 @@ export function ShopDeskTab(): React.ReactElement {
             <button
               type="button"
               className="esd-icon-btn esd-icon-btn-danger"
-              title="清除重置当前所有已导入数据（自动下载备份快照，导回可恢复）"
+              title="清除重置当前所有已导入数据（商品/订单/月周复盘/对比归档全部清空，面板恢复空白）"
               aria-label="清除重置数据"
               onClick={() => void d.doClearData()}
               disabled={d.importing}
@@ -402,7 +402,7 @@ export function ShopDeskPanel(): React.ReactElement {
               <button
                 type="button"
                 className="esd-icon-btn esd-icon-btn-danger"
-                title="清除重置当前所有已导入数据（自动下载备份快照，导回可恢复）"
+                title="清除重置当前所有已导入数据（商品/订单/月周复盘/对比归档全部清空，面板恢复空白）"
                 aria-label="清除重置数据"
                 onClick={() => void d.doClearData()}
                 disabled={d.importing}

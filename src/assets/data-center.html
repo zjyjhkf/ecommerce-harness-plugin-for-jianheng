@@ -1244,7 +1244,10 @@ function renderModuleSummary(){
   ];
   el.innerHTML = cards.map(function(c){
     return '<div class="mod-card" onclick="'+c.fn+'"><div class="mod-name">'+c.name+'</div><div class="mod-value">'+c.value+'</div><div class="mod-sub">'+c.sub+' · 查看 →</div></div>';
-  }).join('');
+  }).join('') +
+    // v0.4.4「数据对比」跳转卡：默认隐藏，updateCompareMenu 按 showModule 同步显隐
+    // （出现条件与左侧菜单完全一致 = 连续导入两月；清除后与菜单同步隐藏）
+    '<div class="mod-card" id="cmpSummaryCard" style="display:none" onclick="switchView(\'compare\')"><div class="mod-name">数据对比</div><div class="mod-value">多月份趋势</div><div class="mod-sub">按月柱状 + 折线 · 查看 →</div></div>';
 }
 
 // 周数据字段是否「有值」：任一行的给定字段中存在非 0 值（避免渲染全 0/空的空白图表与空列）
@@ -2718,15 +2721,20 @@ function cmpBarAxisVal(v, unit){
   return s + String(Math.round(a));
 }
 
-/** 切换层级：清空指标回到默认，立刻刷新（指标目录随层级变） */
+/** 切换层级：清空指标回到默认，立刻刷新（指标目录随层级变）。
+ *  ⚠ v0.4.4 修复「按键无反应」：旧代码调用不存在的 compareRender 函数 → ReferenceError
+ *  点击即抛错、视图永不更新。现先以本地缓存即时重绘（compareFrame），再向服务端拉取
+ *  新层级/指标的对比负载（compareRefresh 完成后自动 compareFrame + updateCompareMenu）。 */
 function switchCompareKind(kind){
   compareKind = kind;
   compareMetric = '';
-  compareRender();
+  compareFrame();
+  if (typeof compareRefresh === 'function') void compareRefresh();
 }
 function switchCompareMetric(metric){
   compareMetric = metric;
-  compareRender();
+  compareFrame();
+  if (typeof compareRefresh === 'function') void compareRefresh();
 }
 /** 主入口（renderView 的 compare 分支）：重置周期状态 → 渲染 → 拉取最新 */
 async function renderCompare(){
@@ -2757,6 +2765,9 @@ function updateCompareMenu(){
       : (p.result && Array.isArray(p.kinds) && p.kinds.length > 0)));
     const mi = document.querySelector('.menu-item[data-view="compare"]');
     if (mi) mi.style.display = has ? '' : 'none';
+    // 销售概览的「数据对比」跳转卡与菜单同步显隐（同一判定源，杜绝两处不一致）
+    const cs = document.getElementById('cmpSummaryCard');
+    if (cs) cs.style.display = has ? '' : 'none';
     if (!has && typeof currentView !== 'undefined' && currentView === 'compare' && typeof switchView === 'function') switchView('sales');
   } catch(e) {}
 }
@@ -3115,7 +3126,7 @@ function __dataSig(){
 // 变化判定优先采用服务端单调递增的 revision（任一报表导入即 +1，能捕获「行数不变但数值变化」的更新），
 // 无版本号时回退到内容指纹。force=true 强制重渲染；仅变化时重渲染以避免轮询闪烁。
 // 构建版本标记：随每次发版更新，用于面板右上角展示 + iframe 缓存失效（与 client data.ts 保持一致）
-const DC_VERSION = '2026-09-14.r20';
+const DC_VERSION = '2026-09-14.r21';
 
 // 右上角数据状态徽标：实时显示「版本 / 接口状态 / 当前周期 / 层级行数 / 服务端版本号 / 刷新时间」，
 // 便于直观确认面板是否加载到最新导入数据（排查「插入不同数据但显示相同」问题时一目了然）。
