@@ -431,6 +431,15 @@ export function ShopDeskPanel(): React.ReactElement {
               >
                 🧹
               </button>
+              <button
+                type="button"
+                className="esd-icon-btn"
+                title="文件交换：上传文件交给 AI 处理，下载处理结果"
+                aria-label="文件交换"
+                onClick={d.toggleFiles}
+              >
+                📂
+              </button>
               <input
                 ref={d.fileInputRef}
                 type="file"

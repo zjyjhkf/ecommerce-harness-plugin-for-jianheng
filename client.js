@@ -1058,6 +1058,16 @@ function ShopDeskPanel() {
     },
     "\u{1F9F9}"
   ), /* @__PURE__ */ React3.createElement(
+    "button",
+    {
+      type: "button",
+      className: "esd-icon-btn",
+      title: "\u6587\u4EF6\u4EA4\u6362\uFF1A\u4E0A\u4F20\u6587\u4EF6\u4EA4\u7ED9 AI \u5904\u7406\uFF0C\u4E0B\u8F7D\u5904\u7406\u7ED3\u679C",
+      "aria-label": "\u6587\u4EF6\u4EA4\u6362",
+      onClick: d.toggleFiles
+    },
+    "\u{1F4C2}"
+  ), /* @__PURE__ */ React3.createElement(
     "input",
     {
       ref: d.fileInputRef,
