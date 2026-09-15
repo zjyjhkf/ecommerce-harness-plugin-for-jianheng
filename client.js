@@ -1862,7 +1862,11 @@ var CSS = `
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 10px;
-  overflow: hidden;              /* \u4EFB\u4F55\u5F62\u6001\u90FD\u4E0D\u51FA\u6EDA\u52A8\u6761 */
+  /* \u5173\u952E(\u8E29\u8FC7\u7684\u5751)\uFF1A\u5BBF\u4E3B\u7684 composerStack \u662F\u300C\u5B9A\u9AD8 flex \u5BB9\u5668\u300D\uFF0C\u672C\u5143\u7D20\u82E5\u4E0D\u7981\u6B62\u6536\u7F29\uFF0C
+     \u4F1A\u88AB\u538B\u5230\u53EA\u5269\u4E00\u884C\u7684\u9AD8\u5EA6(min-height \u56E0 overflow \u975E visible \u800C\u5F52\u96F6)\uFF0C
+     \u6362\u884C\u51FA\u6765\u7684\u7B2C\u4E8C\u884C\u5C31\u88AB overflow:hidden \u6574\u6761\u88C1\u6389 \u2014\u2014 \u73B0\u8C61\u662F\u300C\u53EA\u9732\u51FA\u6309\u952E\u9876\u90E8\u300D\u3002 */
+  flex: none;
+  min-height: fit-content;
 }
 .esd-skillbar-title {
   display: inline-flex;
@@ -1915,10 +1919,12 @@ var CSS = `
      \xB7 \u4E00\u884C\u653E\u4E0D\u4E0B\u5C31\u6362\u5230\u4E0B\u4E00\u884C(flex-wrap)\uFF0C\u4EFB\u4F55\u5BBD\u5EA6\u4E0B\u90FD\u5B8C\u6574\u53EF\u89C1\uFF1B
      \xB7 overflow:hidden + \u9690\u85CF\u6EDA\u52A8\u6761\uFF0C\u5F7B\u5E95\u6CA1\u6709\u6A2A\u5411\u6EDA\u52A8\u4E0E\u6ED1\u52A8\u3002 */
 .esd-skillbar-dock {
+  flex: none;                    /* \u4E0D\u88AB\u5BBF\u4E3B\u538B\u6241(\u89C1 .esd-skillbar \u6CE8\u91CA) */
+  min-height: fit-content;
   flex-wrap: wrap;
-  overflow: hidden;              /* \u5173\u952E\uFF1A\u4E0D\u518D\u4EA7\u751F\u6A2A\u5411\u6EDA\u52A8 */
+  overflow: hidden;              /* \u6362\u884C\u4EE3\u66FF\u6EDA\u52A8\uFF0C\u56E0\u6B64\u6C38\u4E0D\u51FA\u73B0\u6A2A\u5411\u6EDA\u52A8\u6761 */
   padding: 4px 6px;
-  gap: 6px;
+  gap: 4px 6px;                  /* \u884C\u8DDD 4 / \u5217\u8DDD 6\uFF1A\u4E24\u884C\u4E5F\u4EC5\u7EA6 56px \u9AD8 */
   scrollbar-width: none;         /* Firefox\uFF1A\u9690\u85CF\u6EDA\u52A8\u6761 */
   -ms-overflow-style: none;
 }
@@ -1927,9 +1933,9 @@ var CSS = `
 .esd-skillbar-dock .esd-skillbar-name { display: none; }
 .esd-skillbar-dock .esd-skillbar-title { flex: none; }
 .esd-skillbar-dock .esd-skill-btn {
-  flex: 0 1 auto;
+  flex: 0 0 auto;                /* \u6309\u952E\u81EA\u8EAB\u4E5F\u4E0D\u88AB\u538B\u7F29 */
   min-width: 88px;               /* \u4FDD\u8BC1\u6807\u7B7E\u53EF\u8BFB\uFF0C\u4E0D\u4F1A\u88AB\u538B\u6210\u56FE\u6807 */
-  height: 26px;
+  height: 24px;
   padding: 0 9px;
   font-size: 11px;
   justify-content: center;

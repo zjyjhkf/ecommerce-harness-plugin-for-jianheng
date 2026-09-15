@@ -784,7 +784,11 @@ const CSS = `
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 10px;
-  overflow: hidden;              /* 任何形态都不出滚动条 */
+  /* 关键(踩过的坑)：宿主的 composerStack 是「定高 flex 容器」，本元素若不禁止收缩，
+     会被压到只剩一行的高度(min-height 因 overflow 非 visible 而归零)，
+     换行出来的第二行就被 overflow:hidden 整条裁掉 —— 现象是「只露出按键顶部」。 */
+  flex: none;
+  min-height: fit-content;
 }
 .esd-skillbar-title {
   display: inline-flex;
@@ -837,10 +841,12 @@ const CSS = `
      · 一行放不下就换到下一行(flex-wrap)，任何宽度下都完整可见；
      · overflow:hidden + 隐藏滚动条，彻底没有横向滚动与滑动。 */
 .esd-skillbar-dock {
+  flex: none;                    /* 不被宿主压扁(见 .esd-skillbar 注释) */
+  min-height: fit-content;
   flex-wrap: wrap;
-  overflow: hidden;              /* 关键：不再产生横向滚动 */
+  overflow: hidden;              /* 换行代替滚动，因此永不出现横向滚动条 */
   padding: 4px 6px;
-  gap: 6px;
+  gap: 4px 6px;                  /* 行距 4 / 列距 6：两行也仅约 56px 高 */
   scrollbar-width: none;         /* Firefox：隐藏滚动条 */
   -ms-overflow-style: none;
 }
@@ -849,9 +855,9 @@ const CSS = `
 .esd-skillbar-dock .esd-skillbar-name { display: none; }
 .esd-skillbar-dock .esd-skillbar-title { flex: none; }
 .esd-skillbar-dock .esd-skill-btn {
-  flex: 0 1 auto;
+  flex: 0 0 auto;                /* 按键自身也不被压缩 */
   min-width: 88px;               /* 保证标签可读，不会被压成图标 */
-  height: 26px;
+  height: 24px;
   padding: 0 9px;
   font-size: 11px;
   justify-content: center;
