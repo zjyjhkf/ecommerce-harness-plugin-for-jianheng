@@ -33,6 +33,10 @@ export function handle(rawUrl: string): string | null {
     getPreviousMonthlyReport: () => D.prevMonthly,
     getWeeklyReport: () => D.weekly,
     getPreviousWeeklyReport: () => D.prevWeekly,
+    // v0.4.6 compare 新增依赖:多月趋势归档。导出器未提供 history 时按 [上期,本期] 推导。
+    getMonthlyHistory: () => (Array.isArray((D as Record<string, unknown>).history)
+      ? (D as unknown as { history: unknown[] }).history
+      : [D.prevMonthly, D.monthly].filter((x) => x !== null && x !== undefined)),
     getReportRevision: () => 1,
   }
   if (p === '/ecommerce-api/monthly-report') return J({ ok: true, value: D.monthly ?? null })
