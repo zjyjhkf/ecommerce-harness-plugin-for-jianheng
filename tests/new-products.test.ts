@@ -9,7 +9,8 @@
  *   4. 毛利率分母是净销售额（用销售额做分母会整体压低十几个百分点）；
  *   5. 换一组导入数据，输出随之改变（不允许任何写死数据）；
  *   6. 无数据 / 无可比期时 available=false 且给出中文原因；
- *   7. /ecommerce-api/new-products 接口契约。
+ *   7. /ecommerce-api/new-products 接口契约；
+ *   8. prevSide（上一期新品概览）——「数据对比 · 新品对比」的对照来源，走同一套判据。
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -196,6 +197,66 @@ test('新品追踪：规格维度汇总件数/成本/退款三段，并按货品
   assert.equal(p.products.length, 1)
   assert.equal(p.products[0].specCount, 2, '货品行带出规格数')
   assert.equal(p.products[0].salesCount, 100)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+/* ───────────── 8) prevSide：上一期新品概览（供数据对比的新品对比） ───────────── */
+test('新品追踪 prevSide：连续导入三期后，上一期概览按同一判据算出', () => {
+  const { store, dir } = makeStore()
+  store.importMonthlyReport([prodPart('2026-05-01~2026-05-31', [
+    prod('五月新货', 'A-1', '26年5月', 1000, 800, 400),
+    prod('老货', 'A-9', '无', 2000, 1500, 900),
+  ])] as never)
+  store.importMonthlyReport([prodPart('2026-06-01~2026-06-30', [
+    prod('五月新货', 'B-1', '26年5月', 1200, 900, 500),
+    prod('六月新货', 'B-2', '26年6月', 600, 400, 200),
+    prod('老货', 'B-9', '无', 1800, 1300, 700),
+  ])] as never)
+  const p = buildNewProductPayload(store)
+  assert.equal(p.basis, 'category')
+  assert.equal(p.newCnt, 1, '本期（6月）新品只有「六月新货」')
+  assert.ok(p.prevSide, '上一期（5月）应有新品概览')
+  assert.equal(p.prevSide!.period, '2026-05-01~2026-05-31')
+  assert.equal(p.prevSide!.basis, 'category')
+  assert.equal(p.prevSide!.newCnt, 1, '5月新品是「五月新货」')
+  assert.equal(p.prevSide!.newSales, 1000)
+  assert.ok(Math.abs(p.prevSide!.newShare - (1000 / 3000) * 100) < 0.01, '上期占全店 = 1000/3000')
+  assert.equal(p.prevSide!.totalSales, 3000)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('新品追踪 prevSide：仅导入一期时为 null（对比页显示"无上期新品口径可比"）', () => {
+  const { store, dir } = makeStore()
+  store.importMonthlyReport([prodPart('2026-07-01~2026-07-31', [
+    prod('新品甲', 'C-1', '26年7月', 1000, 700, 300),
+  ])] as never)
+  const p = buildNewProductPayload(store)
+  assert.equal(p.available, true)
+  assert.equal(p.prevSide, null)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('新品追踪 prevSide：上期为首次上榜判据时同样可用，且口径随数据变化', () => {
+  const { store, dir } = makeStore()
+  store.importMonthlyReport([prodPart('2026-06-01~2026-06-30', [
+    prod('甲', 'A', '热销期', 500, 400, 200),
+  ])] as never)
+  store.importMonthlyReport([prodPart('2026-07-01~2026-07-31', [
+    prod('甲', 'A2', '热销期', 700, 500, 300),
+    prod('乙', 'B', '热销期', 300, 200, 90),
+  ])] as never)
+  store.importMonthlyReport([prodPart('2026-08-01~2026-08-31', [
+    prod('甲', 'A3', '热销期', 900, 700, 400),
+    prod('乙', 'B2', '热销期', 400, 300, 150),
+    prod('丙', 'C', '热销期', 200, 150, 80),
+  ])] as never)
+  const p = buildNewProductPayload(store)
+  assert.equal(p.basis, 'newcomer')
+  assert.equal(p.newCnt, 1, '本期（8月）新品只有「丙」')
+  assert.ok(p.prevSide, '上一期（7月）也应能判定')
+  assert.equal(p.prevSide!.basis, 'newcomer')
+  assert.equal(p.prevSide!.newCnt, 1, '7月新品是「乙」（6月没有它）')
+  assert.equal(p.prevSide!.newSales, 300)
   rmSync(dir, { recursive: true, force: true })
 })
 

@@ -3489,6 +3489,26 @@ function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
 }
 
 // src/new-products.ts
+function newProductSideOf(p) {
+  if (!p.available) return null;
+  return {
+    period: p.period,
+    basis: p.basis,
+    basisLabel: p.basisLabel,
+    newCnt: p.newCnt,
+    specCnt: p.specCnt,
+    oldCnt: p.oldCnt,
+    newSales: p.newSales,
+    totalSales: p.totalSales,
+    newShare: p.newShare,
+    newGm: p.newGm,
+    oldGm: p.oldGm,
+    newRr: p.newRr,
+    oldRr: p.oldRr,
+    top1Share: p.top1Share,
+    top1Name: p.top1Name
+  };
+}
 function monthLabel(month) {
   const m = String(month ?? "").match(/^(\d{4})-(\d{2})$/);
   if (!m) return "";
@@ -3557,11 +3577,23 @@ var EMPTY = (reason, period = "", prevPeriod = "", hasPrev = false) => ({
   specPie: { prodName: "", items: [] },
   specDist: [],
   products: [],
-  specs: []
+  specs: [],
+  prevSide: null
 });
 function buildNewProductPayload(store) {
   const curr = store.getMonthlyReport();
   const prev = store.getPreviousMonthlyReport();
+  const payload = computeNewProducts(curr, prev);
+  if (prev) {
+    const history = store.getMonthlyHistory();
+    const idx = history.findIndex((r) => r.period === prev.period);
+    const before = idx > 0 ? history[idx - 1] : null;
+    const side = computeNewProducts(prev, before ?? null);
+    payload.prevSide = newProductSideOf(side);
+  }
+  return payload;
+}
+function computeNewProducts(curr, prev) {
   const period = curr && curr.period || "";
   const prevPeriod = prev && prev.period || "";
   const hasPrev = prev !== null;
@@ -3715,7 +3747,9 @@ function buildNewProductPayload(store) {
     specPie: { prodName: pieProd, items: specPieItems },
     specDist,
     products,
-    specs
+    specs,
+    prevSide: null
+    // 由 buildNewProductPayload 用上一期数据回填
   };
 }
 

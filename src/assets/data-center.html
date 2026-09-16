@@ -590,7 +590,31 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
       </div>
     </div>
 
-    <!-- ⑤ 明细：阈值开关 + 榜单页签 + 表格 -->
+    <!-- ⑤ 新品对比：数据来自「新品追踪」负载（上期 vs 本期新品，仅保留有效数据） -->
+    <div class="chart-row two" id="compareNewTrackRow" style="display:none">
+      <div class="chart-box">
+        <div class="chart-title" id="compareNewTrackKpiTitle">新品对比 · 上期 vs 本期 <span class="badge" id="compareNewTrackBadge"></span></div>
+        <div class="chart-container" id="compareNewTrackKpi" style="height:300px"></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title" id="compareNewTrackTopTitle">本期新品 TOP10 销售额</div>
+        <div class="chart-container" id="compareNewTrackTop" style="height:300px"></div>
+      </div>
+    </div>
+    <div class="insight-bar" id="compareNewTrackNote" style="display:none"></div>
+    <div class="chart-row full" id="compareNewTrackTableRow" style="display:none">
+      <div class="chart-box">
+        <div class="chart-title">本期新品明细（仅有效数据） <span class="badge" id="compareNewTrackCount"></span></div>
+        <div class="cmp-table-wrap">
+          <table class="data-table" id="compareNewTrackTable">
+            <thead><tr><th>#</th><th>新品货品</th><th>货品编号</th><th>规格数</th><th>本期销售额</th><th>占新品</th><th>毛利率</th><th>退款率</th><th>退货比例</th></tr></thead>
+            <tbody id="compareNewTrackTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑥ 明细：阈值开关 + 榜单页签 + 表格 -->
     <div class="chart-row full" id="compareTableRow" style="display:none">
       <div class="chart-box">
         <div class="chart-title" id="compareTableTitle">对比明细 <span class="badge" id="compareTableCount"></span></div>
@@ -1872,6 +1896,11 @@ function npRender(){
   // ⑪ 两张明细表
   npRenderProdTable(p);
   npRenderSpecTable(p);
+
+  // ⑫ 若当前停留在「数据对比」视图，同步刷新其中的「新品对比」区块
+  if (typeof currentView !== 'undefined' && currentView === 'compare' && typeof renderCompareNewTrack === 'function') {
+    renderCompareNewTrack();
+  }
 }
 
 function npRenderProdTable(p){
@@ -3206,6 +3235,9 @@ async function renderCompare(){
   }
   compareFrame();
   compareRefresh();
+  // 「新品对比」区块的数据来自新品追踪负载：首次进入对比页时若还没拉过，主动拉一次，
+  // 拉到后 npRender 会回填本视图的新品对比区块（npPayload 已加载则不重复请求）。
+  if (!npPayload && typeof npRefresh === 'function') void npRefresh();
 }
 /** 渲染当前缓存 payload（可能为 null → 加载/空态） */
 function compareFrame(){
@@ -3399,8 +3431,10 @@ function renderCompareMetricBar(){
 function compareBodyEmpty(html){
   if (typeof hideTrendBlocks === 'function') hideTrendBlocks();
   const kpi = document.getElementById('compareKpi'); if (kpi) { kpi.style.display = 'none'; kpi.innerHTML = ''; }
-  ['compareRankRow','compareMoveRow','compareTableRow'].forEach(function(id){ const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-  ['compareUpBar','compareDownBar','compareQuad','compareMove','comparePareto','compareTrendMix'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  ['compareRankRow','compareMoveRow','compareNewTrackRow','compareNewTrackTableRow','compareNewTrackNote','compareTableRow'].forEach(function(id){ const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  ['compareUpBar','compareDownBar','compareQuad','compareMove','comparePareto','compareTrendMix','compareNewTrackKpi','compareNewTrackTop'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  const ntb = document.getElementById('compareNewTrackTbody'); if (ntb) ntb.innerHTML = '';
+  cmpViewResult = null;
   const ins = document.getElementById('compareInsight'); if (ins) { ins.style.display = ''; ins.innerHTML = '<span class="insight-title">数据对比：</span>' + html; }
   const empty = document.getElementById('compareEmpty'); if (empty) empty.innerHTML = '';
 }
@@ -3487,6 +3521,7 @@ function cmpRowValid(result, r, th){
 let cmpFilter = 'valid';   // valid=仅有效 / all=全部
 let cmpTab = 'all';        // all / up / down / added / removed
 let cmpLastResult = null;
+let cmpViewResult = null;  // 最近一次渲染的对比结果，「新品对比」区块复用它算同一套无效阈值
 function switchCmpFilter(mode){ cmpFilter = (mode === 'all') ? 'all' : 'valid'; renderCompareTable(cmpLastResult); }
 function switchCmpTab(tab){ cmpTab = tab; renderCompareTable(cmpLastResult); }
 function cmpTabRows(rows, tab){
@@ -3720,7 +3755,135 @@ function renderCompareViews(result){
   renderCmpPareto(valid, result, period);
   const rr = document.getElementById('compareRankRow'); if (rr) rr.style.display = (up.length || dn.length || shared.length) ? '' : 'none';
   const mr = document.getElementById('compareMoveRow'); if (mr) mr.style.display = valid.length ? '' : 'none';
+  // 新品对比：与上面共用同一份对比结果（阈值口径完全一致）
+  cmpViewResult = result;
+  renderCompareNewTrack();
 }
+
+/**
+ * 「数据对比 · 新品对比」区块。
+ * 数据来源：新品追踪负载 npPayload（GET /ecommerce-api/new-products），本函数不另算新品。
+ * 有效性：复用对比模块自身的无效阈值 cmpThresholds / cmpRowValid —— 新品天然属「本期新增」，
+ *   故按 added 行规则判定，与下方「对比明细」的筛选口径完全一致，不会出现两套阈值。
+ */
+/** 判据中文名（两期判据不一致时在说明条里点明，避免拿不同口径的数量直接对比） */
+function npBasisName(basis){
+  return basis === 'category' ? '分类上市月份' : (basis === 'newcomer' ? '首次上榜' : '未判定');
+}
+function renderCompareNewTrack(){
+  const row = document.getElementById('compareNewTrackRow');
+  if (!row) return;
+  const tableRow = document.getElementById('compareNewTrackTableRow');
+  const noteEl = document.getElementById('compareNewTrackNote');
+  const tbody = document.getElementById('compareNewTrackTbody');
+  function hide(){
+    row.style.display = 'none';
+    if (tableRow) tableRow.style.display = 'none';
+    if (noteEl) noteEl.style.display = 'none';
+    if (tbody) tbody.innerHTML = '';
+    ['compareNewTrackKpi','compareNewTrackTop'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  }
+  const np = npPayload;
+  const cmp = cmpViewResult;
+  if (!cmp || !np || !np.available){ hide(); return; }
+
+  const th = cmpThresholds(cmp, Array.isArray(cmp.rows) ? cmp.rows : []);
+  const allNew = Array.isArray(np.products) ? np.products : [];
+  const validNew = allNew.filter(function(p){
+    return cmpRowValid(cmp, { state:'added', prev:null, curr:p.sales, delta:p.sales }, th);
+  });
+  if (!validNew.length){ hide(); return; }
+
+  row.style.display = '';
+  const prevSide = np.prevSide || null;
+  const C = { prev:'#9fc4bd', curr:'#f59e0b', accent:'#17a08c', muted:'#5f8087', grid:'#e8f0ee', text:'#16343b' };
+
+  // ① 上期 vs 本期 新品关键指标（同为百分比，避免不同量纲混在一张图）
+  const cats = ['占全店销售额','新品毛利率','新品退款率','TOP1 集中度'];
+  const currVals = [np.newShare, np.newGm, np.newRr, np.top1Share].map(function(v){ return +(Number(v) || 0).toFixed(2); });
+  const prevVals = prevSide ? [prevSide.newShare, prevSide.newGm, prevSide.newRr, prevSide.top1Share].map(function(v){ return +(Number(v) || 0).toFixed(2); }) : null;
+  const badge = document.getElementById('compareNewTrackBadge');
+  if (badge) badge.textContent = prevSide
+    ? ('新品数 ' + prevSide.newCnt + ' → ' + np.newCnt + ' · 规格 ' + prevSide.specCnt + ' → ' + np.specCnt)
+    : ('本期新品 ' + np.newCnt + ' 个（无上期新品口径可比）');
+  const series = [];
+  if (prevVals) series.push({ name:'上期新品', type:'bar', data:prevVals, itemStyle:{ color:C.prev }, barMaxWidth:34,
+    label:{ show:true, position:'top', color:C.text, fontSize:11, formatter:function(x){ return Number(x.value).toFixed(1); } } });
+  series.push({ name:'本期新品', type:'bar', data:currVals, itemStyle:{ color:C.curr }, barMaxWidth:34,
+    label:{ show:true, position:'top', color:C.text, fontSize:11, formatter:function(x){ return Number(x.value).toFixed(1); } } });
+  getChart('compareNewTrackKpi')?.setOption({
+    tooltip:{ trigger:'axis', textStyle:{ fontSize:12 }, formatter:function(ps){
+      return ps.map(function(x){ return x.marker + x.seriesName + ' · ' + cats[x.dataIndex] + '：' + Number(x.value).toFixed(2) + '%'; }).join('<br/>');
+    }},
+    legend:{ data: series.map(function(s){ return s.name; }), top:0, textStyle:{ color:C.muted, fontSize:11 } },
+    grid:{ left:56, right:22, top:36, bottom:24 },
+    xAxis:{ type:'category', data:cats, axisLabel:{ color:C.muted, fontSize:11 } },
+    yAxis:{ type:'value', axisLabel:{ color:C.muted, fontSize:11, formatter:'{value}%' }, splitLine:{ lineStyle:{ color:C.grid } } },
+    series: series
+  }, true);
+
+  // ② 本期新品 TOP10 销售额（仅有效数据）
+  const titleEl = document.getElementById('compareNewTrackTopTitle');
+  if (titleEl) titleEl.innerHTML = '本期新品 TOP10 销售额 <span class="badge">共 ' + validNew.length + ' 个有效新品</span>';
+  const top = validNew.slice(0, 10).reverse();
+  registerChartClick('compareNewTrackTop', function(params){
+    const r = top[params && params.dataIndex];
+    if (!r) return null;
+    return { label:'数据对比 · 新品对比 · ' + npClip(r.name, 20),
+      value: r.name + '：本期销售额 ' + realMoney(r.sales) + '（占本期新品 ' + realPct(np.newSales > 0 ? r.sales / np.newSales * 100 : 0) + '，毛利率 ' + realPct(r.grossMargin) + '，退款率 ' + realPct(r.refundRate) + '）' };
+  });
+  getChart('compareNewTrackTop')?.setOption({
+    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
+      const r = top[ps[0] && ps[0].dataIndex];
+      if (!r) return '';
+      return '<b>' + escAttr(r.name) + '</b><br/>本期销售额：' + realMoney(r.sales)
+        + '<br/>占本期新品：' + realPct(np.newSales > 0 ? r.sales / np.newSales * 100 : 0)
+        + '<br/>毛利率：' + realPct(r.grossMargin) + '　退款率：' + realPct(r.refundRate);
+    }},
+    grid:{ left:152, right:74, top:16, bottom:6 },
+    xAxis:{ type:'value', axisLabel:{ color:C.muted, fontSize:11, formatter:function(v){ return (Number(v) / 10000).toFixed(1) + '万'; } }, splitLine:{ lineStyle:{ color:C.grid } } },
+    yAxis:{ type:'category', data:top.map(function(r){ return r.name; }), axisLabel:{ color:C.muted, fontSize:11, width:142, overflow:'truncate', ellipsis:'…' } },
+    series:[{ type:'bar', data:top.map(function(r){ return r.sales; }), itemStyle:{ color:C.curr }, barMaxWidth:12,
+      label:{ show:true, position:'right', color:C.text, fontSize:11, formatter:function(x){ return (Number(x.value) / 10000).toFixed(1) + '万'; } } }]
+  }, true);
+
+  // ③ 说明条：判据 + 阈值 + 剔除数（与对比明细同源）
+  if (noteEl){
+    noteEl.style.display = '';
+    const removed = allNew.length - validNew.length;
+    noteEl.innerHTML = '<span class="insight-title">新品对比：</span>数据取自「新品追踪」模块（' + escAttr(np.basisLabel || '—') + '）。'
+      + '仅保留有效数据：' + allNew.length + ' 个新品中剔除 <b>' + removed + '</b> 个（双零 / 体量过小；阈值：' + escAttr(th.why) + '），与下方对比明细同一套阈值。'
+      + (prevSide
+        ? '上期新品 ' + prevSide.newCnt + ' 个（' + npBasisName(prevSide.basis) + '）、占全店 ' + realPct(prevSide.newShare)
+          + '；本期 ' + np.newCnt + ' 个（' + npBasisName(np.basis) + '）、占全店 ' + realPct(np.newShare) + '。'
+          + (prevSide.basis !== np.basis
+            ? '<b>注意：两期判据不同</b>（上期按「' + npBasisName(prevSide.basis) + '」、本期按「' + npBasisName(np.basis) + '」），'
+              + '数量与金额的同期对比仅供趋势参考，不可当作严格同口径增减。'
+            : '')
+        : '上一期无新品口径可比，仅展示本期新品。');
+  }
+
+  // ④ 本期新品明细（仅有效数据）
+  if (tableRow && tbody){
+    tableRow.style.display = '';
+    const shown = validNew.slice(0, 200);
+    const cnt = document.getElementById('compareNewTrackCount');
+    if (cnt) cnt.textContent = '有效 ' + validNew.length + ' / ' + allNew.length + ' 个' + (shown.length < validNew.length ? '（仅列前 ' + shown.length + ' 个）' : '');
+    tbody.innerHTML = shown.map(function(r, i){
+      const share = np.newSales > 0 ? (r.sales / np.newSales) * 100 : 0;
+      return '<tr><td>' + (i + 1) + '</td>'
+        + '<td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
+        + '<td>' + escAttr(r.code) + '</td>'
+        + '<td>' + r.specCount + '</td>'
+        + '<td>' + realMoney(r.sales) + '</td>'
+        + '<td>' + realPct(share) + '</td>'
+        + '<td>' + realPct(r.grossMargin) + '</td>'
+        + '<td>' + realPct(r.refundRate) + '</td>'
+        + '<td>' + realPct(r.returnRate) + '</td></tr>';
+    }).join('');
+  }
+}
+
 function payloadPeriodShort(result){ return (result.prevPeriod || '上期') + ' → ' + (result.currPeriod || '本期'); }
 
 // ===================== v0.4.5 统一空数据治理（根治「清除后图表/排行残留」） =====================

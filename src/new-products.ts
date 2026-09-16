@@ -105,6 +105,53 @@ export interface NewProductPayload {
 
   products: NewProductItem[]
   specs: NewProductSpecRow[]
+
+  /**
+   * 上一期的「新品概览」，供「数据对比 · 新品对比」做上期 vs 本期对照。
+   * 与本期同判据同口径（同样由本模块现算），上一期无法判定时为 null。
+   */
+  prevSide: NewProductSide | null
+}
+
+/** 单期新品概览（「数据对比 · 新品对比」对照用，字段与本期负载一一对应） */
+export interface NewProductSide {
+  period: string
+  basis: NewProductPayload['basis']
+  basisLabel: string
+  newCnt: number
+  specCnt: number
+  oldCnt: number
+  newSales: number
+  totalSales: number
+  newShare: number
+  newGm: number
+  oldGm: number
+  newRr: number
+  oldRr: number
+  top1Share: number
+  top1Name: string
+}
+
+/** 从完整负载抽出一期概览；该期判不出新品时返回 null */
+export function newProductSideOf(p: NewProductPayload): NewProductSide | null {
+  if (!p.available) return null
+  return {
+    period: p.period,
+    basis: p.basis,
+    basisLabel: p.basisLabel,
+    newCnt: p.newCnt,
+    specCnt: p.specCnt,
+    oldCnt: p.oldCnt,
+    newSales: p.newSales,
+    totalSales: p.totalSales,
+    newShare: p.newShare,
+    newGm: p.newGm,
+    oldGm: p.oldGm,
+    newRr: p.newRr,
+    oldRr: p.oldRr,
+    top1Share: p.top1Share,
+    top1Name: p.top1Name,
+  }
 }
 
 /** "2026-08" → "26年8月"（与月度表「分类」列的上市月份写法一致，不补前导零） */
@@ -194,15 +241,34 @@ const EMPTY = (reason: string, period = '', prevPeriod = '', hasPrev = false): N
   specDist: [],
   products: [],
   specs: [],
+  prevSide: null,
 })
 
 /**
  * 由 Store 当前/上一期月度复盘生成「新品追踪」负载。
  * 纯函数式读取，不写 Store，可在接口与工具里复用。
+ *
+ * 除本期结果外，还会算出上一期的「新品概览」（prevSide）供「数据对比 · 新品对比」做对照 ——
+ * 两期走的是同一个 computeNewProducts，口径不可能分叉。
  */
 export function buildNewProductPayload(store: EcommerceStore): NewProductPayload {
   const curr: MonthlyReport | null = store.getMonthlyReport()
   const prev: MonthlyReport | null = store.getPreviousMonthlyReport()
+  const payload = computeNewProducts(curr, prev)
+  // 上一期的新品概览：用月份归档找到「上一期的上一期」，供其 newcomer 判据使用；
+  // 归档里没有更早一期时该期只能走「分类上市月份」判据（判不出则为 null，面板会说明）。
+  if (prev) {
+    const history = store.getMonthlyHistory()
+    const idx = history.findIndex((r) => r.period === prev.period)
+    const before = idx > 0 ? history[idx - 1] : null
+    const side = computeNewProducts(prev, before ?? null)
+    payload.prevSide = newProductSideOf(side)
+  }
+  return payload
+}
+
+/** 由「本期 + 上一期」两份月度复盘现算新品追踪（纯函数，不读 Store，可对任意两期复用） */
+function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | null): NewProductPayload {
   const period = (curr && curr.period) || ''
   const prevPeriod = (prev && prev.period) || ''
   const hasPrev = prev !== null
@@ -389,5 +455,6 @@ export function buildNewProductPayload(store: EcommerceStore): NewProductPayload
     specDist,
     products,
     specs,
+    prevSide: null, // 由 buildNewProductPayload 用上一期数据回填
   }
 }
