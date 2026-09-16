@@ -146,6 +146,16 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
 .cmp-table-wrap{overflow:auto;max-height:600px;border:1px solid var(--card-border);border-radius:10px}
 .cmp-table-wrap thead th{position:sticky;top:0;z-index:2;background:var(--card-bg)}
 
+/* ── 新品追踪 v0.4.8：数字列右对齐 + 长名称省略号（避免 13 列挤压导致文字重叠） ── */
+#view-newtrack .cmp-table-wrap{max-height:460px}
+#view-newtrack table.data-table th,#view-newtrack table.data-table td{padding:7px 10px}
+#view-newtrack table.data-table th:nth-child(n+3),#view-newtrack table.data-table td:nth-child(n+3){text-align:right}
+#view-newtrack #npProdTable td:nth-child(1){max-width:250px;overflow:hidden;text-overflow:ellipsis}
+#view-newtrack #npSpecTable td:nth-child(1){max-width:210px;overflow:hidden;text-overflow:ellipsis}
+#view-newtrack #npSpecTable td:nth-child(2){max-width:250px;overflow:hidden;text-overflow:ellipsis}
+#view-newtrack .chart-row{margin-bottom:14px}
+#view-newtrack .insight-bar{font-size:12px;line-height:1.7}
+
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:500}
 .tag.tb{background:rgba(245,158,11,.16);color:#d97706} .tag.jd{background:rgba(229,72,77,.15);color:var(--red)}
 .tag.pdd{background:rgba(245,158,11,.16);color:#d97706} .tag.dy{background:rgba(23,160,140,.14);color:var(--accent)}
@@ -266,7 +276,8 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
     <div class="menu-item" data-view="product" onclick="switchView('product')" style="--ic:#d4f7ef"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 L20 7 V17 L12 21 L4 17 V7 Z"/><path d="M4 7 L12 11 L20 7"/><path d="M12 11 V21"/></svg> 产品概览</div>
     <div class="menu-item" data-view="link" onclick="switchView('link')" style="--ic:#ffe9b8"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9.5 14.5 L14.5 9.5"/><path d="M6.8 12.7 L5.3 14.2a3.8 3.8 0 0 0 5.4 5.4l1.5-1.5"/><path d="M17.2 11.3 L18.7 9.8a3.8 3.8 0 0 0-5.4-5.4L11.8 5.9"/></svg> 商品明细</div>
     <div class="menu-item" data-view="newproduct" onclick="switchView('newproduct')" style="--ic:#ffd9ea"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 L14 8.5 L20 10.5 L14 12.5 L12 18.5 L10 12.5 L4 10.5 L10 8.5 Z" fill="currentColor"/></svg> SKU 规格</div>
-    <div class="menu-item" data-view="promo" onclick="switchView('promo')" style="--ic:#ffdcc5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> 推广分析</div>
+    <div class="menu-item" data-view="newtrack" onclick="switchView('newtrack')" style="--ic:#c8f5ec"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2.8 L20 7 V17 L12 21.2 L4 17 V7 Z"/><path d="M4 7 L12 11.2 L20 7"/><path d="M12 11.2 V21.2"/><path d="M8.6 4.9 L16.6 9.1"/></svg> 新品追踪</div>
+<div class="menu-item" data-view="promo" onclick="switchView('promo')" style="--ic:#ffdcc5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> 推广分析</div>
     <div class="menu-item" data-view="refund" onclick="switchView('refund')" style="--ic:#ffd1d4"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 12 a7.2 7.2 0 1 1 2.1 5.1"/><path d="M4.3 7.6 V12.3 H9"/></svg> 退款分析</div>
     <div class="menu-item" data-view="review" onclick="switchView('review')" style="--ic:#e9dcff"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6.5 3 H14 L18 7 V21 H6.5 Z"/><path d="M14 3 V7 H18"/><path d="M9.5 12 H15 M9.5 15.5 H15"/></svg> <span id="reviewMenuLabel">周复盘</span></div>
     <div class="menu-item" data-view="compare" onclick="switchView('compare')" style="--ic:#fff3bf;display:none"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 V12 M10 20 V5 M16 20 V9 M21.5 20 H2.5"/><path d="M12.5 5 L10 7.5 L12.5 10 L15 7.5 Z" fill="currentColor" stroke="none"/></svg> 数据对比</div>
@@ -392,6 +403,80 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
     </div>
   </div>
 
+
+  <!-- ===== NEW TRACK VIEW（新品追踪：新品 vs 老品，判据与全部数字均由月度复盘现算） ===== -->
+  <div class="view-content" id="view-newtrack">
+    <div class="insight-bar" id="npBasisBar" style="display:none"></div>
+    <div class="kpi-grid" id="npKpiTop"></div>
+    <div class="kpi-grid" id="npKpiBottom"></div>
+
+    <div class="tabs" id="npTabs">
+      <div class="tab active" onclick="switchNpTab('prod')">新品货品（合并规格）</div>
+      <div class="tab" onclick="switchNpTab('spec')">新品规格明细</div>
+    </div>
+
+    <div class="tab-content active" id="npPanelProd">
+      <div class="chart-row two">
+        <div class="chart-box">
+          <div class="chart-title">新品货品 TOP10 <span class="badge" id="npTopProdBadge">销售额 / 净销售额</span></div>
+          <div class="chart-container" id="npChartTopProd" style="height:320px"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">新品占全店销售额构成 <span class="badge" id="npDonutBadge"></span></div>
+          <div class="chart-container" id="npChartDonut" style="height:320px"></div>
+        </div>
+      </div>
+      <div class="chart-row two">
+        <div class="chart-box">
+          <div class="chart-title">新品 vs 老品 关键指标对比 <span class="badge" id="npCmpBadge"></span></div>
+          <div class="chart-container" id="npChartCompare" style="height:280px"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">退款率阶段拆解（新品规格表） <span class="badge">三段合计 = 总退款率</span></div>
+          <div class="chart-container" id="npChartRefund" style="height:280px"></div>
+        </div>
+      </div>
+      <div class="insight-bar" id="npInsightProd" style="display:none"></div>
+      <div class="chart-row full">
+        <div class="chart-box">
+          <div class="chart-title">新品货品清单（含规格表归并的件数/成本/退款拆解） <span class="badge" id="npProdBadge"></span></div>
+          <div class="cmp-table-wrap">
+            <table class="data-table" id="npProdTable"><thead><tr id="npProdThead"></tr></thead><tbody id="npProdBodY"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="npPanelSpec">
+      <div class="chart-row two">
+        <div class="chart-box">
+          <div class="chart-title">新品规格 TOP10 销售额 <span class="badge" id="npTopSpecBadge"></span></div>
+          <div class="chart-container" id="npChartTopSpec" style="height:320px"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">TOP1 新品 各规格销售额构成 <span class="badge" id="npSpecPieBadge"></span></div>
+          <div class="chart-container" id="npChartSpecPie" style="height:320px"></div>
+        </div>
+      </div>
+      <div class="chart-row full">
+        <div class="chart-box">
+          <div class="chart-title">各新品货品的规格数分布 TOP15 <span class="badge">归并结构</span></div>
+          <div class="chart-container" id="npChartSpecDist" style="height:300px"></div>
+        </div>
+      </div>
+      <div class="insight-bar" id="npInsightSpec" style="display:none"></div>
+      <div class="chart-row full">
+        <div class="chart-box">
+          <div class="chart-title">新品规格清单 <span class="badge" id="npSpecBadge"></span></div>
+          <div class="cmp-table-wrap">
+            <table class="data-table" id="npSpecTable"><thead><tr id="npSpecThead"></tr></thead><tbody id="npSpecBodY"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="npEmpty"></div>
+  </div>
 
   <!-- ===== PROMO VIEW ===== -->
   <div class="view-content" id="view-promo">
@@ -834,12 +919,12 @@ window.addEventListener('resize',()=>{Object.values(charts).forEach(c=>c&&c.resi
 
 // ===================== VIEW SWITCHING =====================
 // 7天周期下，仅「销售概览」与「复盘」对应周数据；其余模块为 30天（月）周期专属
-const MONTHLY_ONLY_VIEWS = ['product','link','newproduct','promo','refund'];
+const MONTHLY_ONLY_VIEWS = ['product','link','newproduct','newtrack','promo','refund'];
 function switchView(view){
   // 周期隔离：7天周期下禁止进入月周期专属模块（防止周/月数据混淆）
   if (cycle === '7d' && MONTHLY_ONLY_VIEWS.indexOf(view) !== -1) {
     view = 'review';
-    document.getElementById('insightBar').innerHTML = '<span class="insight-title" style="color:var(--red)">提示：</span>7天周期仅提供「周复盘」一个周数据模块；产品概览/商品明细/SKU 规格/推广/退款为 30天（月）周期专属，请切换到「30天」查看。';
+    document.getElementById('insightBar').innerHTML = '<span class="insight-title" style="color:var(--red)">提示：</span>7天周期仅提供「周复盘」一个周数据模块；产品概览/商品明细/SKU 规格/新品追踪/推广/退款为 30天（月）周期专属，请切换到「30天」查看。';
   }
   // 7天周期下「销售概览」与「周复盘」合并为同一个周数据明细展板（按导入层级切换），
   // 避免出现「口径相同、总数近似」的重复概览，导致导入不同表格后面板看起来一样。
@@ -849,7 +934,7 @@ function switchView(view){
   document.querySelectorAll('.menu-item').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+view).classList.add('active');
   document.querySelector(`.menu-item[data-view="${view}"]`).classList.add('active');
-  const titles={sales:'经营总览',product:'产品概览',link:'商品明细',newproduct:'SKU 规格',promo:'推广分析',refund:'退款分析',review:(cycle==='7d'?'周复盘':'月复盘'),compare:'数据对比'};
+  const titles={sales:'经营总览',product:'产品概览',link:'商品明细',newproduct:'SKU 规格',newtrack:'新品追踪',promo:'推广分析',refund:'退款分析',review:(cycle==='7d'?'周复盘':'月复盘'),compare:'数据对比'};
   document.getElementById('pageTitle').textContent = titles[view] || '';
   setTimeout(()=>renderView(view),50);
 }
@@ -1542,6 +1627,319 @@ function renderLinkPeriod(period){
   buildLinkRankToggle();
   renderLinkRankTable();
 }
+
+// ===================== RENDER: NEW PRODUCT TRACKING（新品追踪） =====================
+// 本页所有数字都来自 GET /ecommerce-api/new-products —— 服务端用当期已导入的
+// 「系统货品表 + 系统规格表」现算（判定口径见 src/new-products.ts）。
+// 面板侧不做任何本地估算、不内置任何常量数据：换一组导入数据，接口返回变，本页随之全变。
+const NP_C = { new:'#f59e0b', old:'#17a08c', oldLite:'#9fc4bd', red:'#e5484d', purple:'#8b5cf6',
+  accent:'#17a08c', accent2:'#00c9ad', muted:'#5f8087', grid:'#e8f0ee', text:'#16343b' };
+const NP_CHARTS = ['npChartTopProd','npChartDonut','npChartCompare','npChartRefund','npChartTopSpec','npChartSpecPie','npChartSpecDist'];
+const NP_TABLE_MAX = 200;
+let npPayload = null, npLoading = false, npError = '', npTab = 'prod';
+
+function npWan(v){ return (Number(v) || 0) / 10000; }
+function npClip(v, n){ const s = String(v == null ? '' : v); return s.length > n ? s.slice(0, n) + '…' : s; }
+/** 差值文案：新品相对老品高/低多少个百分点 */
+function npGap(newV, oldV){
+  const d = (Number(newV) || 0) - (Number(oldV) || 0);
+  if (!isFinite(d) || oldV === 0) return '';
+  return (d >= 0 ? '高 ' : '低 ') + Math.abs(d).toFixed(1) + ' 个百分点';
+}
+
+/** 数据变化（导入/清除）后重新拉取；面板进入本视图时也调用 */
+async function npRefresh(){
+  if (npLoading) return;
+  if (!__API_READY){ npPayload = null; npError = ''; npRender(); return; }
+  npLoading = true;
+  try {
+    const j = await fetch(API_BASE + '/ecommerce-api/new-products', { cache: 'no-store' })
+      .then(function(r){ return r.json(); }).catch(function(){ return undefined; });
+    if (j && j.ok){ npPayload = j.value || null; npError = ''; }
+    else if (j && j.value === null){ npPayload = null; npError = ''; }
+    else { npError = '新品追踪接口暂不可用，请稍后重试。'; }
+  } catch (e){ npError = '新品追踪数据拉取失败。'; }
+  finally { npLoading = false; npRender(); }
+}
+
+/** 清残留：KPI/表头/表体/说明条全部清空，图表容器重置为占位，避免上一次导入的旧数字与画布残留 */
+function npClearData(){
+  NP_CHARTS.forEach(function(id){ chartPlaceholder(id, '暂无数据'); });
+  ['npKpiTop','npKpiBottom'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  ['npProdThead','npSpecThead'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  ['npProdBodY','npSpecBodY'].forEach(function(id){ const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  ['npBasisBar','npInsightProd','npInsightSpec'].forEach(function(id){ const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const emp = document.getElementById('npEmpty');
+  if (emp) emp.innerHTML = '';
+}
+/** 有数据但判不出新品时的说明框（此时统一空态不生效，需要本视图自己把原因说清楚） */
+function npBodyEmpty(html){
+  npClearData();
+  const emp = document.getElementById('npEmpty');
+  if (emp) emp.innerHTML = '<div class="chart-row full"><div class="chart-box">' + emptyState(html) + '</div></div>';
+}
+function npKpiCard(cls, label, value, sub){
+  return '<div class="kpi-card ' + cls + '"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value
+    + '</div><div class="kpi-sub">' + (sub || '') + '</div></div>';
+}
+
+function npRender(){
+  const view = document.getElementById('view-newtrack');
+  if (!view) return;
+  const p = npPayload;
+  if (!p || !p.available){
+    // 整体没有导入数据时走面板统一空态（KPI/图表/表格占位由 showEmptyNotice 负责），
+    // 本视图不再叠加一个说明框，避免同一屏出现两句「暂无导入数据」。
+    if (typeof cycleDataEmpty === 'function' && cycleDataEmpty()){ npClearData(); return; }
+    npBodyEmpty(npError || (p && p.reason) || (npLoading ? '正在读取新品追踪数据…' : '读取中，请稍候…'));
+    return;
+  }
+  const emp = document.getElementById('npEmpty'); if (emp) emp.innerHTML = '';
+
+  // ① 判定口径条：说明这批数字是怎么判出来的，避免"数据从哪来"说不清
+  const basis = document.getElementById('npBasisBar');
+  if (basis){
+    basis.style.display = '';
+    basis.innerHTML = '<span class="insight-title">判定口径：</span>' + escAttr(p.basisLabel)
+      + '。本期 <b>' + escAttr(p.period) + '</b>'
+      + (p.hasPrev ? '，上一期 <b>' + escAttr(p.prevPeriod) + '</b>。' : '（暂无上一期）。')
+      + '全部指标仅来自本期已导入的系统货品表与系统规格表，无外部引入。';
+  }
+
+  // ② KPI：两排各四张，全部取接口值
+  const shareDiff = npGap(p.newShare, 0);
+  document.getElementById('npKpiTop').innerHTML = [
+    npKpiCard('blue', '新品货品数', p.newCnt + ' 个', '规格 ' + p.specCnt + ' 个 · 老品 ' + p.oldCnt + ' 个'),
+    npKpiCard('green', '新品销售额', realMoney(p.newSales), '占全店 ' + realPct(p.newShare) + (shareDiff ? '' : '')),
+    npKpiCard('orange', '新品毛利率', realPct(p.newGm), '老品 ' + realPct(p.oldGm) + (npGap(p.newGm, p.oldGm) ? '（' + npGap(p.newGm, p.oldGm) + '）' : '')),
+    npKpiCard('red', '新品退款率', realPct(p.newRr), '老品 ' + realPct(p.oldRr) + (npGap(p.newRr, p.oldRr) ? '（' + npGap(p.newRr, p.oldRr) + '）' : ''))
+  ].join('');
+  document.getElementById('npKpiBottom').innerHTML = [
+    npKpiCard('teal', '新品销售件数', Math.round(p.newUnits).toLocaleString() + ' 件', '来自规格表 · SKU 级加总'),
+    npKpiCard('purple', '新品销售成本', realMoney(p.newCost), '成本率 ' + realPct(p.costRate)),
+    npKpiCard('blue', '发货后退款率', realPct(p.refundPost), '发货前 ' + p.refundPre.toFixed(2) + '% ／ 发货后 ' + p.refundPost.toFixed(2) + '% ／ 收货后 ' + p.refundReceived.toFixed(2) + '%'),
+    npKpiCard('orange', 'TOP1 占新品销额', realPct(p.top1Share), npClip(p.top1Name, 16) || '—')
+  ].join('');
+
+  // ③ 新品货品 TOP10（销售额 + 净销售额）
+  const t10 = p.top10 || [];
+  const t10Badge = document.getElementById('npTopProdBadge');
+  if (t10Badge) t10Badge.textContent = '共 ' + p.newCnt + ' 个新品货品 · 销售额/净销售额';
+  if (t10.length){
+    registerChartClick('npChartTopProd', function(params){
+      const r = t10[params && params.dataIndex];
+      if (!r) return null;
+      return { label: '新品追踪 · ' + npClip(r.name, 20), value: r.name + '：销售额 ' + realMoney(r.sales) + '，净销售额 ' + realMoney(r.netSales) + '（占新品 ' + realPct(p.newSales > 0 ? r.sales / p.newSales * 100 : 0) + '）' };
+    });
+    getChart('npChartTopProd')?.setOption({
+      tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
+        const r = t10[ps[0] && ps[0].dataIndex];
+        if (!r) return '';
+        return '<b>' + escAttr(r.name) + '</b><br/>销售额：' + realMoney(r.sales) + '<br/>净销售额：' + realMoney(r.netSales)
+          + '<br/>占新品：' + realPct(p.newSales > 0 ? r.sales / p.newSales * 100 : 0);
+      }},
+      legend:{ data:['销售额','净销售额'], top:0, textStyle:{ color:NP_C.muted, fontSize:11 } },
+      grid:{ left:152, right:22, top:34, bottom:6 },
+      xAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11, formatter:function(v){ return npWan(v).toFixed(1) + '万'; } }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
+      yAxis:{ type:'category', data:t10.map(function(r){ return r.name; }), axisLabel:{ color:NP_C.muted, fontSize:11, width:142, overflow:'truncate', ellipsis:'…' } },
+      series:[
+        { name:'销售额', type:'bar', data:t10.map(function(r){ return r.sales; }), itemStyle:{ color:NP_C.new }, barMaxWidth:11 },
+        { name:'净销售额', type:'bar', data:t10.map(function(r){ return r.netSales; }), itemStyle:{ color:NP_C.accent }, barMaxWidth:11 }
+      ]
+    }, true);
+  } else chartPlaceholder('npChartTopProd', '暂无新品');
+
+  // ④ 新品/老品 销售额构成
+  const donutBadge = document.getElementById('npDonutBadge');
+  if (donutBadge) donutBadge.textContent = realPct(p.newShare) + ' / 老品 ' + realPct(100 - p.newShare);
+  if (p.donut.newSales + p.donut.oldSales > 0){
+    getChart('npChartDonut')?.setOption({
+      tooltip:{ trigger:'item', textStyle:{ fontSize:12 }, formatter:function(x){ return x.name + '：' + realMoney(x.value) + '（' + x.percent + '%）'; } },
+      legend:{ bottom:0, textStyle:{ color:NP_C.muted, fontSize:11 } },
+      series:[{ type:'pie', radius:['42%','66%'], center:['50%','44%'],
+        data:[{ name:'新品', value:p.donut.newSales, itemStyle:{ color:NP_C.new } },
+              { name:'老品', value:p.donut.oldSales, itemStyle:{ color:NP_C.old } }],
+        label:{ color:NP_C.text, fontSize:11, formatter:'{b}\n{d}%' } }]
+    }, true);
+  } else chartPlaceholder('npChartDonut', '暂无销售额构成');
+
+  // ⑤ 新品 vs 老品 关键指标
+  const cmpBadge = document.getElementById('npCmpBadge');
+  if (cmpBadge) cmpBadge.textContent = '新品 ' + p.newCnt + ' 个 · 老品 ' + p.oldCnt + ' 个（销售额加权）';
+  getChart('npChartCompare')?.setOption({
+    tooltip:{ trigger:'axis', textStyle:{ fontSize:12 }, formatter:function(ps){
+      return ps.map(function(x){ return x.marker + x.seriesName + '：' + Number(x.value).toFixed(1) + '%'; }).join('<br/>');
+    }},
+    legend:{ data:['新品','老品'], top:0, textStyle:{ color:NP_C.muted, fontSize:11 } },
+    grid:{ left:52, right:18, top:34, bottom:24 },
+    xAxis:{ type:'category', data:['毛利率','退款率','退货比例'], axisLabel:{ color:NP_C.muted, fontSize:11 } },
+    yAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11, formatter:'{value}%' }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
+    series:[
+      { name:'新品', type:'bar', data:[+p.newGm.toFixed(2), +p.newRr.toFixed(2), +p.newRt.toFixed(2)], itemStyle:{ color:NP_C.new }, barMaxWidth:34,
+        label:{ show:true, position:'top', color:NP_C.text, fontSize:11, formatter:function(x){ return Number(x.value).toFixed(1); } } },
+      { name:'老品', type:'bar', data:[+p.oldGm.toFixed(2), +p.oldRr.toFixed(2), +p.oldRt.toFixed(2)], itemStyle:{ color:NP_C.oldLite }, barMaxWidth:34,
+        label:{ show:true, position:'top', color:NP_C.text, fontSize:11, formatter:function(x){ return Number(x.value).toFixed(1); } } }
+    ]
+  }, true);
+
+  // ⑥ 退款率阶段拆解
+  getChart('npChartRefund')?.setOption({
+    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
+      return ps[0].name + '退款率：' + Number(ps[0].value).toFixed(2) + '%';
+    }},
+    grid:{ left:52, right:18, top:24, bottom:24 },
+    xAxis:{ type:'category', data:['发货前','发货后','收货后'], axisLabel:{ color:NP_C.muted, fontSize:11 } },
+    yAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11, formatter:'{value}%' }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
+    series:[{ type:'bar', barMaxWidth:76,
+      data:[{ value:+p.refundPre.toFixed(2), itemStyle:{ color:NP_C.oldLite } },
+            { value:+p.refundPost.toFixed(2), itemStyle:{ color:NP_C.red } },
+            { value:+p.refundReceived.toFixed(2), itemStyle:{ color:NP_C.purple } }],
+      label:{ show:true, position:'top', color:NP_C.text, fontSize:11, formatter:function(x){ return Number(x.value).toFixed(2) + '%'; } } }]
+  }, true);
+
+  // ⑦ 新品规格 TOP10
+  const ts = p.specTop10 || [];
+  const tsBadge = document.getElementById('npTopSpecBadge');
+  if (tsBadge) tsBadge.textContent = '共 ' + p.specCnt + ' 个新品规格 · 按销售额降序';
+  if (ts.length){
+    registerChartClick('npChartTopSpec', function(params){
+      const r = ts[params && params.dataIndex];
+      if (!r) return null;
+      return { label: '新品追踪 · 规格', value: r.name + '：' + realMoney(r.sales) };
+    });
+    getChart('npChartTopSpec')?.setOption({
+      tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
+        const r = ts[ps[0] && ps[0].dataIndex];
+        return r ? '<b>' + escAttr(r.name) + '</b><br/>销售额：' + realMoney(r.sales) : '';
+      }},
+      grid:{ left:212, right:70, top:16, bottom:6 },
+      xAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11, formatter:function(v){ return npWan(v).toFixed(1) + '万'; } }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
+      yAxis:{ type:'category', data:ts.map(function(r){ return r.name; }), axisLabel:{ color:NP_C.muted, fontSize:11, width:200, overflow:'truncate', ellipsis:'…' } },
+      series:[{ type:'bar', data:ts.map(function(r){ return r.sales; }), itemStyle:{ color:NP_C.accent2 }, barMaxWidth:12,
+        label:{ show:true, position:'right', color:NP_C.text, fontSize:11, formatter:function(x){ return npWan(x.value).toFixed(1) + '万'; } } }]
+    }, true);
+  } else chartPlaceholder('npChartTopSpec', '暂无新品规格');
+
+  // ⑧ TOP1 新品内部规格构成
+  const pieBadge = document.getElementById('npSpecPieBadge');
+  if (pieBadge) pieBadge.textContent = npClip(p.specPie.prodName, 14) || '—';
+  if (p.specPie.items.length){
+    getChart('npChartSpecPie')?.setOption({
+      tooltip:{ trigger:'item', textStyle:{ fontSize:12 }, formatter:function(x){ return escAttr(x.name) + '：' + realMoney(x.value) + '（' + x.percent + '%）'; } },
+      legend:{ type:'scroll', orient:'vertical', right:0, top:'middle', textStyle:{ color:NP_C.muted, fontSize:11 } },
+      series:[{ type:'pie', radius:['34%','62%'], center:['36%','50%'],
+        data:p.specPie.items.map(function(it){ return { name:it.name, value:it.value }; }),
+        label:{ show:false }, labelLine:{ show:false } }]
+    }, true);
+  } else chartPlaceholder('npChartSpecPie', '暂无规格构成');
+
+  // ⑨ 各新品货品的规格数分布
+  const sd = p.specDist || [];
+  if (sd.length){
+    getChart('npChartSpecDist')?.setOption({
+      tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
+        const r = sd[ps[0] && ps[0].dataIndex];
+        return r ? escAttr(r.name) + '：' + r.cnt + ' 个规格' : '';
+      }},
+      grid:{ left:212, right:56, top:16, bottom:6 },
+      xAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11 }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
+      yAxis:{ type:'category', data:sd.map(function(r){ return r.name; }), axisLabel:{ color:NP_C.muted, fontSize:11, width:200, overflow:'truncate', ellipsis:'…' } },
+      series:[{ type:'bar', data:sd.map(function(r){ return r.cnt; }), itemStyle:{ color:NP_C.purple }, barMaxWidth:13,
+        label:{ show:true, position:'right', color:NP_C.text, fontSize:11 } }]
+    }, true);
+  } else chartPlaceholder('npChartSpecDist', '暂无规格分布');
+
+  // ⑩ 洞察条（全部由接口数字拼出，无固定文案里的常量）
+  const insP = document.getElementById('npInsightProd');
+  if (insP){
+    insP.style.display = '';
+    insP.innerHTML = '<span class="insight-title">新品追踪：</span>' + p.newCnt + ' 个新品货品（' + p.specCnt + ' 个规格）贡献全店 '
+      + realPct(p.newShare) + ' 销售额（' + realMoney(p.newSales) + '）；毛利率 ' + realPct(p.newGm) + '，老品 ' + realPct(p.oldGm)
+      + (npGap(p.newGm, p.oldGm) ? '（新品' + npGap(p.newGm, p.oldGm) + '）' : '')
+      + '；退款率 ' + realPct(p.newRr) + '，老品 ' + realPct(p.oldRr)
+      + (npGap(p.newRr, p.oldRr) ? '（新品' + npGap(p.newRr, p.oldRr) + '）' : '')
+      + '。TOP1「' + escAttr(p.top1Name) + '」占新品销售额 ' + realPct(p.top1Share) + '。';
+  }
+  const insS = document.getElementById('npInsightSpec');
+  if (insS){
+    insS.style.display = '';
+    insS.innerHTML = '<span class="insight-title">规格明细：</span>' + p.specCnt + ' 个新品规格来自 ' + p.newCnt + ' 个新品货品；'
+      + '销售件数 ' + Math.round(p.newUnits).toLocaleString() + ' 件，销售成本 ' + realMoney(p.newCost) + '（成本率 ' + realPct(p.costRate) + '）；'
+      + '退款三段：发货前 ' + p.refundPre.toFixed(2) + '% ／ 发货后 ' + p.refundPost.toFixed(2) + '% ／ 收货后 ' + p.refundReceived.toFixed(2) + '%。'
+      + '单规格销额最高为「' + escAttr((p.specTop10[p.specTop10.length-1] || {}).name || '—') + '」' + realMoney((p.specTop10[p.specTop10.length-1] || {}).sales || 0) + '。';
+  }
+
+  // ⑪ 两张明细表
+  npRenderProdTable(p);
+  npRenderSpecTable(p);
+}
+
+function npRenderProdTable(p){
+  const thead = document.getElementById('npProdThead');
+  const tb = document.getElementById('npProdBodY');
+  if (!thead || !tb) return;
+  const rows = p.products || [];
+  const shown = rows.length > NP_TABLE_MAX ? rows.slice(0, NP_TABLE_MAX) : rows;
+  const badge = document.getElementById('npProdBadge');
+  if (badge) badge.textContent = '共 ' + rows.length + ' 个' + (shown.length < rows.length ? '（仅列前 ' + shown.length + ' 个）' : '') + ' · 按销售额降序';
+  thead.innerHTML = '<th>商品名称</th><th>货品编号</th><th>规格数</th><th>销售额</th><th>净销售额</th><th>毛利额</th><th>毛利率</th>'
+    + '<th>退款率</th><th>退货比例</th><th>发货后退款率</th><th>销售件数</th><th>销售成本</th><th>推广费</th>';
+  tb.innerHTML = shown.length ? shown.map(function(r){
+    return '<tr><td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
+      + '<td>' + escAttr(r.code) + '</td>'
+      + '<td>' + r.specCount + '</td>'
+      + '<td>' + realMoney(r.sales) + '</td>'
+      + '<td>' + realMoney(r.netSales) + '</td>'
+      + '<td>' + realMoney(r.grossProfit) + '</td>'
+      + '<td>' + realPct(r.grossMargin) + '</td>'
+      + '<td>' + realPct(r.refundRate) + '</td>'
+      + '<td>' + realPct(r.returnRate) + '</td>'
+      + '<td>' + realPct(r.postShipRefundRate) + '</td>'
+      + '<td>' + Math.round(r.salesCount).toLocaleString() + '</td>'
+      + '<td>' + realMoney(r.salesCost) + '</td>'
+      + '<td>' + realMoney(r.adSpend) + '</td></tr>';
+  }).join('') : '<tr><td colspan="13">' + emptyState('暂无新品货品') + '</td></tr>';
+}
+
+function npRenderSpecTable(p){
+  const thead = document.getElementById('npSpecThead');
+  const tb = document.getElementById('npSpecBodY');
+  if (!thead || !tb) return;
+  const rows = p.specs || [];
+  const shown = rows.length > NP_TABLE_MAX ? rows.slice(0, NP_TABLE_MAX) : rows;
+  const badge = document.getElementById('npSpecBadge');
+  if (badge) badge.textContent = '共 ' + rows.length + ' 行' + (shown.length < rows.length ? '（仅列前 ' + shown.length + ' 行）' : '') + ' · 按销售额降序';
+  thead.innerHTML = '<th>商品名称</th><th>规格</th><th>销售额</th><th>净销售额</th><th>毛利额</th><th>毛利率</th><th>退款率</th><th>退货比例</th>';
+  tb.innerHTML = shown.length ? shown.map(function(r){
+    return '<tr><td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
+      + '<td title="' + escAttr(r.specName) + '">' + escAttr(r.specName) + '</td>'
+      + '<td>' + realMoney(r.sales) + '</td>'
+      + '<td>' + realMoney(r.netSales) + '</td>'
+      + '<td>' + realMoney(r.grossProfit) + '</td>'
+      + '<td>' + realPct(r.grossMargin) + '</td>'
+      + '<td>' + realPct(r.refundRate) + '</td>'
+      + '<td>' + realPct(r.returnRate) + '</td></tr>';
+  }).join('') : '<tr><td colspan="8">' + emptyState('暂无新品规格') + '</td></tr>';
+}
+
+function switchNpTab(which){
+  npTab = (which === 'spec') ? 'spec' : 'prod';
+  const tabs = document.querySelectorAll('#npTabs .tab');
+  if (tabs.length >= 2){
+    tabs[0].classList.toggle('active', npTab === 'prod');
+    tabs[1].classList.toggle('active', npTab === 'spec');
+  }
+  const pp = document.getElementById('npPanelProd');
+  const ps = document.getElementById('npPanelSpec');
+  if (pp) pp.classList.toggle('active', npTab === 'prod');
+  if (ps) ps.classList.toggle('active', npTab === 'spec');
+  // 页签切换后当前页签才可见：重新绘制一次，避免在 display:none 的容器里以 0 尺寸初始化。
+  // ⚠ 不能用 getChart(id) 做 resize —— 它不是取值器，每次调用都会 dispose() 重建，
+  //   会把已经 setOption 好的图表清成空白（曾在规格页签上把 3 张图整片清掉）。
+  setTimeout(function(){ if (npPayload && npPayload.available) npRender(); }, 30);
+}
+
+function renderNewTrack(){ npRefresh(); }
 
 // ===================== RENDER: NEW PRODUCT =====================
 function renderNewProduct(){
@@ -2789,11 +3187,13 @@ function switchCompareKind(kind){
   compareMetric = '';
   compareFrame();
   if (typeof compareRefresh === 'function') void compareRefresh();
+  if (typeof npRefresh === 'function') void npRefresh();
 }
 function switchCompareMetric(metric){
   compareMetric = metric;
   compareFrame();
   if (typeof compareRefresh === 'function') void compareRefresh();
+  if (typeof npRefresh === 'function') void npRefresh();
 }
 /** 主入口（renderView 的 compare 分支）：重置周期状态 → 渲染 → 拉取最新 */
 async function renderCompare(){
@@ -3341,6 +3741,7 @@ const VIEW_EMPTY_TARGETS = {
   product:    { charts:[], kpis:['productKpi'], tables:['productDetailThead','productDetailTbody'] },
   link:       { charts:['linkGrade','linkStatus'], kpis:['linkKpi'], tables:['linkThead','linkTbody'] },
   newproduct: { charts:['newProductFunnel'], kpis:['newProductKpi'], tables:['npThead','npTbody'] },
+  newtrack:   { charts:['npChartTopProd','npChartDonut','npChartCompare','npChartRefund','npChartTopSpec','npChartSpecPie','npChartSpecDist'], kpis:['npKpiTop','npKpiBottom'], tables:['npProdThead','npProdBodY','npSpecThead','npSpecBodY'] },
   promo:      { charts:['promoSpendDist','promoFeeDist','promoRoiDist'], kpis:['promoKpi'], tables:['promoThead','promoTbody'] },
   refund:     { charts:['refundTrend'], kpis:['refundKpi'], tables:['refundAbnormalThead','refundAbnormalTbody','refundProductThead','refundProductTbody'] },
   review:     { charts:['mrOverviewBar','mrRatingPie','mrStoreBar','mrFeeBar','mrProfitBar','wkOverviewCompare','wkLinkBar','wkLinkFunnel','wkProdBar','wkProdMargin','wkSkuBar','wkSkuFee','wkShopPie'], kpis:[], tables:[] },
@@ -3398,6 +3799,7 @@ function renderView(view){
     case 'product': renderProduct(); break;
     case 'link': renderLink(); break;
     case 'newproduct': renderNewProduct(); break;
+    case 'newtrack': renderNewTrack(); break;
     case 'promo': renderPromo(); break;
     case 'refund': renderRefund(); break;
     case 'review': renderReview(); break;
@@ -3567,6 +3969,7 @@ async function loadRealData(force){
       comparePayload = null; compareError = '';
       updateCompareMenu();
       if (typeof compareRefresh === 'function') void compareRefresh();
+  if (typeof npRefresh === 'function') void npRefresh();
     }
     // 每次轮询都刷新评价：服务端非阻塞（即时返回规则占位 + 后台生成 AI），
     // 轮询自动把占位升级为 AI；已拿到最终结果（非 pending）则跳过。

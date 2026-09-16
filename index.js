@@ -3488,6 +3488,237 @@ function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
   };
 }
 
+// src/new-products.ts
+function monthLabel(month) {
+  const m = String(month ?? "").match(/^(\d{4})-(\d{2})$/);
+  if (!m) return "";
+  return m[1].slice(2) + "\u5E74" + String(Number(m[2])) + "\u6708";
+}
+function asMonthLabel(v) {
+  const m = String(v ?? "").trim().match(/^(\d{2})年(\d{1,2})月$/);
+  return m ? m[1] + "\u5E74" + String(Number(m[2])) + "\u6708" : "";
+}
+function weighted(items, weights) {
+  let sw = 0;
+  let sv = 0;
+  for (let i = 0; i < items.length; i++) {
+    const w = Number(weights[i]) || 0;
+    sw += w;
+    sv += (Number(items[i]) || 0) * w;
+  }
+  return sw > 0 ? sv / sw : 0;
+}
+function sumBy(arr, f) {
+  let s = 0;
+  for (const x of arr) s += Number(f(x)) || 0;
+  return s;
+}
+function prodKey(p) {
+  const c = String(p.code ?? "").trim();
+  return c || String(p.name ?? "").trim();
+}
+function prodNameKey(p) {
+  return String(p.name ?? "").trim();
+}
+function specNameKey(s) {
+  return String(s.name ?? "").trim() + "\0" + String(s.specName ?? "").trim();
+}
+var EMPTY = (reason, period = "", prevPeriod = "", hasPrev = false) => ({
+  available: false,
+  reason,
+  basis: "none",
+  basisLabel: "",
+  period,
+  prevPeriod,
+  hasPrev,
+  newCnt: 0,
+  specCnt: 0,
+  oldCnt: 0,
+  newSales: 0,
+  totalSales: 0,
+  newShare: 0,
+  newUnits: 0,
+  newCost: 0,
+  costRate: 0,
+  newGm: 0,
+  oldGm: 0,
+  newRr: 0,
+  oldRr: 0,
+  newRt: 0,
+  oldRt: 0,
+  refundPre: 0,
+  refundPost: 0,
+  refundReceived: 0,
+  top1Share: 0,
+  top1Name: "",
+  top10: [],
+  donut: { newSales: 0, oldSales: 0 },
+  specTop10: [],
+  specPie: { prodName: "", items: [] },
+  specDist: [],
+  products: [],
+  specs: []
+});
+function buildNewProductPayload(store) {
+  const curr = store.getMonthlyReport();
+  const prev = store.getPreviousMonthlyReport();
+  const period = curr && curr.period || "";
+  const prevPeriod = prev && prev.period || "";
+  const hasPrev = prev !== null;
+  if (!curr) return EMPTY("\u6682\u65E0\u5BFC\u5165\u6570\u636E\uFF1A\u8BF7\u5148\u5BFC\u5165\u6708\u5EA6\u590D\u76D8\uFF0830 \u5929\u5468\u671F\uFF094 \u4EFD\u6587\u4EF6\u3002", period, prevPeriod, hasPrev);
+  const allProd = Array.isArray(curr.systemProducts) ? curr.systemProducts : [];
+  const allSku = Array.isArray(curr.systemSkus) ? curr.systemSkus : [];
+  if (allProd.length === 0 && allSku.length === 0) {
+    return EMPTY("\u672C\u671F\u6708\u5EA6\u590D\u76D8\u7F3A\u5C11\u7CFB\u7EDF\u8D27\u54C1\u8868\u4E0E\u7CFB\u7EDF\u89C4\u683C\u8868\uFF1A\u65E0\u6CD5\u5224\u5B9A\u65B0\u54C1\uFF0C\u8BF7\u91CD\u65B0\u5BFC\u5165\u6708\u5EA6\u590D\u76D8 4 \u4EFD\u6587\u4EF6\u3002", period, prevPeriod, hasPrev);
+  }
+  const label = monthLabel(curr.month);
+  const prevProds = prev && Array.isArray(prev.systemProducts) ? prev.systemProducts : [];
+  const prevSkus = prev && Array.isArray(prev.systemSkus) ? prev.systemSkus : [];
+  let basis = "none";
+  let newProd = [];
+  let newSku = [];
+  let basisLabel = "";
+  if (label) {
+    newProd = allProd.filter((p) => asMonthLabel(p.category) === label);
+    newSku = allSku.filter((s) => asMonthLabel(s.category) === label);
+    if (newProd.length > 0 || newSku.length > 0) {
+      basis = "category";
+      basisLabel = "\u65B0\u54C1 = \u6708\u5EA6\u8868\u300C\u5206\u7C7B\u300D\u5217\u4E0A\u5E02\u6708\u4EFD = " + label + "\uFF08\u4E0E\u672C\u671F\u62A5\u8868\u6708\u4EFD\u4E00\u81F4\uFF09";
+    }
+  }
+  if (basis === "none" && prevProds.length > 0) {
+    const seen = new Set(prevProds.map((p) => prodNameKey(p)));
+    newProd = allProd.filter((p) => !seen.has(prodNameKey(p)));
+    basis = "newcomer";
+    basisLabel = "\u672C\u671F\u8868\u300C\u5206\u7C7B\u300D\u5217\u65E0\u4E0A\u5E02\u6708\u4EFD\u6807\u7B7E\uFF0C\u6539\u7528\u300C" + prevPeriod + " \u672A\u51FA\u73B0\u3001" + period + " \u9996\u6B21\u51FA\u73B0\u300D\u5224\u5B9A\u65B0\u54C1";
+  }
+  if (basis !== "none" && newSku.length === 0 && prevSkus.length > 0) {
+    const seenSku = new Set(prevSkus.map((s) => specNameKey(s)));
+    newSku = allSku.filter((s) => !seenSku.has(specNameKey(s)));
+  }
+  if (basis === "category" && newSku.length === 0 && allSku.length > 0) {
+    const newNames = new Set(newProd.map((p) => String(p.name ?? "")));
+    newSku = allSku.filter((s) => newNames.has(String(s.name ?? "")));
+  }
+  if (basis === "none" || newProd.length === 0 && newSku.length === 0) {
+    const why = hasPrev || label ? "\u672C\u671F\u672A\u8BC6\u522B\u5230\u65B0\u54C1\uFF1A\u6708\u5EA6\u8868\u300C\u5206\u7C7B\u300D\u5217\u65E2\u65E0\u4E0E\u672C\u671F\u6708\u4EFD\u4E00\u81F4\u7684\u4E0A\u5E02\u6807\u7B7E\uFF0C\u4E5F\u65E0\u53EF\u6BD4\u4E0A\u4E00\u671F\u7528\u4E8E\u300C\u9996\u6B21\u4E0A\u699C\u300D\u5224\u5B9A\u3002" : "\u672C\u671F\u672A\u8BC6\u522B\u5230\u65B0\u54C1\uFF1A\u6708\u5EA6\u8868\u300C\u5206\u7C7B\u300D\u5217\u65E0\u4E0A\u5E02\u6708\u4EFD\u6807\u7B7E\uFF0C\u4E14\u5C1A\u672A\u5BFC\u5165\u4E0A\u4E00\u671F\uFF0C\u65E0\u6CD5\u505A\u300C\u9996\u6B21\u51FA\u73B0\u300D\u5224\u5B9A\u3002\u8BF7\u518D\u5BFC\u5165\u4E0A\u4E00\u671F\u6708\u5EA6\u590D\u76D8\u540E\u67E5\u770B\u3002";
+    return EMPTY(why, period, prevPeriod, hasPrev);
+  }
+  const newKeySet = new Set(newProd.map((p) => prodKey(p)));
+  const oldProd = allProd.filter((p) => !newKeySet.has(prodKey(p)));
+  const newSales = sumBy(newProd, (p) => p.sales);
+  const totalSales = sumBy(allProd, (p) => p.sales);
+  const newSkuSales = sumBy(newSku, (s) => s.sales);
+  const newUnits = sumBy(newSku, (s) => s.salesCount);
+  const newCost = sumBy(newSku, (s) => s.salesCost);
+  const costRate = newSkuSales > 0 ? newCost / newSkuSales * 100 : 0;
+  const refundPre = weighted(newSku.map((s) => s.preShipRefundRate), newSku.map((s) => s.sales));
+  const refundPost = weighted(newSku.map((s) => s.postShipRefundRate), newSku.map((s) => s.sales));
+  const refundReceived = weighted(newSku.map((s) => s.receivedRefundRate), newSku.map((s) => s.sales));
+  const oldSales = sumBy(oldProd, (p) => p.sales);
+  const newNet = sumBy(newProd, (p) => p.netSales);
+  const oldNet = sumBy(oldProd, (p) => p.netSales);
+  const newGm = newNet > 0 ? sumBy(newProd, (p) => p.grossProfit) / newNet * 100 : 0;
+  const oldGm = oldNet > 0 ? sumBy(oldProd, (p) => p.grossProfit) / oldNet * 100 : 0;
+  const newRr = weighted(newProd.map((p) => p.refundRate), newProd.map((p) => p.sales));
+  const oldRr = weighted(oldProd.map((p) => p.refundRate), oldProd.map((p) => p.sales));
+  const newRt = weighted(newProd.map((p) => p.returnRate), newProd.map((p) => p.sales));
+  const oldRt = weighted(oldProd.map((p) => p.returnRate), oldProd.map((p) => p.sales));
+  const specCntOf = /* @__PURE__ */ new Map();
+  for (const s of newSku) {
+    const k = String(s.name ?? "");
+    specCntOf.set(k, (specCntOf.get(k) ?? 0) + 1);
+  }
+  const postShipOf = /* @__PURE__ */ new Map();
+  const postShipW = /* @__PURE__ */ new Map();
+  for (const s of newSku) {
+    const k = String(s.name ?? "");
+    if (!postShipOf.has(k)) {
+      postShipOf.set(k, []);
+      postShipW.set(k, []);
+    }
+    postShipOf.get(k).push(s.postShipRefundRate);
+    postShipW.get(k).push(s.sales);
+  }
+  const products = newProd.map((p) => ({
+    name: String(p.name ?? ""),
+    code: String(p.code ?? ""),
+    brand: String(p.brand ?? ""),
+    category: String(p.category ?? ""),
+    specCount: specCntOf.get(String(p.name ?? "")) ?? 0,
+    sales: p.sales,
+    netSales: p.netSales,
+    grossProfit: p.grossProfit,
+    grossMargin: p.grossMargin,
+    salesCount: sumBy(newSku.filter((s) => String(s.name ?? "") === String(p.name ?? "")), (s) => s.salesCount),
+    salesCost: sumBy(newSku.filter((s) => String(s.name ?? "") === String(p.name ?? "")), (s) => s.salesCost),
+    refundRate: p.refundRate,
+    returnRate: p.returnRate,
+    postShipRefundRate: weighted(postShipOf.get(String(p.name ?? "")) ?? [], postShipW.get(String(p.name ?? "")) ?? []),
+    adSpend: p.adSpend
+  })).sort((a, b) => b.sales - a.sales);
+  const specs = newSku.map((s) => ({
+    name: String(s.name ?? ""),
+    specName: String(s.specName ?? ""),
+    code: String(s.code ?? ""),
+    sales: s.sales,
+    netSales: s.netSales,
+    grossProfit: s.grossProfit,
+    grossMargin: s.grossMargin,
+    salesCount: s.salesCount,
+    salesCost: s.salesCost,
+    refundRate: s.refundRate,
+    returnRate: s.returnRate,
+    preShipRefundRate: s.preShipRefundRate,
+    postShipRefundRate: s.postShipRefundRate,
+    receivedRefundRate: s.receivedRefundRate
+  })).sort((a, b) => b.sales - a.sales);
+  const top1 = products[0];
+  const top1Share = top1 && newSales > 0 ? top1.sales / newSales * 100 : 0;
+  const specDist = [...specCntOf.entries()].map(([name2, cnt]) => ({ name: name2, cnt })).sort((a, b) => b.cnt - a.cnt).slice(0, 15).reverse();
+  const pieProd = top1 ? top1.name : "";
+  const pieAll = specs.filter((s) => s.name === pieProd).slice(0, 8);
+  const pieRest = specs.filter((s) => s.name === pieProd).slice(8);
+  const specPieItems = pieAll.map((s) => ({ name: s.specName, value: s.sales }));
+  if (pieRest.length) specPieItems.push({ name: "\u5176\u4ED6\u89C4\u683C", value: sumBy(pieRest, (s) => s.sales) });
+  return {
+    available: true,
+    reason: "",
+    basis,
+    basisLabel,
+    period,
+    prevPeriod,
+    hasPrev,
+    newCnt: products.length,
+    specCnt: specs.length,
+    oldCnt: oldProd.length,
+    newSales,
+    totalSales,
+    newShare: totalSales > 0 ? newSales / totalSales * 100 : 0,
+    newUnits,
+    newCost,
+    costRate,
+    newGm,
+    oldGm,
+    newRr,
+    oldRr,
+    newRt,
+    oldRt,
+    refundPre,
+    refundPost,
+    refundReceived,
+    top1Share,
+    top1Name: pieProd,
+    top10: products.slice(0, 10).reverse().map((p) => ({ name: p.name, sales: p.sales, netSales: p.netSales })),
+    donut: { newSales, oldSales },
+    specTop10: specs.slice(0, 10).reverse().map((s) => ({ name: s.specName, sales: s.sales })),
+    specPie: { prodName: pieProd, items: specPieItems },
+    specDist,
+    products,
+    specs
+  };
+}
+
 // src/files.ts
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
@@ -3855,6 +4086,10 @@ function registerShopApi(webServer, store, ctx = {}, filesDirs) {
           const limit = Math.min(Math.max(Number(query.get("limit") ?? 100) || 100, 1), 1e3);
           const payload = buildComparePayload(store, cycle, kind, metric2, limit);
           sendJson2(res, 200, { ok: true, value: payload, revision: store.getReportRevision() });
+          return;
+        }
+        if (pathname === "/ecommerce-api/new-products") {
+          sendJson2(res, 200, { ok: true, value: buildNewProductPayload(store), revision: store.getReportRevision() });
           return;
         }
         if (pathname === "/ecommerce-api/evaluation") {

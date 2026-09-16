@@ -11,6 +11,7 @@
  *   GET  /ecommerce-api/monthly-report → 月度复盘（30/60 天）
  *   GET  /ecommerce-api/weekly-report  → 周度复盘（7 天）
  *   GET  /ecommerce-api/compare        → 数据对比（连续导入两期）
+ *   GET  /ecommerce-api/new-products   → 新品追踪（本期新品 vs 老品，全部由月度复盘现算）
  *   GET  /ecommerce-api/evaluation     → 数据评价（AI / 规则）
  *   GET  /ecommerce-api/data-center    → 数据中台 HTML 页面
  *   GET  /ecommerce-api/export         → 导出 CSV / JSON
@@ -28,6 +29,7 @@ import type { MonthlyReport, Order, Product } from './types.ts'
 import { buildEvaluationSummary, callLlmForEvaluation, evaluationPrompt, ruleBasedEvaluation } from './data-evaluation.ts'
 import type { EvaluationSummary } from './data-evaluation.ts'
 import { buildComparePayload, isCompareCycle } from './compare-payload.ts'
+import { buildNewProductPayload } from './new-products.ts'
 import { handleFilesRoute, type FilesConfig } from './files.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -324,6 +326,12 @@ export function registerShopApi(
           const limit = Math.min(Math.max(Number(query.get('limit') ?? 100) || 100, 1), 1000)
           const payload = buildComparePayload(store, cycle, kind, metric, limit)
           sendJson(res, 200, { ok: true, value: payload, revision: store.getReportRevision() })
+          return
+        }
+        if (pathname === '/ecommerce-api/new-products') {
+          // 新品追踪：由月度复盘（系统货品表 + 系统规格表）现算，无写死数据。
+          // 判据在 new-products.ts 内统一收敛（分类上市月份优先，回退首次上榜）。
+          sendJson(res, 200, { ok: true, value: buildNewProductPayload(store), revision: store.getReportRevision() })
           return
         }
         if (pathname === '/ecommerce-api/evaluation') {
