@@ -139,8 +139,11 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
 .num-tag{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:rgba(23,160,140,.12);color:var(--accent);font-size:11px;text-align:center}
 #compareTabs{margin-bottom:10px;flex-wrap:wrap}
 #compareTabs .tab{padding:7px 14px;font-size:13px}
-/* 对比页表格：名称列限宽+省略号，避免长名撑破列宽导致文字挤压 */
-#compareTable td:nth-child(2){max-width:280px;overflow:hidden;text-overflow:ellipsis}
+/* 对比页表格：身份列限宽+省略号。用列名 class 而非 nth-child —— 全空列会被动态剔除，列位置会变 */
+#compareTable td.cmp-c-name{max-width:280px;overflow:hidden;text-overflow:ellipsis}
+#compareTable td.cmp-c-category{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+#compareTable td.cmp-c-code{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+#compareTable td.cmp-c-margin{white-space:nowrap}
 #compareTable th,#compareTable td{padding:8px 12px}
 /* 明细表固定视口 + 表头吸顶：200 行全量入 DOM 后页面会被拉到 8000px+，滚动定位困难 */
 .cmp-table-wrap{overflow:auto;max-height:600px;border:1px solid var(--card-border);border-radius:10px}
@@ -1131,7 +1134,12 @@ function renderSalesPeriod(period){
   const totNet = totSales - totRefund;
   const totPromo = sRows.length ? sRows.reduce(function(s,r){return s+r.promoCost;},0) : lRows.reduce(function(s,l){return s+(Number(l.adSpend)||0);},0);
   const totProfit = sRows.length ? sRows.reduce(function(s,r){return s+r.grossProfit;},0) : lRows.reduce(function(s,l){return s+(Number(l.grossProfit)||0);},0);
-  const feeRatio = totSales>0 ? (totPromo/totSales*100) : 0;
+  // ⚠ 费比分母必须与分子同源（与顶部概览条一致）：
+  //   利润表（逐店）口径 = 推广费 ÷ 销售收入；排名表（链接）口径 = 推广费 ÷ 净销售额。
+  //   此前统一用销售额做分母，走链接分支时会算成 9.46%，比正确的 12.19% 低近 3 个百分点。
+  const feeRatio = sRows.length
+    ? (totSales>0 ? (totPromo/totSales*100) : 0)
+    : (totNet>0 ? (totPromo/totNet*100) : 0);
   // 经营总额等 KPI 已由顶部 overviewBar 概览条集中展示，此处不再重复渲染 KPI 卡
   document.getElementById('insightBar').innerHTML = '<span class="insight-title">经营洞察（'+ML_CURR+'·导入数据）：</span>在销货品 '+productCount+' 个 · 商品（链接）'+linkCount+' 个 · 总销售额 '+realMoney(totSales)+' · 毛利 '+realMoney(totProfit)+' · 整体费比 '+realPct(feeRatio);
   // ── 经销排行（总销售额 / 净销 / 费比 / 毛利额，点击切换；明细表为准，图表已删避免重复）──
@@ -3295,6 +3303,10 @@ function cmpTrendAnchor(usable){
   const pidx = idx > 0 ? idx - 1 : (usable.length > 1 ? 1 : 0);
   return { last: usable[idx], prev: usable[pidx], idx: idx };
 }
+/** 趋势点取数层级的中文名（面板标注口径用；趋势 KPI 与下方明细表同源） */
+function cmpSourceLabel(src){
+  return src === 'platformLinks' ? '平台链接' : src === 'systemProducts' ? '系统货品' : src === 'systemSkus' ? '系统规格' : '—';
+}
 function renderCompareTrend(){
   const pts = cmpTrendPoints();
   const usable = pts.filter(function(x){ return x && x.month; });
@@ -3333,7 +3345,8 @@ function renderCompareTrend(){
     tg.style.display = '';
     tg.innerHTML = '<span class="pt-label">对比指标：</span>' + defs.map(function(d){
       return '<button class="pt-btn' + (d.id===compareTrendMetric?' active':'') + '" onclick="switchCompareTrendMetric(\''+d.id+'\')">' + d.label + '</button>';
-    }).join('');
+    }).join('')
+      + '<span class="pt-label" style="margin-left:8px">取数层级：<b>' + cmpSourceLabel(last.source) + '</b>（与下方明细表同源）</span>';
   }
   const def = cmpTrendMetricDef(compareTrendMetric);
   // ③ v0.4.5 组合图（参考多月份.html）：一屏一图——柱=所选指标每月一根（每月不同色、
@@ -3531,6 +3544,31 @@ function cmpTabRows(rows, tab){
   if (tab === 'removed') return rows.filter(function(r){ return r.state === 'removed'; });
   return rows;
 }
+/** 周期串 → 短月份标签（"2026-07-01~2026-07-31" → "7月"），用于把笼统的「上期/本期」换成真实月份 */
+function cmpPeriodMonth(p){
+  const m = String(p || '').match(/\d{4}-(\d{2})/);
+  return m ? (Number(m[1]) + '月') : '';
+}
+/** 逐行毛利率对比文案（源表「毛利额 / 净销售额」两列现算）："64.0% → 58.5%" */
+function cmpMarginHtml(r){
+  const a = (r.prevMargin === null || r.prevMargin === undefined) ? null : Number(r.prevMargin);
+  const b = (r.currMargin === null || r.currMargin === undefined) ? null : Number(r.currMargin);
+  if (a === null && b === null) return '—';
+  const fa = a === null ? '—' : a.toFixed(1) + '%';
+  const fb = b === null ? '—' : b.toFixed(1) + '%';
+  const cls = (a !== null && b !== null) ? (b > a ? 'trend-up' : (b < a ? 'trend-down' : '')) : '';
+  const arrow = (a !== null && b !== null && b !== a) ? (b > a ? ' ↑' : ' ↓') : '';
+  return '<span class="' + cls + '">' + fa + ' → ' + fb + arrow + '</span>';
+}
+/** 状态列：与参考表的「状态」列对应（新上榜 / 已退出 / 上升 / 下降 / 持平） */
+function cmpStateHtml(r){
+  if (r.state === 'added') return '<span class="abn-tag" style="background:rgba(26,158,99,.15);color:var(--green)">新上榜</span>';
+  if (r.state === 'removed') return '<span class="abn-tag">已退出</span>';
+  const d = Number(r.delta) || 0;
+  if (d > 0) return '<span class="trend-up">上升</span>';
+  if (d < 0) return '<span class="trend-down">下降</span>';
+  return '<span style="color:var(--muted)">持平</span>';
+}
 function renderCompareTable(result){
   const tr = document.getElementById('compareTableRow'); if (!tr) return;
   if (!result) return;
@@ -3542,10 +3580,8 @@ function renderCompareTable(result){
   const valid = all.filter(function(r){ return cmpRowValid(result, r, th); });
   const base = (cmpFilter === 'all') ? all : valid;
   const rows = cmpTabRows(base, cmpTab);
-  // 表格渲染上限：接口最多 1000 行，全量入 DOM 会拖慢滚动与重排
   const CMP_TABLE_MAX = 200;
   const shown = rows.length > CMP_TABLE_MAX ? rows.slice(0, CMP_TABLE_MAX) : rows;
-  // 阈值说明条
   const note = document.getElementById('compareThresholdNote');
   if (note) {
     const removed = all.length - valid.length;
@@ -3557,7 +3593,6 @@ function renderCompareTable(result){
   const fv = document.getElementById('cmpFilterValid'); const fa = document.getElementById('cmpFilterAll');
   if (fv) fv.className = 'pt-btn' + (cmpFilter === 'valid' ? ' active' : '');
   if (fa) fa.className = 'pt-btn' + (cmpFilter === 'all' ? ' active' : '');
-  // 榜单页签（参考多月份.html 的"增长榜/下滑榜"分页）
   const tabsEl = document.getElementById('compareTabs');
   if (tabsEl) {
     const defs = [['all','全部'],['up','增长榜'],['down','下滑榜'],['added','新增'],['removed','退出']];
@@ -3566,27 +3601,78 @@ function renderCompareTable(result){
       return '<div class="tab' + (cmpTab === d[0] ? ' active' : '') + '" onclick="switchCmpTab(\'' + d[0] + '\')">' + d[1] + ' <span class="num-tag">' + n + '</span></div>';
     }).join('');
   }
+  // ── 列定义（参考「多月份」对比表）：身份列(品类/编号) + 真实月份的 上期/本期 + 变化额/变化率 + 毛利率(上期→本期) + 状态 ──
+  const prevM = cmpPeriodMonth(result.prevPeriod);
+  const currM = cmpPeriodMonth(result.currPeriod);
+  const mLabel = result.metricLabel || '';
+  const kindName = CMP_KIND_NAME[result.kind] || '对象';
   const showShare = (result.unit !== 'pct');
   const totalCurr = Math.abs(Number(result.summary && result.summary.currTotal) || 0);
-  const kindName = CMP_KIND_NAME[result.kind] || '对象';
-  if (thead) thead.innerHTML = '<th>#</th><th>' + kindName + '</th><th>上期</th><th>本期</th><th>增减</th><th>增减率</th>' + (showShare ? '<th>占本期</th>' : '') + '<th>名次(上→本)</th>';
-  const colspan = showShare ? 8 : 7;
-  const html = shown.map(function(r, i){
-    const tag = r.state === 'added' ? '<span class="abn-tag" style="background:rgba(26,158,99,.15);color:var(--green)">新上榜</span>' : (r.state === 'removed' ? '<span class="abn-tag">已退出</span>' : '');
+  const cells = shown.map(function(r, i){
+    const name = String(r.label || r.key);
     const dCls = cmpDeltaCls(result.metric, r.delta);
-    const deltaHtml = r.state === 'added' ? '<span class="trend-up">+ ' + cmpVal(r.curr, result.unit) + '</span>' : (r.state === 'removed' ? '<span class="trend-down">− ' + cmpVal(r.prev, result.unit) + '</span>' : '<span class="' + dCls + '">' + cmpDeltaStr(r.delta, result.unit) + '</span>');
-    const pctHtml = r.deltaPct !== null && r.deltaPct !== undefined ? '<span class="' + cmpDeltaCls(result.metric, r.deltaPct) + '">' + cmpSigned(r.deltaPct) + r.deltaPct.toFixed(1) + '%</span>' : '—';
+    const deltaHtml = r.state === 'added' ? '<span class="trend-up">+ ' + cmpVal(r.curr, result.unit) + '</span>'
+      : (r.state === 'removed' ? '<span class="trend-down">− ' + cmpVal(r.prev, result.unit) + '</span>'
+        : '<span class="' + dCls + '">' + cmpDeltaStr(r.delta, result.unit) + '</span>');
+    const pctHtml = (r.deltaPct !== null && r.deltaPct !== undefined)
+      ? '<span class="' + cmpDeltaCls(result.metric, r.deltaPct) + '">' + cmpSigned(r.deltaPct) + r.deltaPct.toFixed(1) + '%</span>'
+      : '—';
     let rankHtml;
     if (r.state === 'added') rankHtml = '<span class="trend-up">新入榜</span>';
     else if (r.state === 'removed') rankHtml = '<span class="trend-down">退出榜</span>';
     else if (r.rankShift) rankHtml = r.rankPrev + '→' + r.rankCurr + (r.rankShift > 0 ? ' <span class="trend-up">▲' + r.rankShift + '</span>' : ' <span class="trend-down">▼' + Math.abs(r.rankShift) + '</span>');
     else rankHtml = r.rankPrev + '→' + r.rankCurr;
-    const shareHtml = showShare ? ('<td>' + (totalCurr > 0 && r.curr !== null && r.curr !== undefined ? (Math.abs(Number(r.curr)) / totalCurr * 100).toFixed(2) + '%' : '—') + '</td>') : '';
-    const name = String(r.label || r.key);
-    return '<tr><td>' + (i + 1) + '</td><td title="' + escAttr(name) + '">' + escAttr(name.length > 26 ? name.slice(0, 26) + '…' : name) + ' ' + tag + '</td><td>' + cmpVal(r.prev, result.unit) + '</td><td>' + cmpVal(r.curr, result.unit) + '</td><td>' + deltaHtml + '</td><td>' + pctHtml + '</td>' + shareHtml + '<td>' + rankHtml + '</td></tr>';
+    const share = (totalCurr > 0 && r.curr !== null && r.curr !== undefined) ? (Math.abs(Number(r.curr)) / totalCurr * 100).toFixed(2) + '%' : '';
+    const hasMargin = (r.prevMargin !== null && r.prevMargin !== undefined) || (r.currMargin !== null && r.currMargin !== undefined);
+    return {
+      idx: { v: (i + 1), html: String(i + 1) },
+      name: { v: name, html: '<span title="' + escAttr(name) + '">' + escAttr(name.length > 26 ? name.slice(0, 26) + '…' : name) + '</span>' },
+      category: { v: String(r.category || ''), html: escAttr(String(r.category || '') || '—') },
+      code: { v: String(r.code || ''), html: escAttr(String(r.code || '') || '—') },
+      prev: { v: (r.prev === null || r.prev === undefined) ? null : r.prev, html: cmpVal(r.prev, result.unit) },
+      curr: { v: (r.curr === null || r.curr === undefined) ? null : r.curr, html: cmpVal(r.curr, result.unit) },
+      delta: { v: r.delta, html: deltaHtml },
+      pct: { v: (r.deltaPct === null || r.deltaPct === undefined) ? null : r.deltaPct, html: pctHtml },
+      margin: { v: hasMargin ? 1 : null, html: cmpMarginHtml(r) },
+      share: showShare ? { v: share, html: share || '—' } : null,
+      rank: { v: (r.rankCurr !== null && r.rankCurr !== undefined) ? r.rankCurr : r.rankPrev, html: rankHtml },
+      state: { v: r.state, html: cmpStateHtml(r) },
+    };
+  });
+  const COLS = [
+    ['idx', '#'],
+    ['name', kindName],
+    ['category', '品类'],
+    ['code', '编号'],
+    ['prev', prevM + mLabel],
+    ['curr', currM + mLabel],
+    ['delta', '变化额'],
+    ['pct', '变化率'],
+    ['margin', '毛利率(' + (prevM || '上期') + '→' + (currM || '本期') + ')'],
+    ['share', '占' + (currM || '本期')],
+    ['rank', '名次(上→本)'],
+    ['state', '状态'],
+  ];
+  // 动态剔除「数据全部为空」的列（例：店铺层级没有品类/编号；比率类指标没有变化率）。
+  // idx/name 恒保留，其余按整列是否存在非空值决定。
+  const kept = COLS.filter(function(c){
+    if (c[0] === 'idx' || c[0] === 'name') return true;
+    return cells.some(function(row){
+      const cell = row[c[0]];
+      if (!cell) return false;
+      const v = cell.v;
+      return v !== null && v !== undefined && String(v).trim() !== '';
+    });
+  });
+  const colspan = kept.length || 1;
+  if (thead) thead.innerHTML = kept.map(function(c){ return '<th>' + c[1] + '</th>'; }).join('');
+  const html = cells.map(function(row){
+    return '<tr>' + kept.map(function(c){ return '<td class="cmp-c-' + c[0] + '">' + row[c[0]].html + '</td>'; }).join('') + '</tr>';
   }).join('');
   if (tbody) tbody.innerHTML = html || '<tr><td colspan="' + colspan + '" style="color:var(--muted);text-align:center;padding:18px">当前筛选/页签下没有符合条件的对象。</td></tr>';
-  if (badge) badge.textContent = result.metricLabel + ' · 显示 ' + shown.length + ' / ' + rows.length + ' 行';
+  const dropped = COLS.filter(function(c){ return kept.indexOf(c) < 0; }).map(function(c){ return c[1]; });
+  if (badge) badge.textContent = result.metricLabel + ' · 显示 ' + shown.length + ' / ' + rows.length + ' 行'
+    + (dropped.length ? ' · 已隐藏全空列：' + dropped.join('、') : '');
 }
 // ───────────── 多视图渲染（替代原先"一张柱状图占满横向"） ─────────────
 /** 成对横向条形：上期灰 + 本期品牌绿（增长榜 / 下滑榜各一张） */

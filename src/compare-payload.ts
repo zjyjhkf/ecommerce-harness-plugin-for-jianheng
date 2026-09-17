@@ -59,11 +59,13 @@ export function buildComparePayload(
 ): ComparePayload {
   const prevReport = cycle === '7d' ? store.getPreviousWeeklyReport() : store.getPreviousMonthlyReport()
   const currReport = cycle === '7d' ? store.getWeeklyReport() : store.getMonthlyReport()
-  // 月度趋势仅 30d 有意义：多月份归档（含当前期）升序聚合；7d 返回空数组
-  const trend: MonthTrendPoint[] = cycle === '30d' ? buildMonthTrend(store.getMonthlyHistory()) : []
   const kinds = reportKindsAvail(cycle, prevReport, currReport)
   // 有效 kind：显式给定且在该周期层级内；否则自动挑选两期都有数据的层级
   const effectiveKind: CompareKind = kind !== undefined && isCompareKind(kind) ? kind : pickCompareKind(cycle, prevReport, currReport)
+  // 月度趋势仅 30d 有意义：多月份归档（含当前期）升序聚合；7d 返回空数组。
+  // ⚠ 必须传 effectiveKind：趋势 KPI 与下方明细表取自同一张排名表，
+  //   否则同一个「净销额」会在同一屏出现两个数（利润表口径 vs 排名表口径）。
+  const trend: MonthTrendPoint[] = cycle === '30d' ? buildMonthTrend(store.getMonthlyHistory(), effectiveKind) : []
   const defs = listCompareMetrics(effectiveKind)
   const def = defs.find((m) => m.id === metricId) ?? defs[0]
   const result = buildCompare({

@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { EcommerceStore } from '../src/store.ts'
 import { MockAdapter } from '../src/platform/mock.ts'
-import { buildMonthTrend, buildMonthTrendPoint, COMPARE_METRICS, CORE_TREND_METRICS } from '../src/compare.ts'
+import { buildCompare, buildMonthTrend, buildMonthTrendPoint, COMPARE_METRICS, CORE_TREND_METRICS } from '../src/compare.ts'
 import { buildComparePayload } from '../src/compare-payload.ts'
 import { registerShopApi, type WebServerLike } from '../src/shop-api.ts'
 import type { MonthlyReport } from '../src/types.ts'
@@ -83,15 +83,48 @@ test('同月重复导入：归档 upsert 覆盖当月，不产生重复月份', 
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('buildMonthTrendPoint：利润表优先聚合，净销/毛利/推广/费比/规格数口径正确', () => {
-  const pt = buildMonthTrendPoint(makeMonth('07', 1))
-  assert.equal(pt.sales, 150000, '销售收入=利润表逐店合计')
-  assert.equal(pt.netSales, 150000 - 13000, '净销=销售收入−退款')
-  assert.equal(pt.grossProfit, 44000, '毛利=利润表逐店合计')
-  assert.equal(pt.promoCost, 15000, '推广费=利润表逐店合计')
+test('buildMonthTrendPoint：与对比明细同源（排名表），净销/毛利/推广/费比/规格数口径正确', () => {
+  const rep = makeMonth('07', 1)
+  const pt = buildMonthTrendPoint(rep)
+  // 默认层级 = 平台链接（与 pickCompareKind 的优先顺序一致），不再优先取利润表
+  assert.equal(pt.source, 'platformLinks', '趋势点标明取数层级，供面板标注口径')
+  assert.equal(pt.sales, 150000, '销售额=链接表合计')
+  assert.equal(pt.netSales, 137000, '净销额直接取表内「净销售额」列（92000+45000）')
+  assert.equal(pt.grossProfit, 44000, '毛利=链接表合计')
+  assert.equal(pt.promoCost, 15000, '推广费=链接表推广投放费用合计')
   assert.equal(pt.skuCount, 3, '产品规格数=系统SKU 行数')
-  assert.equal(pt.feeRatio, Math.round((15000 / 137000) * 1000) / 10, '费比=推广÷净销%（1 位小数）')
+  assert.equal(pt.feeRatio, Math.round((15000 / 137000) * 1000) / 10, '费比=推广费÷净销售额%（1 位小数）')
   assert.equal(pt.label, '7月', '短标签用于柱状 x 轴')
+})
+
+test('趋势与明细严格同源：指定 kind 时趋势点净销额 = 明细表净销额总计（回归：曾出现 ±112 万口径差）', () => {
+  const rep = makeMonth('07', 1)
+  for (const kind of ['platformLinks', 'systemProducts', 'systemSkus'] as const) {
+    const pt = buildMonthTrendPoint(rep, kind)
+    const r = buildCompare({ cycle: '30d', kind, metricId: 'netSales', prevReport: rep, currReport: rep, limit: 1000 })
+    assert.equal(pt.source, kind, kind + ' 趋势点层级正确')
+    assert.equal(pt.netSales, Math.round(r!.summary.currTotal), kind + '：趋势 KPI 净销额必须等于同屏明细表总计')
+  }
+  // 换 kind 即换表：三个层级各自的合计不同，趋势点必须跟着变
+  const a = buildMonthTrendPoint(rep, 'platformLinks').netSales
+  const b = buildMonthTrendPoint(rep, 'systemProducts').netSales
+  assert.equal(a, 137000)
+  assert.equal(b, 137000, '本 fixture 两表恰好同额；重点在下方回归用不同额 fixture 验证')
+})
+
+test('回归：货品/规格层级的净销额取表内列，不得用「销售额−退款」反算（WeeklyProductRow 无 refundAmount）', () => {
+  const rep = makeMonth('07', 1)
+  // 货品表：销售额 150000、净销售额仅 100000（退款 5 万），且货品行根本没有 refundAmount 字段
+  rep.systemProducts = [
+    { name: '货品X', code: 'P1', brand: 'B1', category: '家居', sales: 150000, netSales: 100000, grossProfit: 30000, grossMargin: 30, refundRate: 33, returnRate: 5, adSpend: 9000, avgPrice: 500, singleRate: 80 },
+  ] as never
+  delete (rep as { platformLinks?: unknown }).platformLinks
+  const pt = buildMonthTrendPoint(rep)
+  assert.equal(pt.source, 'systemProducts')
+  assert.equal(pt.sales, 150000)
+  assert.equal(pt.netSales, 100000, '净销额=表内净销售额列；若用 销售额−退款 会因字段缺失得到 150000')
+  assert.notEqual(pt.netSales, pt.sales, '不得出现「净销额=销售额」这种退款被吞掉的结果')
+  assert.equal(pt.feeRatio, Math.round((9000 / 100000) * 1000) / 10, '费比=推广费÷净销售额')
 })
 
 test('缺利润表的月份：毛利/费比回退排名层级，费比可为 null 但趋势点不丢弃', () => {

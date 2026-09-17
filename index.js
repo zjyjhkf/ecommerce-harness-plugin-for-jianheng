@@ -3197,27 +3197,26 @@ var CORE_TREND_METRICS = [
   { id: "feeRatio", label: "\u8D39\u6BD4", unit: "pct" }
 ];
 var round1 = (n) => Math.round(n * 10) / 10;
-function buildMonthTrendPoint(rep) {
-  const sum3 = function(rows, f) {
-    if (!rows || rows.length === 0) return null;
+function buildMonthTrendPoint(rep, kind) {
+  const sum3 = function(rows2, f) {
+    if (!rows2 || rows2.length === 0) return null;
     let s = 0;
-    for (const r of rows) s += Number(f(r)) || 0;
+    for (const r of rows2) s += Number(f(r)) || 0;
     return s;
   };
   const month = rep.month || String(rep.period || "").slice(0, 7);
   const mm = Number(month.slice(5, 7));
   const label = Number.isFinite(mm) && mm > 0 ? mm + "\u6708" : month;
-  const stores = rep.storeProfit;
   const links = rep.platformLinks;
   const products = rep.systemProducts;
   const skus = rep.systemSkus;
-  const sales = sum3(stores, (r) => r.sales) ?? sum3(links, (r) => r.sales) ?? sum3(products, (r) => r.sales) ?? sum3(skus, (r) => r.sales);
-  const refund = sum3(stores, (r) => r.refund) ?? sum3(links, (r) => r.refundAmount) ?? sum3(products, (r) => r.refundAmount) ?? sum3(skus, (r) => r.refundAmount);
-  const netSales = sales === null ? null : sales - (refund ?? 0);
-  const grossProfit = sum3(stores, (r) => r.grossProfit) ?? sum3(links, (r) => r.grossProfit) ?? sum3(products, (r) => r.grossProfit) ?? sum3(skus, (r) => r.grossProfit);
-  const promoCost = sum3(stores, (r) => r.promoCost) ?? sum3(links, (r) => r.adSpend) ?? sum3(products, (r) => r.adSpend) ?? sum3(skus, (r) => r.adSpend);
-  const feeBase = netSales !== null && netSales > 0 ? netSales : sales !== null && sales > 0 ? sales : null;
-  const feeRatio = promoCost !== null && feeBase !== null && feeBase > 0 ? round1(promoCost / feeBase * 100) : null;
+  const pick2 = kind === "systemSkus" ? { kind: "systemSkus", rows: skus } : kind === "systemProducts" ? { kind: "systemProducts", rows: products } : kind === "platformLinks" ? { kind: "platformLinks", rows: links } : links && links.length ? { kind: "platformLinks", rows: links } : products && products.length ? { kind: "systemProducts", rows: products } : skus && skus.length ? { kind: "systemSkus", rows: skus } : { kind: "platformLinks", rows: void 0 };
+  const rows = pick2.rows;
+  const sales = sum3(rows, (r) => r.sales);
+  const netSales = sum3(rows, (r) => r.netSales);
+  const grossProfit = sum3(rows, (r) => r.grossProfit);
+  const promoCost = sum3(rows, (r) => r.adSpend);
+  const feeRatio = promoCost !== null && netSales !== null && netSales > 0 ? round1(promoCost / netSales * 100) : null;
   return {
     period: rep.period || "",
     month,
@@ -3227,11 +3226,12 @@ function buildMonthTrendPoint(rep) {
     grossProfit,
     promoCost,
     feeRatio,
-    skuCount: skus ? skus.length : null
+    skuCount: skus ? skus.length : null,
+    source: rows ? pick2.kind : null
   };
 }
-function buildMonthTrend(history) {
-  return history.filter((r) => r !== null && typeof r.period === "string" && r.period !== "").slice().sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0).map(buildMonthTrendPoint);
+function buildMonthTrend(history, kind) {
+  return history.filter((r) => r !== null && typeof r.period === "string" && r.period !== "").slice().sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0).map((r) => buildMonthTrendPoint(r, kind));
 }
 function listCompareMetrics(kind) {
   return COMPARE_METRICS[kind] ?? [];
@@ -3277,6 +3277,16 @@ function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+function codeOf(kind, row) {
+  if (kind === "storeProfit") return "";
+  if (kind === "platformLinks") return String(row.linkCode ?? row.linkId ?? "").trim();
+  return String(row.code ?? "").trim();
+}
+function netOf(row) {
+  if (row.netSales !== void 0 && row.netSales !== null && String(row.netSales).trim() !== "") return num(row.netSales);
+  const refund = row.refund ?? row.refundAmount ?? 0;
+  return num(row.sales) - num(refund);
+}
 function normalize(kind, rows, def) {
   const out = /* @__PURE__ */ new Map();
   for (const raw of rows ?? []) {
@@ -3291,12 +3301,20 @@ function normalize(kind, rows, def) {
     const value = num(row[def.id]);
     const weightField = def.weight ?? "sales";
     const weight = num(row[weightField]);
+    const category = String(row.category ?? "").trim();
+    const code = codeOf(kind, row);
+    const gp = num(row.grossProfit);
+    const net = netOf(row);
     const cur = out.get(key);
     if (cur) {
       cur.value += value;
       cur.weight += weight;
+      cur.gp += gp;
+      cur.net += net;
+      if (!cur.category && category) cur.category = category;
+      if (!cur.code && code) cur.code = code;
     } else {
-      out.set(key, { key, label: labelOf(kind, row) || key, value, weight });
+      out.set(key, { key, label: labelOf(kind, row) || key, value, weight, category, code, gp, net });
     }
   }
   return [...out.values()];
@@ -3380,6 +3398,7 @@ function buildCompare(input) {
     const b = currV ?? 0;
     const delta2 = b - a;
     const deltaPct2 = def.unit === "pct" || a === 0 ? null : delta2 / a * 100;
+    const marginOf = (e) => e && e.net > 0 ? round1(e.gp / e.net * 100) : null;
     rows.push({
       key,
       label: (p ?? c).label,
@@ -3390,7 +3409,11 @@ function buildCompare(input) {
       rankPrev: p ? prevRank.get(key) ?? null : null,
       rankCurr: c ? currRank.get(key) ?? null : null,
       rankShift: p && c ? (prevRank.get(key) ?? 0) - (currRank.get(key) ?? 0) : null,
-      state
+      state,
+      category: (p ?? c).category,
+      code: (p ?? c).code,
+      prevMargin: marginOf(p),
+      currMargin: marginOf(c)
     });
   }
   const prevTotal = aggregate(def, prevEntries);
@@ -3460,9 +3483,9 @@ function isCompareKind(v) {
 function buildComparePayload(store, cycle, kind, metricId, limit = 100) {
   const prevReport = cycle === "7d" ? store.getPreviousWeeklyReport() : store.getPreviousMonthlyReport();
   const currReport = cycle === "7d" ? store.getWeeklyReport() : store.getMonthlyReport();
-  const trend = cycle === "30d" ? buildMonthTrend(store.getMonthlyHistory()) : [];
   const kinds = reportKindsAvail(cycle, prevReport, currReport);
   const effectiveKind = kind !== void 0 && isCompareKind(kind) ? kind : pickCompareKind(cycle, prevReport, currReport);
+  const trend = cycle === "30d" ? buildMonthTrend(store.getMonthlyHistory(), effectiveKind) : [];
   const defs = listCompareMetrics(effectiveKind);
   const def = defs.find((m) => m.id === metricId) ?? defs[0];
   const result = buildCompare({

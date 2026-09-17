@@ -47,6 +47,14 @@ export interface CompareRow {
   /** 名次位移 = rankPrev - rankCurr（正 = 名次上升） */
   rankShift: number | null
   state: CompareRowState
+  /** 品类（源表「分类」列；店铺层级无此列 → 空串，面板会据此剔除整列） */
+  category: string
+  /** 编号（链接用 linkCode/linkId，货品与规格用 code；店铺层级无此列 → 空串） */
+  code: string
+  /** 上期毛利率 %（= Σ毛利额 ÷ Σ净销售额，源表两列真实数据；上期不存在为 null） */
+  prevMargin: number | null
+  /** 本期毛利率 %（同上） */
+  currMargin: number | null
 }
 
 export interface CompareSummary {
@@ -155,14 +163,36 @@ export interface MonthTrendPoint {
   promoCost: number | null
   feeRatio: number | null
   skuCount: number | null
+  /** 该点取数的层级（与「对比明细」同一张排名表）；无排名表时为 null */
+  source: CompareKind | null
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10
 
-/** 从单份月报聚合出趋势点：
- *  店铺/收入/毛利/推广优先取「利润表」（storeProfit 完整月份）；
- *  缺利润表时回退「商品排名导出」行汇总；净销 = 销售收入 − 退款。 */
-export function buildMonthTrendPoint(rep: MonthlyReport): MonthTrendPoint {
+/** 趋势点可聚合的排名表行（三层级的行结构在销售/净销/毛利/推广上同构） */
+interface TrendRow {
+  sales: number
+  netSales: number
+  grossProfit: number
+  adSpend: number
+}
+
+/**
+ * 从单份月报聚合出趋势点。
+ *
+ * ⚠ 口径（必须与「对比明细」严格同源）：趋势 KPI 与下方明细表要来自**同一张排名表**。
+ *   此前趋势优先取「利润表」、明细取排名表，同一个「净销额」在同一屏出现两个数
+ *   （实测 8 月 3,365,396 vs 4,492,466，差 112.7 万），费比也随之从 12.19% 变成 16.19%。
+ *   现统一为排名表：层级优先 平台链接 → 系统货品 → 系统规格，可由 kind 指定；
+ *   利润表不参与本趋势（它是「发货口径」财务表，与排名表的商品口径本就不同，
+ *   仅用于经销排行与概览条的店铺分支，那里费比=推广费÷销售收入）。
+ *
+ * ⚠ 净销额直接取表内「净销售额」列求和，**不再用 销售额−退款 反算**：
+ *   WeeklyProductRow 根本没有 refundAmount 字段，反算会把退款当 0（货品/规格层级虚高）。
+ *
+ * ⚠ 费比 = 推广投放费用 ÷ 净销售额 ×100（分母是净销售额，不是销售额）。
+ */
+export function buildMonthTrendPoint(rep: MonthlyReport, kind?: CompareKind): MonthTrendPoint {
   const sum = function <T>(rows: T[] | undefined, f: (r: T) => number): number | null {
     if (!rows || rows.length === 0) return null
     let s = 0
@@ -172,18 +202,23 @@ export function buildMonthTrendPoint(rep: MonthlyReport): MonthTrendPoint {
   const month = rep.month || String(rep.period || '').slice(0, 7)
   const mm = Number(month.slice(5, 7))
   const label = Number.isFinite(mm) && mm > 0 ? mm + '月' : month
-  const stores = rep.storeProfit
   const links = rep.platformLinks
   const products = rep.systemProducts
   const skus = rep.systemSkus
-  // 收入口径：利润表销售收入 → 回退排名销售额（任一层级）
-  const sales = sum(stores, (r) => r.sales) ?? sum(links, (r) => r.sales) ?? sum(products, (r) => r.sales) ?? sum(skus, (r) => r.sales)
-  const refund = sum(stores, (r) => r.refund) ?? sum(links, (r) => r.refundAmount) ?? sum(products, (r) => r.refundAmount) ?? sum(skus, (r) => r.refundAmount)
-  const netSales = sales === null ? null : sales - (refund ?? 0)
-  const grossProfit = sum(stores, (r) => r.grossProfit) ?? sum(links, (r) => r.grossProfit) ?? sum(products, (r) => r.grossProfit) ?? sum(skus, (r) => r.grossProfit)
-  const promoCost = sum(stores, (r) => r.promoCost) ?? sum(links, (r) => r.adSpend) ?? sum(products, (r) => r.adSpend) ?? sum(skus, (r) => r.adSpend)
-  const feeBase = netSales !== null && netSales > 0 ? netSales : sales !== null && sales > 0 ? sales : null
-  const feeRatio = promoCost !== null && feeBase !== null && feeBase > 0 ? round1((promoCost / feeBase) * 100) : null
+  const pick: { kind: CompareKind; rows: unknown[] | undefined } =
+    kind === 'systemSkus' ? { kind: 'systemSkus', rows: skus }
+      : kind === 'systemProducts' ? { kind: 'systemProducts', rows: products }
+        : kind === 'platformLinks' ? { kind: 'platformLinks', rows: links }
+          : links && links.length ? { kind: 'platformLinks', rows: links }
+            : products && products.length ? { kind: 'systemProducts', rows: products }
+              : skus && skus.length ? { kind: 'systemSkus', rows: skus }
+                : { kind: 'platformLinks', rows: undefined }
+  const rows = pick.rows as TrendRow[] | undefined
+  const sales = sum(rows, (r) => r.sales)
+  const netSales = sum(rows, (r) => r.netSales)
+  const grossProfit = sum(rows, (r) => r.grossProfit)
+  const promoCost = sum(rows, (r) => r.adSpend)
+  const feeRatio = promoCost !== null && netSales !== null && netSales > 0 ? round1((promoCost / netSales) * 100) : null
   return {
     period: rep.period || '',
     month,
@@ -194,16 +229,17 @@ export function buildMonthTrendPoint(rep: MonthlyReport): MonthTrendPoint {
     promoCost,
     feeRatio,
     skuCount: skus ? skus.length : null,
+    source: rows ? pick.kind : null,
   }
 }
 
 /** 对多月份归档按升序产出趋势点序列（数据对比视图的柱状/折线数据源） */
-export function buildMonthTrend(history: MonthlyReport[]): MonthTrendPoint[] {
+export function buildMonthTrend(history: MonthlyReport[], kind?: CompareKind): MonthTrendPoint[] {
   return history
     .filter((r) => r !== null && typeof r.period === 'string' && r.period !== '')
     .slice()
     .sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0))
-    .map(buildMonthTrendPoint)
+    .map((r) => buildMonthTrendPoint(r, kind))
 }
 
 export function listCompareMetrics(kind: CompareKind): CompareMetricDef[] {
@@ -265,12 +301,38 @@ function num(v: unknown): number {
 }
 
 /** 归一化一章行为 {key,label,value,weight} 列表（身份键重复行按指标值求和聚合成一条） */
+/** 归一化后的对比条目：指标值 + 身份列（品类/编号）+ 毛利率所需的两列分子分母 */
+interface NormEntry {
+  key: string
+  label: string
+  value: number
+  weight: number
+  category: string
+  code: string
+  /** Σ毛利额 / Σ净销售额：两列都来自源表，用于逐行毛利率（不是估算） */
+  gp: number
+  net: number
+}
+
+/** 身份列取值：链接层级用 linkCode/linkId，货品与规格用 code，店铺层级没有编号 */
+function codeOf(kind: CompareKind, row: Record<string, unknown>): string {
+  if (kind === 'storeProfit') return ''
+  if (kind === 'platformLinks') return String(row.linkCode ?? row.linkId ?? '').trim()
+  return String(row.code ?? '').trim()
+}
+/** 净销售额：有「净销售额」列就用它；没有（利润表逐店）才回退 销售额−退款 */
+function netOf(row: Record<string, unknown>): number {
+  if (row.netSales !== undefined && row.netSales !== null && String(row.netSales).trim() !== '') return num(row.netSales)
+  const refund = row.refund ?? row.refundAmount ?? 0
+  return num(row.sales) - num(refund)
+}
+
 function normalize(
   kind: CompareKind,
   rows: unknown[] | undefined,
   def: CompareMetricDef,
-): Array<{ key: string; label: string; value: number; weight: number }> {
-  const out = new Map<string, { key: string; label: string; value: number; weight: number }>()
+): NormEntry[] {
+  const out = new Map<string, NormEntry>()
   for (const raw of rows ?? []) {
     if (raw === null || typeof raw !== 'object') continue
     const row = raw as Record<string, unknown>
@@ -286,12 +348,20 @@ function normalize(
     // 加权因子：比例/单价类指标才需要；缺权数字段回退 sales
     const weightField = def.weight ?? 'sales'
     const weight = num(row[weightField])
+    const category = String(row.category ?? '').trim()
+    const code = codeOf(kind, row)
+    const gp = num(row.grossProfit)
+    const net = netOf(row)
     const cur = out.get(key)
     if (cur) {
       cur.value += value
       cur.weight += weight
+      cur.gp += gp
+      cur.net += net
+      if (!cur.category && category) cur.category = category
+      if (!cur.code && code) cur.code = code
     } else {
-      out.set(key, { key, label: labelOf(kind, row) || key, value, weight })
+      out.set(key, { key, label: labelOf(kind, row) || key, value, weight, category, code, gp, net })
     }
   }
   return [...out.values()]
@@ -401,6 +471,9 @@ export function buildCompare(input: CompareInput): CompareResult | null {
     const b = currV ?? 0
     const delta = b - a
     const deltaPct = def.unit === 'pct' || a === 0 ? null : (delta / a) * 100
+    // 毛利率 = Σ毛利额 ÷ Σ净销售额（两列均来自源表，非估算）；缺一侧为 null，面板显示 "— → x%"
+    const marginOf = (e: { gp: number; net: number } | undefined): number | null =>
+      e && e.net > 0 ? round1((e.gp / e.net) * 100) : null
     rows.push({
       key,
       label: (p ?? c)!.label,
@@ -412,6 +485,10 @@ export function buildCompare(input: CompareInput): CompareResult | null {
       rankCurr: c ? currRank.get(key) ?? null : null,
       rankShift: p && c ? (prevRank.get(key) ?? 0) - (currRank.get(key) ?? 0) : null,
       state,
+      category: (p ?? c)!.category,
+      code: (p ?? c)!.code,
+      prevMargin: marginOf(p),
+      currMargin: marginOf(c),
     })
   }
 
