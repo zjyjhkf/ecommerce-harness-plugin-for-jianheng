@@ -5,6 +5,7 @@
  * bundle 后以 globalName=DEMOBRIDGE 暴露 handle()。
  */
 import { buildComparePayload, isCompareCycle } from '../src/compare-payload.ts'
+import { buildNewProductPayload } from '../src/new-products.ts'
 import { buildEvaluationSummary, ruleBasedEvaluation } from '../src/data-evaluation.ts'
 
 interface DemoData {
@@ -52,6 +53,15 @@ export function handle(rawUrl: string): string | null {
       return J({ ok: true, value: payload, revision: 1 })
     } catch {
       return J({ ok: false, error: { code: 'DEMO_COMPARE', message: '该组合暂无示例数据' } })
+    }
+  }
+  if (p === '/ecommerce-api/new-products') {
+    // 新品追踪：离线面板同样由生产代码现算（判据/口径与线上完全一致），
+    // 「数据对比 · 新品对比」区块读的也是这一份负载。
+    try {
+      return J({ ok: true, value: buildNewProductPayload(shim as never), revision: 1 })
+    } catch {
+      return J({ ok: false, error: { code: 'DEMO_NEW_PRODUCTS', message: '该组合暂无示例数据' } })
     }
   }
   if (p === '/ecommerce-api/evaluation') {
