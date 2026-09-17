@@ -497,9 +497,25 @@ export async function parseStoreProfitExcel(
   const out = acc
     .map((s) => {
       const sales = Number(s.sales) || 0
-      const positiveSales = Number(s.positiveSales) || 0
+      const refund = Number(s.refund) || 0
+      const raw = Number(s.positiveSales) || 0
+      // ── 口径守卫：源表公式笔误的自动纠正 ──
+      // 「正向销售收入(不含特殊单)」按定义是「销售收入」的子集，不可能大于销售收入。
+      // 实测 7/8 月两份模板该行公式被写成 销售收入 **+** 退款（应为 −）：
+      // 8 月得 5,202,477.21 > 销售收入 4,283,936.79，虚高 918,540.42 —— 恰好整整一个退款额；
+      // 且 17 家门店里 16 家中招，属模板级问题而非门店个案。
+      // 这里统一按「销售收入 − 退款」纠正（即该字段应有的值），并把原值留在 positiveSalesRaw，
+      // 面板据此提示用户核对 Excel；AI 取数同源，不会再透传违反口径的数字。
+      const violated = raw > sales + 0.01
+      const positiveSales = violated ? Math.max(0, sales - refund) : raw
       const effSales = sales > 0 ? sales : positiveSales
-      return { ...s, sales, positiveSales, feeRatio: effSales > 0 ? (Number(s.promoCost) / effSales) * 100 : 0 }
+      return {
+        ...s,
+        sales,
+        positiveSales,
+        ...(violated ? { positiveSalesRaw: raw } : {}),
+        feeRatio: effSales > 0 ? (Number(s.promoCost) / effSales) * 100 : 0,
+      }
     })
     .filter((s) => (Number(s.sales) || 0) > 0 || (Number(s.positiveSales) || 0) > 0)
   return out.length ? out : null

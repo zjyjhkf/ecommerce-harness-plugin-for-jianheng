@@ -198,7 +198,14 @@ export interface MonthlySkuRow {
 export interface MonthlyStoreProfit {
   store: string
   sales: number // 一、销售收入
-  positiveSales: number // 正向销售收入(不含特殊单)
+  positiveSales: number // 正向销售收入(不含特殊单)；源表违反口径时已被纠正，原值见 positiveSalesRaw
+  /**
+   * 源表「正向销售收入」违反口径（> 销售收入）时的**原始值**，仅异常时出现。
+   * 正向销售收入按定义是销售收入的子集，不可能大于它；出现即说明源表公式有误
+   * （实测 7/8 月模板 利润表该行被写成「销售收入 + 退款」，应为「−」）。
+   * 解析层按「销售收入 − 退款」纠正并把原值留在这里，面板据此提示用户核对 Excel。
+   */
+  positiveSalesRaw?: number
   refund: number // 退款
   grossProfit: number // 四、毛利
   grossMargin: number // 五、销售毛利率 %

@@ -895,9 +895,18 @@ async function parseStoreProfitExcel(buffer) {
   }
   const out = acc.map((s) => {
     const sales = Number(s.sales) || 0;
-    const positiveSales = Number(s.positiveSales) || 0;
+    const refund = Number(s.refund) || 0;
+    const raw = Number(s.positiveSales) || 0;
+    const violated = raw > sales + 0.01;
+    const positiveSales = violated ? Math.max(0, sales - refund) : raw;
     const effSales = sales > 0 ? sales : positiveSales;
-    return { ...s, sales, positiveSales, feeRatio: effSales > 0 ? Number(s.promoCost) / effSales * 100 : 0 };
+    return {
+      ...s,
+      sales,
+      positiveSales,
+      ...violated ? { positiveSalesRaw: raw } : {},
+      feeRatio: effSales > 0 ? Number(s.promoCost) / effSales * 100 : 0
+    };
   }).filter((s) => (Number(s.sales) || 0) > 0 || (Number(s.positiveSales) || 0) > 0);
   return out.length ? out : null;
 }
@@ -4826,6 +4835,12 @@ function storesText(report, top) {
   }
   const sales = sum2(rows, (r) => r.sales);
   L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sales)} \xB7 \u9000\u6B3E ${yuan(sum2(rows, (r) => r.refund))} \xB7 \u6BDB\u5229 ${yuan(sum2(rows, (r) => r.grossProfit))}`);
+  const posRaw = sum2(rows, (r) => Number(r.positiveSalesRaw) || 0);
+  if (posRaw > 0) {
+    L.push(
+      `\u26A0 \u6E90\u8868\u53E3\u5F84\u5F02\u5E38:\u5229\u6DA6\u8868\u300C\u6B63\u5411\u9500\u552E\u6536\u5165\u300D\u539F\u503C\u5408\u8BA1 ${yuan(posRaw)} \u5927\u4E8E\u300C\u9500\u552E\u6536\u5165\u300D${yuan(sales)},\u8FDD\u53CD\u5B9A\u4E49(\u6B63\u5411\u9500\u552E\u6536\u5165\u662F\u9500\u552E\u6536\u5165\u7684\u5B50\u96C6)\u3002\u5DF2\u6309\u300C\u9500\u552E\u6536\u5165\u2212\u9000\u6B3E\u300D\u7EA0\u6B63\u4E3A ${yuan(sum2(rows, (r) => r.positiveSales))} \u540E\u5C55\u793A;\u56DE\u7B54\u65F6\u8BF7\u4F7F\u7528\u7EA0\u6B63\u540E\u7684\u503C,\u5E76\u63D0\u9192\u7528\u6237\u6838\u5BF9 Excel \u5229\u6DA6\u8868\u8BE5\u884C\u516C\u5F0F(\u5E38\u89C1\u7B14\u8BEF:\u5199\u6210 \u9500\u552E\u6536\u5165+\u9000\u6B3E,\u5E94\u4E3A \u9500\u552E\u6536\u5165\u2212\u9000\u6B3E)\u3002`
+    );
+  }
   return L.join("\n");
 }
 function productsText(report, top) {

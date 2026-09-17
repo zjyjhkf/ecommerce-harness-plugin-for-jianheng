@@ -803,6 +803,8 @@ function storeRows(){
       store: s.store,
       sales: effSales,
       positiveSales: positive,
+      // 源表「正向销售收入」违反口径时的原值（解析层已纠正，这里只用于提示用户核对 Excel）
+      positiveSalesRaw: Number(s.positiveSalesRaw)||0,
       refund: Number(s.refund)||0,
       netSales: effSales - (Number(s.refund)||0),
       grossProfit: Number(s.grossProfit)||0,
@@ -2949,8 +2951,24 @@ function renderMonthlyReportView(){
     '<div style="overflow-x:auto"><table class="data-table"><thead><tr id="mrSkuThead"></tr></thead><tbody id="mrSkuTbody"></tbody></table></div></div>' : '';
   const hasAny = storeList.length || products.length || links.length || skus.length;
   if (!hasAny) { renderNoData(); return; }
+  // 源表口径异常提示：利润表「正向销售收入」不可能大于「销售收入」。
+  // 解析层已按「销售收入 − 退款」自动纠正（见 monthly-report.ts 口径守卫），
+  // 这里把「纠正了什么、原值多少、该去核对哪一行」显式告诉用户 ——
+  // 否则用户拿面板数字去对 Excel 原值对不上，会误判成插件算错。
+  const posRawSum = stores.reduce(function(s,x){ return s+(Number(x.positiveSalesRaw)||0); },0);
+  const posFixSum = storeList.reduce(function(s,x){ return s+(Number(x.positiveSales)||0); },0);
+  const anomalyBar = posRawSum > 0
+    ? '<div class="insight-bar" style="background:rgba(229,72,77,.07);border-color:rgba(229,72,77,.35);border-left-color:var(--red)">'
+      + '<span class="insight-title" style="color:var(--red)">源表口径异常（已自动纠正）：</span>'
+      + '利润表「正向销售收入(不含特殊单)」原值 <b>' + realMoney(posRawSum) + '</b> 大于「销售收入」<b>' + realMoney(storeSales) + '</b>，'
+      + '违反口径（正向销售收入是销售收入的子集，不可能大于销售收入）。'
+      + '插件已按「销售收入 − 退款」纠正为 <b>' + realMoney(posFixSum) + '</b> 后再展示。'
+      + '请核对 Excel「利润表」该行公式 —— 常见笔误是写成了 <b>销售收入 + 退款</b>，应为 <b>销售收入 − 退款</b>。'
+      + '</div>'
+    : '';
   content.innerHTML =
     evaluationBarHtml('30d') +
+    anomalyBar +
     '<div class="insight-bar"><span class="insight-title">月度复盘（导入数据 · 全部来自导入 Excel）：</span>' +
     products.length + ' 货品 · ' + links.length + ' 商品 · ' + skus.length + ' SKU · ' + storeList.length + ' 店铺 · 数据范围 ' + (rep.period || rep.month || ML_CURR) + '</div>' +
     '<div class="kpi-grid">'+kpiCards+'</div>' +

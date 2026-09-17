@@ -97,6 +97,16 @@ function storesText(report: MonthlyReport, top: number): string {
   }
   const sales = sum(rows, (r) => r.sales)
   L.push(`合计:销售额 ${yuan(sales)} · 退款 ${yuan(sum(rows, (r) => r.refund))} · 毛利 ${yuan(sum(rows, (r) => r.grossProfit))}`)
+  // 源表口径异常：正向销售收入不可能大于销售收入。解析层已按「销售收入−退款」纠正，
+  // 这里显式标注，避免模型把 Excel 原值当成事实、或把纠正后的值当成数据错误。
+  const posRaw = sum(rows, (r) => Number(r.positiveSalesRaw) || 0)
+  if (posRaw > 0) {
+    L.push(
+      `⚠ 源表口径异常:利润表「正向销售收入」原值合计 ${yuan(posRaw)} 大于「销售收入」${yuan(sales)},` +
+        `违反定义(正向销售收入是销售收入的子集)。已按「销售收入−退款」纠正为 ${yuan(sum(rows, (r) => r.positiveSales))} 后展示;` +
+        `回答时请使用纠正后的值,并提醒用户核对 Excel 利润表该行公式(常见笔误:写成 销售收入+退款,应为 销售收入−退款)。`,
+    )
+  }
   return L.join('\n')
 }
 
