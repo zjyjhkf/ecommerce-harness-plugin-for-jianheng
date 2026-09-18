@@ -1131,24 +1131,23 @@ function renderSalesPeriod(period){
   const lRows = platformLinks();
   const productCount = (rep.systemProducts || []).length; // 在销货品（同类商品总和）
   const linkCount = lRows.length; // 商品个体（链接）
-  // ⚠ 口径必须与顶部概览条完全一致（同为「商品口径·平台排名表」优先）：
-  //   此前这里优先取「利润表」（发货口径财务数 428.4万），而概览条与其余模块都是排名表口径
-  //   （578.9万）—— 同一屏出现两个「总销售额」，还会连带算出 12.7% 的费比（正确 12.2%）。
-  //   现统一：有链接表就用链接表，没有才回退利润表；净销一律由 销售额 − 退款 推导。
-  const useLink = lRows.length > 0;
-  const totSales = useLink ? lRows.reduce(function(s,l){return s+(Number(l.sales)||0);},0)
-                           : sRows.reduce(function(s,r){return s+r.sales;},0);
-  const totRefund = useLink ? lRows.reduce(function(s,l){return s+(Number(l.refundAmount)||0);},0)
-                            : sRows.reduce(function(s,r){return s+r.refund;},0);
+  // ⚠ 口径与顶部概览条完全一致（以「利润表 · 财务口径」为准）：
+  //   销售额 = 利润表销售收入（8 月 428.4 万）；净销售额 = 销售收入 − 退款（336.5 万）。
+  //   仅在没有利润表时才回退到商品排名口径（链接表），保证同一屏不出现两个「总销售额」。
+  const useStore = sRows.length > 0;
+  const totSales = useStore ? sRows.reduce(function(s,r){return s+r.sales;},0)
+                            : lRows.reduce(function(s,l){return s+(Number(l.sales)||0);},0);
+  const totRefund = useStore ? sRows.reduce(function(s,r){return s+r.refund;},0)
+                             : lRows.reduce(function(s,l){return s+(Number(l.refundAmount)||0);},0);
   const totNet = totSales - totRefund;   // 等式：净销售额 = 销售额 − 退款
-  const totPromo = useLink ? lRows.reduce(function(s,l){return s+(Number(l.adSpend)||0);},0)
-                           : sRows.reduce(function(s,r){return s+r.promoCost;},0);
-  const totProfit = useLink ? lRows.reduce(function(s,l){return s+(Number(l.grossProfit)||0);},0)
-                            : sRows.reduce(function(s,r){return s+r.grossProfit;},0);
-  // 费比分母与分子同源：链接口径 = 推广费 ÷ 净销售额；利润表口径 = 推广费 ÷ 销售收入
-  const feeRatio = useLink
-    ? (totNet>0 ? (totPromo/totNet*100) : 0)
-    : (totSales>0 ? (totPromo/totSales*100) : 0);
+  const totPromo = useStore ? sRows.reduce(function(s,r){return s+r.promoCost;},0)
+                            : lRows.reduce(function(s,l){return s+(Number(l.adSpend)||0);},0);
+  const totProfit = useStore ? sRows.reduce(function(s,r){return s+r.grossProfit;},0)
+                             : lRows.reduce(function(s,l){return s+(Number(l.grossProfit)||0);},0);
+  // 费比分母与分子同源：利润表口径 = 推广费 ÷ 销售收入；链接口径 = 推广费 ÷ 净销售额
+  const feeRatio = useStore
+    ? (totSales>0 ? (totPromo/totSales*100) : 0)
+    : (totNet>0 ? (totPromo/totNet*100) : 0);
   // 经营总额等 KPI 已由顶部 overviewBar 概览条集中展示，此处不再重复渲染 KPI 卡
   document.getElementById('insightBar').innerHTML = '<span class="insight-title">经营洞察（'+ML_CURR+'·导入数据）：</span>在销货品 '+productCount+' 个 · 商品（链接）'+linkCount+' 个 · 总销售额 '+realMoney(totSales)+' · 退款 '+realMoney(totRefund)+' · 净销售额 '+realMoney(totNet)+'（销售额 − 退款） · 毛利 '+realMoney(totProfit)+' · 整体费比 '+realPct(feeRatio);
   // ── 经销排行（总销售额 / 净销 / 费比 / 毛利额，点击切换；明细表为准，图表已删避免重复）──
@@ -1424,8 +1423,8 @@ function renderModuleSummary(){
     {name:'商品明细',   value: linkCount+' 个', sub:'商品个体（链接）', fn:"switchView('link')"},
     {name:'SKU 规格',   value: skuCount+' 个',  sub:'系统规格明细', fn:"switchView('newproduct')"},
     {name:'推广分析',   value: realMoney(totPromo), sub:'运营推广费用', fn:"switchView('promo')"},
-    {name:'退款分析',   value: realMoney(totRefund), sub:'退款金额', fn:"switchView('refund')"},
-    {name:'月度复盘',   value: realMoney(totSales), sub:'总销售额', fn:"switchView('review')"}
+    {name:'退款分析',   value: realMoney(totRefund), sub:'退款金额（财务口径）', fn:"switchView('refund')"},
+    {name:'月度复盘',   value: realMoney(totSales), sub:'总销售额（财务口径）', fn:"switchView('review')"}
   ];
   el.innerHTML = cards.map(function(c){
     return '<div class="mod-card" onclick="'+c.fn+'"><div class="mod-name">'+c.name+'</div><div class="mod-value">'+c.value+'</div><div class="mod-sub">'+c.sub+' · 查看 →</div></div>';
@@ -1533,7 +1532,7 @@ function renderProductPeriod(period){
   const avgMargin = totSales>0 ? (totGp/totSales*100) : 0;
   document.getElementById('productKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">在销货品</div><div class="kpi-value">'+prods.length+'</div><div class="kpi-sub">同类商品总和（'+ML_CURR+'）</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">货品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">货品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">商品排名口径 · '+ML_CURR+'</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">货品毛利额</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">毛利率 '+realPct(avgMargin)+'</div></div>',
     '<div class="kpi-card purple"><div class="kpi-label">货品净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">推广 '+realMoney(totAd)+'</div></div>'
   ].join('');
@@ -1645,7 +1644,7 @@ function renderLinkPeriod(period){
   const highFee = sorted.filter(function(l){ return feeOf(l)>20; }).length;
   document.getElementById('linkKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+tot+'</div><div class="kpi-sub">商品个体（'+ML_CURR+'）</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">商品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">商品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">商品排名口径 · '+ML_CURR+'</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">商品净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">推广 '+realMoney(totAd)+'</div></div>',
     '<div class="kpi-card purple"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">费比>20% '+highFee+' 个</div></div>'
   ].join('');
@@ -2009,7 +2008,7 @@ function renderNewProductPeriod(period){
   // KPI（真实：SKU 规格级）
   document.getElementById('newProductKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+tot+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">SKU 净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">SKU 净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">商品排名口径 · 销售−退款</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">SKU 毛利</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">平均毛利率 '+realPct(avgMargin)+'</div></div>',
     '<div class="kpi-card purple"><div class="kpi-label">SKU 推广费</div><div class="kpi-value">'+realMoney(totAd)+'</div><div class="kpi-sub">线下 '+realMoney(totOff)+'</div></div>'
   ].join('');
@@ -2914,22 +2913,17 @@ function renderMonthlyReportView(){
   const storeRefund = storeList.reduce(function(s,x){ return s+(x.refund||0); },0);
   const storeMargin = storeSales>0 ? (storeGp/storeSales*100) : 0;
   // 层级 KPI：货品 / 商品（链接）/ SKU / 店铺
+  // ⚠ 前三个是「商品排名口径」的净销（源表 578.9 万销售额 − 退款），与下方「经销店铺 · 财务口径」
+  // 的 428.4 万不是同一口径 —— 副标题必须写明，否则卡片并排会被读成「净销 449 万 > 销售收入 428 万」。
   const kpiCards = [
-    '<div class="kpi-card blue"><div class="kpi-label">货品（系统货品）</div><div class="kpi-value">'+products.length+'</div><div class="kpi-sub">净销 '+realMoney(sum(products,'netSales'))+'</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+links.length+'</div><div class="kpi-sub">净销 '+realMoney(sum(links,'netSales'))+'</div></div>',
-    '<div class="kpi-card orange"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+skus.length+'</div><div class="kpi-sub">净销 '+realMoney(sum(skus,'netSales'))+'</div></div>',
+    '<div class="kpi-card blue"><div class="kpi-label">货品（系统货品）</div><div class="kpi-value">'+products.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(products,'netSales'))+'</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+links.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(links,'netSales'))+'</div></div>',
+    '<div class="kpi-card orange"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+skus.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(skus,'netSales'))+'</div></div>',
     '<div class="kpi-card purple"><div class="kpi-label">经销店铺 <span style="font-size:11px;opacity:.75">财务口径</span></div><div class="kpi-value">'+storeList.length+'</div><div class="kpi-sub">销售收入 '+realMoney(storeSales)+'</div></div>'
   ].join('');
-  // 店铺经销指标合计（全店）
-  const metrics = [
-    { name:'销售收入', v:storeSales },
-    { name:'正向销售收入', v:storeList.reduce(function(s,x){ return s+(x.positiveSales||0); },0) },
-    { name:'退款', v:storeRefund },
-    { name:'净销', v:storeNet },
-    { name:'毛利', v:storeGp },
-    { name:'运营推广费', v:storePromo },
-    { name:'仓库物流费', v:storeLogi }
-  ];
+  // 注：这里原有一份未被任何渲染使用的 metrics 数组（含与「销售收入」等值的「正向销售收入」行），
+  // 已删除，避免出现两份口径定义、也避免同一数值被并列展示两次。
+  // 实际渲染「全店经营指标合计」的是下方 renderMonthReview 内的 rows（销售收入（正向）单行）。
   const chartGrid =
     '<div class="chart-row two">' +
       '<div class="chart-box"><div class="chart-title">店铺净销 TOP10 <span class="badge">利润表</span></div><div class="chart-container" id="mrOverviewBar" style="height:280px"></div></div>' +
@@ -3073,11 +3067,12 @@ function renderMonthlyCharts(rep){
   // 5) 全店经营指标合计
   if (stores.length) {
     const sum = function(field){ return stores.reduce(function(s,x){ return s+(Number(x[field])||0); },0); };
+    // 用户指定口径：销售额 = 正向销售额 = 利润表「销售收入」（同一数字，单行展示，不并列两次）；
+    // 净销 = 销售收入 − 退款（与概览条/经营洞察的等式完全一致）。
     const rows = [
-      { name:'销售收入', v:sum('sales') },
-      { name:'正向销售收入', v:sum('positiveSales') },
+      { name:'销售收入（正向）', v:sum('sales') },
       { name:'退款', v:sum('refund') },
-      { name:'净销', v:sum('netSales') },
+      { name:'净销（销售−退款）', v:sum('sales') - sum('refund') },
       { name:'毛利', v:sum('grossProfit') },
       { name:'运营推广费', v:sum('promoCost') },
       { name:'仓库物流费', v:sum('logisticsCost') }
@@ -3169,33 +3164,23 @@ function renderOverviewBar(){
     animateOvMoney(bar);
     return;
   }
-  // 30天月度：概览条统一用「商品口径（平台排名表）」，并严格满足 净销售额 = 销售额 − 退款。
-  // ⚠ 这里原来优先取「利润表」（发货口径财务数，8月 428.4万），而面板其余 8 个模块
-  //   （产品概览/商品明细/推广/退款/数据对比/新品追踪/SKU规格/月复盘）全是排名表口径（578.9万）——
-  //   同一屏里「数据对比·净销额 449.2万」会大于「概览条·销售额 428.4万」，
-  //   呈现成「净销额 > 销售额」这种口径上不可能的关系（用户实测反馈）。
-  //   现统一到排名表口径；利润表的数字保留在「经销排行 / 月复盘·店铺经销明细」，
-  //   那里明确标注「财务口径」，两套口径不再混在同一处比较。
-  const links = platformLinks();
+  // 30天月度：概览条以「利润表 · 财务口径」为准 —— 用户指定口径：
+  //   ① 销售额 = 正向销售额 = 利润表「销售收入」（8 月 428.4 万）；
+  //   ② 净销售额 = 销售额 − 退款（8 月 428.4 − 91.9 = 336.5 万）。
+  // 排名表（平台商品排名）的销售额是另一个口径（8 月 578.9 万），只在商品层模块里
+  // 作为「商品排名口径」出现，不再充当全店销售额头寸 —— 否则同一屏会拿两个口径的数
+  // 互相比较（曾出现「净销额 449.2 万 > 销售额 428.4 万」）。
   const stList = storeRows();
-  const hasLink = links.length > 0;
+  const links = platformLinks();
   const hasStore = stList.length > 0;
-  if (!hasLink && !hasStore) {
+  const hasLink = links.length > 0;
+  if (!hasStore && !hasLink) {
     bar.innerHTML = '<div class="ov-item"><div class="ov-label">经营数据</div><div class="ov-value">--</div><div class="ov-sub">请导入 月度 Excel（利润表 / 排名表）</div></div>';
     return;
   }
   const pLabel = currentPlatform === 'all' ? ML_CURR : platformLabel(currentPlatform);
   let totalSales, totalNet, totalRefund, totalPromo, totalGp, feeRatio, sub0, scope;
-  if (hasLink) {
-    totalSales = links.reduce(function(s,l){ return s+(Number(l.sales)||0); },0);
-    totalRefund = links.reduce(function(s,l){ return s+(Number(l.refundAmount)||0); },0);
-    totalNet = totalSales - totalRefund;            // 等式：净销售额 = 销售额 − 退款
-    totalPromo = links.reduce(function(s,l){ return s+(Number(l.adSpend)||0); },0);
-    totalGp = links.reduce(function(s,l){ return s+(Number(l.grossProfit)||0); },0);
-    feeRatio = totalNet>0 ? (totalPromo/totalNet*100) : 0;
-    sub0 = links.length + ' 商品';
-    scope = '商品口径';
-  } else {
+  if (hasStore) {
     totalSales = stList.reduce(function(s,x){ return s+(x.sales||0); },0);
     totalRefund = stList.reduce(function(s,x){ return s+(x.refund||0); },0);
     totalNet = totalSales - totalRefund;            // 等式：净销售额 = 销售额 − 退款
@@ -3203,7 +3188,16 @@ function renderOverviewBar(){
     totalGp = stList.reduce(function(s,x){ return s+(x.grossProfit||0); },0);
     feeRatio = totalSales>0 ? (totalPromo/totalSales*100) : 0;
     sub0 = stList.length + ' 店';
-    scope = '财务口径';
+    scope = '财务口径 · 利润表';
+  } else {
+    totalSales = links.reduce(function(s,l){ return s+(Number(l.sales)||0); },0);
+    totalRefund = links.reduce(function(s,l){ return s+(Number(l.refundAmount)||0); },0);
+    totalNet = totalSales - totalRefund;            // 等式：净销售额 = 销售额 − 退款
+    totalPromo = links.reduce(function(s,l){ return s+(Number(l.adSpend)||0); },0);
+    totalGp = links.reduce(function(s,l){ return s+(Number(l.grossProfit)||0); },0);
+    feeRatio = totalNet>0 ? (totalPromo/totalNet*100) : 0;
+    sub0 = links.length + ' 商品';
+    scope = '商品排名口径';
   }
   const margin = totalSales>0 ? (totalGp/totalSales*100) : 0;
   const ovProductCount = (rep && rep.systemProducts) ? rep.systemProducts.length : 0;
@@ -3336,9 +3330,12 @@ function cmpTrendAnchor(usable){
   const pidx = idx > 0 ? idx - 1 : (usable.length > 1 ? 1 : 0);
   return { last: usable[idx], prev: usable[pidx], idx: idx };
 }
-/** 趋势点取数层级的中文名（面板标注口径用；趋势 KPI 与下方明细表同源） */
+/** 趋势点取数口径的中文名（面板标注用）：有利润表时 = 财务口径·利润表（销售额=销售收入，净销售额=销售收入−退款），
+ *  没有利润表时回退排名层级（此时与下方明细表同源）。 */
+
 function cmpSourceLabel(src){
-  return src === 'platformLinks' ? '平台链接' : src === 'systemProducts' ? '系统货品' : src === 'systemSkus' ? '系统规格' : '—';
+  if (src === 'storeProfit') return '财务口径·利润表';
+  return src === 'platformLinks' ? '商品排名口径·链接' : src === 'systemProducts' ? '系统货品' : src === 'systemSkus' ? '系统规格' : '—';
 }
 function renderCompareTrend(){
   const pts = cmpTrendPoints();
@@ -3379,7 +3376,11 @@ function renderCompareTrend(){
     tg.innerHTML = '<span class="pt-label">对比指标：</span>' + defs.map(function(d){
       return '<button class="pt-btn' + (d.id===compareTrendMetric?' active':'') + '" onclick="switchCompareTrendMetric(\''+d.id+'\')">' + d.label + '</button>';
     }).join('')
-      + '<span class="pt-label" style="margin-left:8px">取数层级：<b>' + cmpSourceLabel(last.source) + '</b>（与下方明细表同源）</span>';
+      + '<span class="pt-label" style="margin-left:8px">取数口径：<b>' + cmpSourceLabel(last.source) + '</b>'
+      + (last.source === 'storeProfit'
+          ? '（销售额 = 利润表销售收入，净销售额 = 销售收入 − 退款；与顶部概览条同源。下方明细表的层级别名口径不同，勿跨口径比较）'
+          : '（与下方明细表同源）')
+      + '</span>';
   }
   const def = cmpTrendMetricDef(compareTrendMetric);
   // ③ v0.4.5 组合图（参考多月份.html）：一屏一图——柱=所选指标每月一根（每月不同色、

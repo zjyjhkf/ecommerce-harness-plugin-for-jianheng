@@ -83,26 +83,40 @@ test('同月重复导入：归档 upsert 覆盖当月，不产生重复月份', 
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('buildMonthTrendPoint：与对比明细同源（排名表），净销/毛利/推广/费比/规格数口径正确', () => {
+test('buildMonthTrendPoint：以利润表（财务口径）为准，净销/毛利/推广/费比/规格数口径正确', () => {
   const rep = makeMonth('07', 1)
   const pt = buildMonthTrendPoint(rep)
-  // 默认层级 = 平台链接（与 pickCompareKind 的优先顺序一致），不再优先取利润表
-  assert.equal(pt.source, 'platformLinks', '趋势点标明取数层级，供面板标注口径')
-  assert.equal(pt.sales, 150000, '销售额=链接表合计')
-  assert.equal(pt.netSales, 137000, '净销额直接取表内「净销售额」列（92000+45000）')
-  assert.equal(pt.grossProfit, 44000, '毛利=链接表合计')
-  assert.equal(pt.promoCost, 15000, '推广费=链接表推广投放费用合计')
+  // 用户指定口径：销售额 = 正向销售额 = 利润表「销售收入」；净销售额 = 销售收入 − 退款
+  assert.equal(pt.source, 'storeProfit', '有利润表 → 取数层级=财务口径，面板据此标注')
+  assert.equal(pt.sales, 150000, '销售额=利润表销售收入合计（100000+50000）')
+  assert.equal(pt.netSales, 137000, '净销额=销售收入−退款（150000−13000），不是排名表列')
+  assert.equal(pt.grossProfit, 44000, '毛利=利润表毛利额合计')
+  assert.equal(pt.promoCost, 15000, '推广费=利润表推广运营费用合计')
   assert.equal(pt.skuCount, 3, '产品规格数=系统SKU 行数')
-  assert.equal(pt.feeRatio, Math.round((15000 / 137000) * 1000) / 10, '费比=推广费÷净销售额%（1 位小数）')
+  assert.equal(pt.feeRatio, Math.round((15000 / 150000) * 1000) / 10, '费比=推广费÷销售收入%（财务口径 10.0%）')
   assert.equal(pt.label, '7月', '短标签用于柱状 x 轴')
 })
 
-test('趋势与明细严格同源：指定 kind 时趋势点净销额 = 明细表净销额总计（回归：曾出现 ±112 万口径差）', () => {
+test('回归：净销售额恒等于 销售额 − 退款，绝不出现「净销额 > 销售额」', () => {
   const rep = makeMonth('07', 1)
+  // 排名表净销售额列（92000+45000=137000）与其自算值一致，但排名表销售额（150000）里
+  // 有 578.9万/428.4万 那类跨口径差，趋势头寸必须只认利润表
+  const pt = buildMonthTrendPoint(rep)
+  assert.equal(pt.netSales, (pt.sales ?? 0) - 13000, '净销额 = 销售额 − 退款')
+  assert.ok((pt.netSales ?? 0) < (pt.sales ?? 0), '净销额必须小于销售额（退款为正）')
+  // 指定排名层级也不改变头寸口径：利润表在就仍走财务口径（面板用 source 标注清楚）
+  for (const kind of ['platformLinks', 'systemProducts', 'systemSkus'] as const) {
+    assert.equal(buildMonthTrendPoint(rep, kind).source, 'storeProfit', kind + '：利润表在场时仍为财务口径')
+  }
+})
+
+test('无利润表的月份：趋势回退排名层级，且与同层级明细表净销额严格同源（回归：曾出现 ±112 万口径差）', () => {
+  const rep = makeMonth('07', 1)
+  delete (rep as { storeProfit?: unknown }).storeProfit // 只在这一条件下趋势才走排名口径
   for (const kind of ['platformLinks', 'systemProducts', 'systemSkus'] as const) {
     const pt = buildMonthTrendPoint(rep, kind)
     const r = buildCompare({ cycle: '30d', kind, metricId: 'netSales', prevReport: rep, currReport: rep, limit: 1000 })
-    assert.equal(pt.source, kind, kind + ' 趋势点层级正确')
+    assert.equal(pt.source, kind, kind + ' 回退时趋势点层级正确')
     assert.equal(pt.netSales, Math.round(r!.summary.currTotal), kind + '：趋势 KPI 净销额必须等于同屏明细表总计')
   }
   // 换 kind 即换表：三个层级各自的合计不同，趋势点必须跟着变
@@ -119,6 +133,7 @@ test('回归：货品/规格层级的净销额取表内列，不得用「销售�
     { name: '货品X', code: 'P1', brand: 'B1', category: '家居', sales: 150000, netSales: 100000, grossProfit: 30000, grossMargin: 30, refundRate: 33, returnRate: 5, adSpend: 9000, avgPrice: 500, singleRate: 80 },
   ] as never
   delete (rep as { platformLinks?: unknown }).platformLinks
+  delete (rep as { storeProfit?: unknown }).storeProfit // 复现「只有排名表」的月份，才能验证排名层取数
   const pt = buildMonthTrendPoint(rep)
   assert.equal(pt.source, 'systemProducts')
   assert.equal(pt.sales, 150000)
@@ -131,6 +146,7 @@ test('缺利润表的月份：毛利/费比回退排名层级，费比可为 nul
   const rep = makeMonth('05', 1)
   delete (rep as { storeProfit?: unknown }).storeProfit
   const pt = buildMonthTrendPoint(rep)
+  assert.equal(pt.source, 'platformLinks', '无利润表 → 回退平台链接层')
   assert.equal(pt.sales, 150000, '收入回退排名合计')
   assert.equal(pt.grossProfit, 44000, '毛利回退链接级合计')
   assert.equal(pt.skuCount, 3)

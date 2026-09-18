@@ -3224,10 +3224,31 @@ function buildMonthTrendPoint(rep, kind) {
   const month = rep.month || String(rep.period || "").slice(0, 7);
   const mm = Number(month.slice(5, 7));
   const label = Number.isFinite(mm) && mm > 0 ? mm + "\u6708" : month;
+  const stores = rep.storeProfit;
   const links = rep.platformLinks;
   const products = rep.systemProducts;
   const skus = rep.systemSkus;
   const pick2 = kind === "systemSkus" ? { kind: "systemSkus", rows: skus } : kind === "systemProducts" ? { kind: "systemProducts", rows: products } : kind === "platformLinks" ? { kind: "platformLinks", rows: links } : links && links.length ? { kind: "platformLinks", rows: links } : products && products.length ? { kind: "systemProducts", rows: products } : skus && skus.length ? { kind: "systemSkus", rows: skus } : { kind: "platformLinks", rows: void 0 };
+  if (stores && stores.length) {
+    const sales2 = sum3(stores, (r) => r.sales);
+    const refund = sum3(stores, (r) => r.refund);
+    const netSales2 = sales2 === null ? null : sales2 - (refund ?? 0);
+    const grossProfit2 = sum3(stores, (r) => r.grossProfit);
+    const promoCost2 = sum3(stores, (r) => r.promoCost);
+    const feeRatio2 = promoCost2 !== null && sales2 !== null && sales2 > 0 ? round1(promoCost2 / sales2 * 100) : null;
+    return {
+      period: rep.period || "",
+      month,
+      label,
+      sales: sales2,
+      netSales: netSales2,
+      grossProfit: grossProfit2,
+      promoCost: promoCost2,
+      feeRatio: feeRatio2,
+      skuCount: skus ? skus.length : null,
+      source: "storeProfit"
+    };
+  }
   const rows = pick2.rows;
   const sales = sum3(rows, (r) => r.sales);
   const netSales = sum3(rows, (r) => r.netSales);
@@ -4837,16 +4858,18 @@ function overviewText(store) {
 function storesText(report, top) {
   const rows = [...report.storeProfit ?? []].sort((a, b) => b.sales - a.sales);
   const L = [`\u3010\u5E97\u94FA\u5229\u6DA6 \xB7 ${report.period}\u3011\u5171 ${rows.length} \u5BB6(\u6309\u9500\u552E\u989D\u964D\u5E8F,\u663E\u793A\u524D ${Math.min(top, rows.length)})`];
-  L.push(["\u95E8\u5E97", "\u9500\u552E\u6536\u5165", "\u6B63\u5411\u6536\u5165", "\u9000\u6B3E", "\u6BDB\u5229", "\u6BDB\u5229\u7387", "\u7269\u6D41\u8D39", "\u63A8\u5E7F\u8D39", "\u8D39\u6BD4"].join(" | "));
-  for (const r of rows.slice(0, top)) {
-    L.push([r.store, yuan(r.sales), yuan(r.positiveSales), yuan(r.refund), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.logisticsCost), yuan(r.promoCost), pct(r.feeRatio)].join(" | "));
-  }
   const sales = sum2(rows, (r) => r.sales);
-  L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sales)} \xB7 \u9000\u6B3E ${yuan(sum2(rows, (r) => r.refund))} \xB7 \u6BDB\u5229 ${yuan(sum2(rows, (r) => r.grossProfit))}`);
+  const refund = sum2(rows, (r) => r.refund);
+  L.push(["\u95E8\u5E97", "\u9500\u552E\u989D(=\u6B63\u5411\u6536\u5165)", "\u9000\u6B3E", "\u51C0\u9500\u552E\u989D", "\u6BDB\u5229", "\u6BDB\u5229\u7387", "\u7269\u6D41\u8D39", "\u63A8\u5E7F\u8D39", "\u8D39\u6BD4"].join(" | "));
+  for (const r of rows.slice(0, top)) {
+    L.push([r.store, yuan(r.sales), yuan(r.refund), yuan(r.sales - r.refund), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.logisticsCost), yuan(r.promoCost), pct(r.feeRatio)].join(" | "));
+  }
+  L.push(`\u5408\u8BA1:\u9500\u552E\u989D ${yuan(sales)} \xB7 \u9000\u6B3E ${yuan(refund)} \xB7 \u51C0\u9500\u552E\u989D ${yuan(sales - refund)} \xB7 \u6BDB\u5229 ${yuan(sum2(rows, (r) => r.grossProfit))}`);
+  L.push("\u53E3\u5F84:\u9500\u552E\u989D\u4EE5\u5229\u6DA6\u8868\u300C\u9500\u552E\u6536\u5165\u300D\u4E3A\u51C6(=\u6B63\u5411\u9500\u552E\u989D);\u51C0\u9500\u552E\u989D = \u9500\u552E\u989D \u2212 \u9000\u6B3E;\u8D39\u6BD4 = \u8FD0\u8425\u63A8\u5E7F\u8D39 \xF7 \u9500\u552E\u989D\u3002\u5546\u54C1\u6392\u540D\u8868\u7684\u9500\u552E\u989D\u5C5E\u53E6\u4E00\u53E3\u5F84(\u542B\u672A\u53D1\u8D27/\u8DE8\u671F),\u4E0D\u8981\u4E0E\u8FD9\u91CC\u7684\u9500\u552E\u989D\u6DF7\u7528\u3002");
   const posRaw = sum2(rows, (r) => Number(r.positiveSalesRaw) || 0);
   if (posRaw > 0) {
     L.push(
-      `\u26A0 \u6E90\u8868\u53E3\u5F84\u5F02\u5E38:\u5229\u6DA6\u8868\u300C\u6B63\u5411\u9500\u552E\u6536\u5165\u300D\u539F\u503C\u5408\u8BA1 ${yuan(posRaw)} \u5927\u4E8E\u300C\u9500\u552E\u6536\u5165\u300D${yuan(sales)},\u8FDD\u53CD\u5B9A\u4E49(\u6B63\u5411\u9500\u552E\u6536\u5165\u662F\u9500\u552E\u6536\u5165\u7684\u5B50\u96C6)\u3002\u5DF2\u6309\u300C\u9500\u552E\u6536\u5165\u2212\u9000\u6B3E\u300D\u7EA0\u6B63\u4E3A ${yuan(sum2(rows, (r) => r.positiveSales))} \u540E\u5C55\u793A;\u56DE\u7B54\u65F6\u8BF7\u4F7F\u7528\u7EA0\u6B63\u540E\u7684\u503C,\u5E76\u63D0\u9192\u7528\u6237\u6838\u5BF9 Excel \u5229\u6DA6\u8868\u8BE5\u884C\u516C\u5F0F(\u5E38\u89C1\u7B14\u8BEF:\u5199\u6210 \u9500\u552E\u6536\u5165+\u9000\u6B3E,\u5E94\u4E3A \u9500\u552E\u6536\u5165\u2212\u9000\u6B3E)\u3002`
+      `\u26A0 \u6E90\u8868\u8BE5\u5217\u672A\u88AB\u91C7\u7528:\u5229\u6DA6\u8868\u300C\u6B63\u5411\u9500\u552E\u6536\u5165(\u4E0D\u542B\u7279\u6B8A\u5355)\u300D\u539F\u503C\u5408\u8BA1 ${yuan(posRaw)} \u4E0E\u300C\u9500\u552E\u6536\u5165\u300D${yuan(sales)} \u4E0D\u4E00\u81F4,\u9762\u677F\u9075\u5FAA \u6B63\u5411\u9500\u552E\u6536\u5165 = \u9500\u552E\u6536\u5165,\u6545\u53D6 ${yuan(sales)};\u56DE\u7B54\u65F6\u8BF7\u4F7F\u7528\u8BE5\u503C,\u5E76\u63D0\u9192\u7528\u6237\u6838\u5BF9 Excel \u5229\u6DA6\u8868\u8BE5\u884C\u516C\u5F0F(\u5E38\u89C1\u7B14\u8BEF:\u5199\u6210 \u9500\u552E\u6536\u5165+\u9000\u6B3E,\u5E94\u4E3A \u9500\u552E\u6536\u5165\u2212\u9000\u6B3E)\u3002`
     );
   }
   return L.join("\n");

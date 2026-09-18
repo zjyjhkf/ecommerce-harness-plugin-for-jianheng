@@ -180,17 +180,16 @@ interface TrendRow {
 /**
  * 从单份月报聚合出趋势点。
  *
- * ⚠ 口径（必须与「对比明细」严格同源）：趋势 KPI 与下方明细表要来自**同一张排名表**。
- *   此前趋势优先取「利润表」、明细取排名表，同一个「净销额」在同一屏出现两个数
- *   （实测 8 月 3,365,396 vs 4,492,466，差 112.7 万），费比也随之从 12.19% 变成 16.19%。
- *   现统一为排名表：层级优先 平台链接 → 系统货品 → 系统规格，可由 kind 指定；
- *   利润表不参与本趋势（它是「发货口径」财务表，与排名表的商品口径本就不同，
- *   仅用于经销排行与概览条的店铺分支，那里费比=推广费÷销售收入）。
+ * ⚠ 口径（用户指定，以「利润表」为准）：
+ *   ① 销售额 = 正向销售额 = 利润表「销售收入」（8 月 428.4 万）—— 这是全店口径的头寸数；
+ *   ② 净销售额 = 销售收入 − 退款（8 月 428.4 − 91.9 = 336.5 万）。
+ *   排名表（平台商品排名）的销售额是另一个口径（8 月 578.9 万），只在**商品层模块**
+ *   （产品概览 / 商品明细 / SKU 规格）里出现，不参与本趋势、也不参与概览条的总销售额，
+ *   避免同一屏出现「净销额 > 销售额」这种跨口径比较。
+ *   完全没有利润表时才回退排名表（层级优先 平台链接 → 系统货品 → 系统规格，可由 kind 指定）。
  *
- * ⚠ 净销额直接取表内「净销售额」列求和，**不再用 销售额−退款 反算**：
- *   WeeklyProductRow 根本没有 refundAmount 字段，反算会把退款当 0（货品/规格层级虚高）。
- *
- * ⚠ 费比 = 推广投放费用 ÷ 净销售额 ×100（分母是净销售额，不是销售额）。
+ * 费比：利润表口径 = 推广运营费用 ÷ 销售收入（8 月 12.72%，与「发货口径」财务表一致）；
+ *       回退排名表时 = 推广投放费用 ÷ 净销售额。
  */
 export function buildMonthTrendPoint(rep: MonthlyReport, kind?: CompareKind): MonthTrendPoint {
   const sum = function <T>(rows: T[] | undefined, f: (r: T) => number): number | null {
@@ -202,6 +201,7 @@ export function buildMonthTrendPoint(rep: MonthlyReport, kind?: CompareKind): Mo
   const month = rep.month || String(rep.period || '').slice(0, 7)
   const mm = Number(month.slice(5, 7))
   const label = Number.isFinite(mm) && mm > 0 ? mm + '月' : month
+  const stores = rep.storeProfit
   const links = rep.platformLinks
   const products = rep.systemProducts
   const skus = rep.systemSkus
@@ -213,6 +213,28 @@ export function buildMonthTrendPoint(rep: MonthlyReport, kind?: CompareKind): Mo
             : products && products.length ? { kind: 'systemProducts', rows: products }
               : skus && skus.length ? { kind: 'systemSkus', rows: skus }
                 : { kind: 'platformLinks', rows: undefined }
+  // ── 首选「财务口径（利润表）」：销售额取销售收入，净销售额 = 销售收入 − 退款 ──
+  if (stores && stores.length) {
+    const sales = sum(stores, (r) => r.sales)
+    const refund = sum(stores, (r) => r.refund)
+    const netSales = sales === null ? null : sales - (refund ?? 0)
+    const grossProfit = sum(stores, (r) => r.grossProfit)
+    const promoCost = sum(stores, (r) => r.promoCost)
+    const feeRatio = promoCost !== null && sales !== null && sales > 0 ? round1((promoCost / sales) * 100) : null
+    return {
+      period: rep.period || '',
+      month,
+      label,
+      sales,
+      netSales,
+      grossProfit,
+      promoCost,
+      feeRatio,
+      skuCount: skus ? skus.length : null,
+      source: 'storeProfit',
+    }
+  }
+  // ── 回退「商品口径（排名表）」：没有利润表的月份 ──
   const rows = pick.rows as TrendRow[] | undefined
   const sales = sum(rows, (r) => r.sales)
   const netSales = sum(rows, (r) => r.netSales)

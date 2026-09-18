@@ -91,20 +91,23 @@ function overviewText(store: EcommerceStore): string {
 function storesText(report: MonthlyReport, top: number): string {
   const rows = [...(report.storeProfit ?? [])].sort((a, b) => b.sales - a.sales)
   const L: string[] = [`【店铺利润 · ${report.period}】共 ${rows.length} 家(按销售额降序,显示前 ${Math.min(top, rows.length)})`]
-  L.push(['门店', '销售收入', '正向收入', '退款', '毛利', '毛利率', '物流费', '推广费', '费比'].join(' | '))
-  for (const r of rows.slice(0, top)) {
-    L.push([r.store, yuan(r.sales), yuan(r.positiveSales), yuan(r.refund), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.logisticsCost), yuan(r.promoCost), pct(r.feeRatio)].join(' | '))
-  }
   const sales = sum(rows, (r) => r.sales)
-  L.push(`合计:销售额 ${yuan(sales)} · 退款 ${yuan(sum(rows, (r) => r.refund))} · 毛利 ${yuan(sum(rows, (r) => r.grossProfit))}`)
-  // 源表口径异常：正向销售收入不可能大于销售收入。解析层已按「销售收入−退款」纠正，
-  // 这里显式标注，避免模型把 Excel 原值当成事实、或把纠正后的值当成数据错误。
+  const refund = sum(rows, (r) => r.refund)
+  L.push(['门店', '销售额(=正向收入)', '退款', '净销售额', '毛利', '毛利率', '物流费', '推广费', '费比'].join(' | '))
+  for (const r of rows.slice(0, top)) {
+    L.push([r.store, yuan(r.sales), yuan(r.refund), yuan(r.sales - r.refund), yuan(r.grossProfit), pct(r.grossMargin), yuan(r.logisticsCost), yuan(r.promoCost), pct(r.feeRatio)].join(' | '))
+  }
+  // 用户指定口径:销售额 = 正向销售额 = 利润表「销售收入」;净销售额 = 销售额 − 退款。
+  L.push(`合计:销售额 ${yuan(sales)} · 退款 ${yuan(refund)} · 净销售额 ${yuan(sales - refund)} · 毛利 ${yuan(sum(rows, (r) => r.grossProfit))}`)
+  L.push('口径:销售额以利润表「销售收入」为准(=正向销售额);净销售额 = 销售额 − 退款;费比 = 运营推广费 ÷ 销售额。商品排名表的销售额属另一口径(含未发货/跨期),不要与这里的销售额混用。')
+  // 源表「正向销售收入(不含特殊单)」列实测公式有误(常写成 销售收入+退款,应为 −),解析层不采用该列,
+  // 这里显式标注原始值,避免模型把 Excel 原值当成事实、或把纠正后的值当成数据错误。
   const posRaw = sum(rows, (r) => Number(r.positiveSalesRaw) || 0)
   if (posRaw > 0) {
     L.push(
-      `⚠ 源表口径异常:利润表「正向销售收入」原值合计 ${yuan(posRaw)} 大于「销售收入」${yuan(sales)},` +
-        `违反定义(正向销售收入是销售收入的子集)。已按「销售收入−退款」纠正为 ${yuan(sum(rows, (r) => r.positiveSales))} 后展示;` +
-        `回答时请使用纠正后的值,并提醒用户核对 Excel 利润表该行公式(常见笔误:写成 销售收入+退款,应为 销售收入−退款)。`,
+      `⚠ 源表该列未被采用:利润表「正向销售收入(不含特殊单)」原值合计 ${yuan(posRaw)} 与「销售收入」${yuan(sales)} 不一致,` +
+        `面板遵循 正向销售收入 = 销售收入,故取 ${yuan(sales)};` +
+        `回答时请使用该值,并提醒用户核对 Excel 利润表该行公式(常见笔误:写成 销售收入+退款,应为 销售收入−退款)。`,
     )
   }
   return L.join('\n')
