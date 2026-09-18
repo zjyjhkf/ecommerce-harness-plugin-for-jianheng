@@ -895,16 +895,15 @@ async function parseStoreProfitExcel(buffer) {
   }
   const out = acc.map((s) => {
     const sales = Number(s.sales) || 0;
-    const refund = Number(s.refund) || 0;
     const raw = Number(s.positiveSales) || 0;
-    const violated = raw > sales + 0.01;
-    const positiveSales = violated ? Math.max(0, sales - refund) : raw;
+    const positiveSales = sales;
+    const rawDiffers = Math.abs(raw - sales) > 0.01;
     const effSales = sales > 0 ? sales : positiveSales;
     return {
       ...s,
       sales,
       positiveSales,
-      ...violated ? { positiveSalesRaw: raw } : {},
+      ...rawDiffers ? { positiveSalesRaw: raw } : {},
       feeRatio: effSales > 0 ? Number(s.promoCost) / effSales * 100 : 0
     };
   }).filter((s) => (Number(s.sales) || 0) > 0 || (Number(s.positiveSales) || 0) > 0);

@@ -2958,19 +2958,19 @@ function renderMonthlyReportView(){
     '<div style="overflow-x:auto"><table class="data-table"><thead><tr id="mrSkuThead"></tr></thead><tbody id="mrSkuTbody"></tbody></table></div></div>' : '';
   const hasAny = storeList.length || products.length || links.length || skus.length;
   if (!hasAny) { renderNoData(); return; }
-  // 源表口径异常提示：利润表「正向销售收入」不可能大于「销售收入」。
-  // 解析层已按「销售收入 − 退款」自动纠正（见 monthly-report.ts 口径守卫），
-  // 这里把「纠正了什么、原值多少、该去核对哪一行」显式告诉用户 ——
-  // 否则用户拿面板数字去对 Excel 原值对不上，会误判成插件算错。
+  // 源表口径提示：面板遵循「正向销售收入 = 销售收入（以表内销售收入列数字为准）」，
+  // 而源表那张「正向销售收入(不含特殊单)」列实测公式有误（写成 销售收入 + 退款，应为 −，
+  // 8 月得 520.2万 > 销售收入 428.4万）。解析层不采用该列，只把原值留档用于这里提示 ——
+  // 不提示的话，用户拿面板数字去对 Excel 原值对不上，会误判成插件算错。
   const posRawSum = stores.reduce(function(s,x){ return s+(Number(x.positiveSalesRaw)||0); },0);
-  const posFixSum = storeList.reduce(function(s,x){ return s+(Number(x.positiveSales)||0); },0);
   const anomalyBar = posRawSum > 0
     ? '<div class="insight-bar" style="background:rgba(229,72,77,.07);border-color:rgba(229,72,77,.35);border-left-color:var(--red)">'
-      + '<span class="insight-title" style="color:var(--red)">源表口径异常（已自动纠正）：</span>'
-      + '利润表「正向销售收入(不含特殊单)」原值 <b>' + realMoney(posRawSum) + '</b> 大于「销售收入」<b>' + realMoney(storeSales) + '</b>，'
-      + '违反口径（正向销售收入是销售收入的子集，不可能大于销售收入）。'
-      + '插件已按「销售收入 − 退款」纠正为 <b>' + realMoney(posFixSum) + '</b> 后再展示。'
-      + '请核对 Excel「利润表」该行公式 —— 常见笔误是写成了 <b>销售收入 + 退款</b>，应为 <b>销售收入 − 退款</b>。'
+      + '<span class="insight-title" style="color:var(--red)">源表该列未被采用：</span>'
+      + '面板遵循 <b>正向销售收入 = 销售收入</b>（以表内「销售收入」列数字为准），'
+      + '故正向销售收入取 <b>' + realMoney(storeSales) + '</b>，净销售额按「销售收入 − 退款」计算。'
+      + '但源表「利润表 · 正向销售收入(不含特殊单)」那一列的值是 <b>' + realMoney(posRawSum) + '</b>，'
+      + '与销售收入 <b>' + realMoney(storeSales) + '</b> 不一致（差额 ' + realMoney(Math.abs(posRawSum - storeSales)) + '）——'
+      + '该行公式常见笔误是写成了 <b>销售收入 + 退款</b>，应为 <b>销售收入 − 退款</b>，建议核对 Excel。'
       + '</div>'
     : '';
   content.innerHTML =

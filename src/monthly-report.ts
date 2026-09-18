@@ -492,28 +492,26 @@ export async function parseStoreProfitExcel(
     })
   }
 
-  // 兜底：个别店铺「一、销售收入」可能为空但「正向销售收入」有值，这类店铺同样在销，
-  // 按有效销售收入计算费比；两者皆空（如本表无数据的「积胜体育」列）则视为未在销，予以剔除。
+  // ── 口径规则（用户指定）──
+  //   ① 正向销售收入 = 销售收入（**以表内「销售收入」列的数字为准**）：
+  //      源表那张「正向销售收入(不含特殊单)」列实测公式有误（写成 销售收入 + 退款，应为 −：
+  //      8 月得 5,202,477.21 > 销售收入 4,283,936.79，虚高整整一个退款额，17 家门店 16 家中招），
+  //      该列不再作为取值来源。原值仍读出来放进 positiveSalesRaw，仅供面板提示用户核对 Excel。
+  //   ② 净销售额 = 销售收入 − 退款（见 data-center.html 的 storeRows：netSales = sales − refund）。
   const out = acc
     .map((s) => {
       const sales = Number(s.sales) || 0
-      const refund = Number(s.refund) || 0
       const raw = Number(s.positiveSales) || 0
-      // ── 口径守卫：源表公式笔误的自动纠正 ──
-      // 「正向销售收入(不含特殊单)」按定义是「销售收入」的子集，不可能大于销售收入。
-      // 实测 7/8 月两份模板该行公式被写成 销售收入 **+** 退款（应为 −）：
-      // 8 月得 5,202,477.21 > 销售收入 4,283,936.79，虚高 918,540.42 —— 恰好整整一个退款额；
-      // 且 17 家门店里 16 家中招，属模板级问题而非门店个案。
-      // 这里统一按「销售收入 − 退款」纠正（即该字段应有的值），并把原值留在 positiveSalesRaw，
-      // 面板据此提示用户核对 Excel；AI 取数同源，不会再透传违反口径的数字。
-      const violated = raw > sales + 0.01
-      const positiveSales = violated ? Math.max(0, sales - refund) : raw
+      // ① 正向销售收入一律取销售收入
+      const positiveSales = sales
+      // 与该列不一致就留档（阈值 0.01 元规避浮点噪声），面板据此提示
+      const rawDiffers = Math.abs(raw - sales) > 0.01
       const effSales = sales > 0 ? sales : positiveSales
       return {
         ...s,
         sales,
         positiveSales,
-        ...(violated ? { positiveSalesRaw: raw } : {}),
+        ...(rawDiffers ? { positiveSalesRaw: raw } : {}),
         feeRatio: effSales > 0 ? (Number(s.promoCost) / effSales) * 100 : 0,
       }
     })
