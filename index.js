@@ -946,8 +946,17 @@ function mergeMonthly(base, part) {
   if (part.systemSkus) merged.systemSkus = part.systemSkus;
   if (part.storeProfit) merged.storeProfit = part.storeProfit;
   if (part.kind !== "storeProfit") merged.lastKind = part.kind;
+  enforceNetSalesRule(merged);
   merged.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   return merged;
+}
+function enforceNetSalesRule(rep) {
+  for (const l of rep.platformLinks ?? []) {
+    l.netSales = (Number(l.sales) || 0) - (Number(l.refundAmount) || 0);
+  }
+  for (const s of rep.systemSkus ?? []) {
+    s.netSales = (Number(s.sales) || 0) - (Number(s.refundAmount) || 0);
+  }
 }
 function parseMonthlyReportJson(value) {
   if (value === null || typeof value !== "object") return null;
