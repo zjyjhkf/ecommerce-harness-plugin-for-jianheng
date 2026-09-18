@@ -3081,11 +3081,20 @@ function buildEvaluationSummary(cycle, monthlyReport, weeklyReport) {
   const rep = cycle === "7d" ? weeklyReport : monthlyReport;
   const rows = pickRows(rep);
   if (!rows.length) return null;
-  const totalSales = sum(rows, "sales");
-  const totalNet = sum(rows, "netSales");
-  const totalAd = sum(rows, "adSpend");
-  const totalRefund = sum(rows, "refundAmount");
-  const feeRatio = totalNet > 0 ? totalAd / totalNet * 100 : 0;
+  let totalSales = sum(rows, "sales");
+  let totalNet = sum(rows, "netSales");
+  let totalAd = sum(rows, "adSpend");
+  let totalRefund = sum(rows, "refundAmount");
+  let scope = "ranking";
+  const stores = cycle === "30d" ? rep.storeProfit : void 0;
+  if (stores && stores.length) {
+    totalSales = sum(stores, "sales");
+    totalRefund = sum(stores, "refund");
+    totalNet = totalSales - totalRefund;
+    totalAd = sum(stores, "promoCost");
+    scope = "storeProfit";
+  }
+  const feeRatio = scope === "storeProfit" ? totalSales > 0 ? totalAd / totalSales * 100 : 0 : totalNet > 0 ? totalAd / totalNet * 100 : 0;
   const refundRate = totalSales > 0 ? totalRefund / totalSales * 100 : sum(rows, "refundRate") / rows.length;
   const top = [...rows].sort((a, b) => (Number(b.netSales) || 0) - (Number(a.netSales) || 0))[0];
   const topShare = totalNet > 0 && top ? (Number(top.netSales) || 0) / totalNet * 100 : 0;
@@ -3101,7 +3110,8 @@ function buildEvaluationSummary(cycle, monthlyReport, weeklyReport) {
     refundRate,
     itemCount: rows.length,
     topItem: String(top?.name ?? ""),
-    topShare
+    topShare,
+    scope
   };
 }
 function ruleBasedEvaluation(s) {
@@ -3111,7 +3121,8 @@ function ruleBasedEvaluation(s) {
   if (s.refundRate > 10) issues.push("\u9000\u6B3E\u7387\u504F\u9AD8");
   if (s.topShare > 40) issues.push("\u5934\u90E8\u5546\u54C1\u5360\u6BD4\u8FC7\u9AD8");
   const verdict = issues.length ? issues.join("\u3001") + "\uFF0C\u5EFA\u8BAE\u4F18\u5316\u5BF9\u5E94\u73AF\u8282" : "\u9500\u552E\u4E0E\u8D39\u6548\u6574\u4F53\u5E73\u7A33";
-  const text = `${periodLabel2}\u9500\u552E\u989D${fmtMoney(s.totalSales)}\uFF0C\u5728\u9500\u5546\u54C1${s.itemCount}\u4E2A\uFF0C\u8D39\u6BD4${s.feeRatio.toFixed(1)}%\uFF0C\u9000\u6B3E\u7387${s.refundRate.toFixed(1)}%\uFF1B${verdict}\u3002`;
+  const scopeTag = s.scope === "storeProfit" ? "\uFF08\u8D22\u52A1\u53E3\u5F84\uFF09" : "";
+  const text = `${periodLabel2}\u9500\u552E\u989D${fmtMoney(s.totalSales)}${scopeTag}\uFF0C\u5728\u9500\u5546\u54C1${s.itemCount}\u4E2A\uFF0C\u8D39\u6BD4${s.feeRatio.toFixed(1)}%\uFF0C\u9000\u6B3E\u7387${s.refundRate.toFixed(1)}%\uFF1B${verdict}\u3002`;
   return text.length > 80 ? text.slice(0, 80) : text;
 }
 function evaluationPrompt(s) {
@@ -3119,7 +3130,7 @@ function evaluationPrompt(s) {
   return [
     `\u8BF7\u57FA\u4E8E\u4EE5\u4E0B${periodLabel2}\u7535\u5546\u7ECF\u8425\u6570\u636E\uFF0C\u4ECE\u300C\u9500\u552E\u989D\u3001\u4EA7\u54C1\u3001\u63A8\u5E7F\u3001\u9000\u6B3E\u300D\u56DB\u4E2A\u89D2\u5EA6\u505A\u4E00\u53E5\u603B\u4F53\u6570\u636E\u8BC4\u4EF7\u3002`,
     `- \u5468\u671F\uFF1A${s.period}`,
-    `- \u9500\u552E\u989D\uFF1A${fmtMoney(s.totalSales)}\uFF08\u51C0\u9500 ${fmtMoney(s.totalNet)}\uFF09`,
+    `- \u9500\u552E\u989D\uFF1A${fmtMoney(s.totalSales)}\uFF08\u51C0\u9500 ${fmtMoney(s.totalNet)}\uFF09` + (s.scope === "storeProfit" ? "\uFF08\u53E3\u5F84\uFF1A\u9500\u552E\u989D = \u5229\u6DA6\u8868\u9500\u552E\u6536\u5165 = \u6B63\u5411\u9500\u552E\u989D\uFF1B\u51C0\u9500\u552E\u989D = \u9500\u552E\u6536\u5165 \u2212 \u9000\u6B3E\uFF09" : "\uFF08\u53E3\u5F84\uFF1A\u5546\u54C1\u6392\u540D\u8868\uFF09"),
     `- \u4EA7\u54C1\uFF1A\u5728\u9500\u5546\u54C1 ${s.itemCount} \u4E2A\uFF0C\u5934\u90E8\u5546\u54C1\u300C${s.topItem}\u300D\u51C0\u9500\u5360\u6BD4 ${s.topShare.toFixed(1)}%`,
     `- \u63A8\u5E7F\uFF1A\u63A8\u5E7F\u8D39 ${fmtMoney(s.totalAd)}\uFF0C\u6574\u4F53\u8D39\u6BD4 ${s.feeRatio.toFixed(1)}%`,
     `- \u9000\u6B3E\uFF1A\u9000\u6B3E\u91D1\u989D ${fmtMoney(s.totalRefund)}\uFF0C\u9000\u6B3E\u7387 ${s.refundRate.toFixed(1)}%`,

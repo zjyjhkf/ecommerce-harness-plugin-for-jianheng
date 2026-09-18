@@ -24,6 +24,8 @@ export interface EvaluationSummary {
   itemCount: number
   topItem: string
   topShare: number
+  /** 头寸取数口径：storeProfit = 利润表财务口径（30 天且有利润表时）；ranking = 商品排名表口径 */
+  scope: 'storeProfit' | 'ranking'
 }
 
 /** 金额缩写：≥1万 显示「¥x.x万」，否则保留整数元（千分位） */
@@ -85,11 +87,27 @@ export function buildEvaluationSummary(
   const rep = cycle === '7d' ? weeklyReport : monthlyReport
   const rows = pickRows(rep)
   if (!rows.length) return null
-  const totalSales = sum(rows, 'sales')
-  const totalNet = sum(rows, 'netSales')
-  const totalAd = sum(rows, 'adSpend')
-  const totalRefund = sum(rows, 'refundAmount')
-  const feeRatio = totalNet > 0 ? (totalAd / totalNet) * 100 : 0
+  let totalSales = sum(rows, 'sales')
+  let totalNet = sum(rows, 'netSales')
+  let totalAd = sum(rows, 'adSpend')
+  let totalRefund = sum(rows, 'refundAmount')
+  let scope: 'storeProfit' | 'ranking' = 'ranking'
+  // 用户指定口径（仅 30 天月度）：销售额 = 正向销售额 = 利润表「销售收入」，
+  // 净销售额 = 销售收入 − 退款；费比分母同源取销售收入。没有利润表时回退排名表口径。
+  const stores = cycle === '30d'
+    ? (rep as { storeProfit?: Array<Record<string, number | string>> }).storeProfit
+    : undefined
+  if (stores && stores.length) {
+    totalSales = sum(stores, 'sales')
+    totalRefund = sum(stores, 'refund')
+    totalNet = totalSales - totalRefund
+    totalAd = sum(stores, 'promoCost')
+    scope = 'storeProfit'
+  }
+  // 费比分母与分子同源：财务口径 = 推广运营费 ÷ 销售收入；排名口径 = 推广投放费 ÷ 净销售额
+  const feeRatio = scope === 'storeProfit'
+    ? (totalSales > 0 ? (totalAd / totalSales) * 100 : 0)
+    : (totalNet > 0 ? (totalAd / totalNet) * 100 : 0)
   const refundRate = totalSales > 0 ? (totalRefund / totalSales) * 100 : sum(rows, 'refundRate') / rows.length
   const top = [...rows].sort((a, b) => (Number(b.netSales) || 0) - (Number(a.netSales) || 0))[0]
   const topShare = totalNet > 0 && top ? ((Number(top.netSales) || 0) / totalNet) * 100 : 0
@@ -106,6 +124,7 @@ export function buildEvaluationSummary(
     itemCount: rows.length,
     topItem: String((top as { name?: string } | undefined)?.name ?? ''),
     topShare,
+    scope,
   }
 }
 
@@ -117,8 +136,10 @@ export function ruleBasedEvaluation(s: EvaluationSummary): string {
   if (s.refundRate > 10) issues.push('退款率偏高')
   if (s.topShare > 40) issues.push('头部商品占比过高')
   const verdict = issues.length ? issues.join('、') + '，建议优化对应环节' : '销售与费效整体平稳'
+  // 财务口径时显式标注，避免与「商品排名表」的销售额混淆
+  const scopeTag = s.scope === 'storeProfit' ? '（财务口径）' : ''
   const text =
-    `${periodLabel}销售额${fmtMoney(s.totalSales)}，在销商品${s.itemCount}个，费比${s.feeRatio.toFixed(1)}%，退款率${s.refundRate.toFixed(1)}%；${verdict}。`
+    `${periodLabel}销售额${fmtMoney(s.totalSales)}${scopeTag}，在销商品${s.itemCount}个，费比${s.feeRatio.toFixed(1)}%，退款率${s.refundRate.toFixed(1)}%；${verdict}。`
   return text.length > 80 ? text.slice(0, 80) : text
 }
 
@@ -128,7 +149,10 @@ export function evaluationPrompt(s: EvaluationSummary): string {
   return [
     `请基于以下${periodLabel}电商经营数据，从「销售额、产品、推广、退款」四个角度做一句总体数据评价。`,
     `- 周期：${s.period}`,
-    `- 销售额：${fmtMoney(s.totalSales)}（净销 ${fmtMoney(s.totalNet)}）`,
+    `- 销售额：${fmtMoney(s.totalSales)}（净销 ${fmtMoney(s.totalNet)}）` +
+      (s.scope === 'storeProfit'
+        ? '（口径：销售额 = 利润表销售收入 = 正向销售额；净销售额 = 销售收入 − 退款）'
+        : '（口径：商品排名表）'),
     `- 产品：在销商品 ${s.itemCount} 个，头部商品「${s.topItem}」净销占比 ${s.topShare.toFixed(1)}%`,
     `- 推广：推广费 ${fmtMoney(s.totalAd)}，整体费比 ${s.feeRatio.toFixed(1)}%`,
     `- 退款：退款金额 ${fmtMoney(s.totalRefund)}，退款率 ${s.refundRate.toFixed(1)}%`,

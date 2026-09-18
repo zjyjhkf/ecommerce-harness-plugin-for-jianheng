@@ -2093,9 +2093,9 @@ function renderPromoPeriod(period){
   // KPI（真实：来自商品（链接）推广数据）
   document.getElementById('promoKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">推广总花费（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totAd)+'</div><div class="kpi-sub">'+tot+' 商品</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">推广费÷净销</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">商品排名口径 · 推广费÷净销</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">费比>20%</div><div class="kpi-value">'+sorted.filter(function(l){return feeOf(l)>20;}).length+'</div><div class="kpi-sub">需优化</div></div>',
-    '<div class="kpi-card purple"><div class="kpi-label">净销售额（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>'
+    '<div class="kpi-card purple"><div class="kpi-label">净销售额（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">商品排名口径</div></div>'
   ].join('');
   // 费比分层（真实）
   const feeBins = [[0,0.5,'<0.5%'],[0.5,1,'0.5-1%'],[1,2,'1-2%'],[2,3,'2-3%'],[3,4,'3-4%'],[4,5,'4-5%'],[5,10,'5-10%'],[10,15,'10-15%'],[15,20,'15-20%'],[20,Infinity,'>20%']].map(function(b){
@@ -2155,7 +2155,7 @@ function renderRefundPeriod(period){
   // KPI（真实：来自商品（链接）退款数据）
   document.getElementById('refundKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">有效商品</div><div class="kpi-value">'+normal.length+'</div><div class="kpi-sub">剔除失真 '+(distorted.length)+' 个</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">退款金额</div><div class="kpi-value">'+realMoney(totRefund)+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">退款金额</div><div class="kpi-value">'+realMoney(totRefund)+'</div><div class="kpi-sub">商品排名口径 · 有效商品</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">平均退款率</div><div class="kpi-value">'+realPct(avgR)+'</div><div class="kpi-sub">仅有效商品</div></div>',
     '<div class="kpi-card red"><div class="kpi-label">失真数据</div><div class="kpi-value">'+distorted.length+'</div><div class="kpi-sub">净销&lt;2000 或 退款率&gt;100%</div></div>'
   ].join('');
@@ -3337,6 +3337,10 @@ function cmpSourceLabel(src){
   if (src === 'storeProfit') return '财务口径·利润表';
   return src === 'platformLinks' ? '商品排名口径·链接' : src === 'systemProducts' ? '系统货品' : src === 'systemSkus' ? '系统规格' : '—';
 }
+/** 对比明细（按层级排名表逐行汇总）所属口径的中文说明；店铺利润层即财务口径 · 利润表 */
+function cmpScopeName(kind){
+  return kind === 'storeProfit' ? '财务口径·利润表' : '商品排名口径';
+}
 function renderCompareTrend(){
   const pts = cmpTrendPoints();
   const usable = pts.filter(function(x){ return x && x.month; });
@@ -3514,8 +3518,8 @@ function renderCompareBody(){
     const deltaUp = s.delta >= 0;
     const dCls = (CMP_BAD_UP[result.metric] === 1 ? !deltaUp : deltaUp) ? 'trend-up' : 'trend-down';
     kpi.innerHTML =
-      '<div class="kpi-card blue"><div class="kpi-label">' + result.metricLabel + ' · 上期</div><div class="kpi-value">' + cmpVal(s.prevTotal, result.unit) + '</div><div class="kpi-sub">' + payload.prevPeriod + ' · ' + s.matched + ' 个可比对象</div></div>' +
-      '<div class="kpi-card green"><div class="kpi-label">' + result.metricLabel + ' · 本期</div><div class="kpi-value">' + cmpVal(s.currTotal, result.unit) + '</div><div class="kpi-sub">' + payload.currPeriod + ' · ' + (s.added ? '新增 ' + s.added + ' 个' : '无新增') + '</div></div>' +
+      '<div class="kpi-card blue"><div class="kpi-label">' + result.metricLabel + ' · 上期 <span style="font-size:11px;opacity:.75">' + cmpScopeName(result.kind) + '</span></div><div class="kpi-value">' + cmpVal(s.prevTotal, result.unit) + '</div><div class="kpi-sub">' + payload.prevPeriod + ' · ' + s.matched + ' 个可比对象</div></div>' +
+      '<div class="kpi-card green"><div class="kpi-label">' + result.metricLabel + ' · 本期 <span style="font-size:11px;opacity:.75">' + cmpScopeName(result.kind) + '</span></div><div class="kpi-value">' + cmpVal(s.currTotal, result.unit) + '</div><div class="kpi-sub">' + payload.currPeriod + ' · ' + (s.added ? '新增 ' + s.added + ' 个' : '无新增') + '</div></div>' +
       '<div class="kpi-card orange"><div class="kpi-label">整体增减</div><div class="kpi-value ' + dCls + '">' + cmpDeltaStr(s.delta, result.unit) + '</div><div class="kpi-sub">' + (s.deltaPct !== null ? '相对上期 ' + cmpSigned(s.deltaPct) + s.deltaPct.toFixed(1) + '%' : (result.unit === 'pct' ? '百分点变化' : '')) + '</div></div>' +
       '<div class="kpi-card purple"><div class="kpi-label">对象变动</div><div class="kpi-value">' + s.matched + ' 匹配</div><div class="kpi-sub">名次 ↑' + s.rankUp + ' / ↓' + s.rankDown + '</div></div>';
   }
