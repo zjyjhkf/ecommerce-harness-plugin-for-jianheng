@@ -1089,7 +1089,7 @@ function toggleProductSkusGeneric(btn, skus){
   sub.setAttribute('data-sku-of', name);
   sub.innerHTML = '<td colspan="20" style="background:#f6faf9;padding:0"><div style="padding:10px 16px">'
     + '<div style="font-weight:700;margin-bottom:8px;color:#6c5ce7">该货品的 SKU（'+matched.length+' 个规格，对应关系来自 Excel「系统货品名称」）</div>'
-    + '<table class="data-table" style="margin:0"><thead><tr><th>系统规格</th><th>商家编码</th><th>销售额</th><th>净销</th><th>毛利</th><th>毛利率</th><th>退款率</th><th>客单价</th></tr></thead><tbody>'
+    + '<table class="data-table" style="margin:0"><thead><tr><th>系统规格</th><th>商家编码</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利</th><th>毛利率</th><th>退款率</th><th>客单价</th></tr></thead><tbody>'
     + matched.slice().sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); }).map(function(s){ return '<tr><td>'+escAttr(String(s.specName||'').slice(0,18))+'</td><td>'+escAttr(s.code)+'</td><td>'+realMoney(s.sales)+'</td><td class="trend-up">'+realMoney(s.netSales)+'</td><td>'+realMoney(s.grossProfit)+'</td><td>'+realPct(s.grossMargin)+'</td><td>'+realPct(s.refundRate)+'</td><td>'+realMoney(s.avgPrice)+'</td></tr>'; }).join('')
     + '</tbody></table></div></td>';
   tr.parentNode.insertBefore(sub, tr.nextSibling);
@@ -1206,19 +1206,19 @@ function renderSalesCoreBars(){
   const catAgg = {};
   products.forEach(function(p){ const k=(p.category||'未分类'); const g=catAgg[k]||(catAgg[k]={sales:0,net:0,items:0}); g.sales+=Number(p.sales)||0; g.net+=Number(p.netSales)||0; g.items+=1; });
   const catRanked = Object.keys(catAgg).map(function(k){ return { name:k, sales:catAgg[k].sales, net:catAgg[k].net, items:catAgg[k].items }; })
-    .filter(function(x){ return x.sales>0; }).sort(function(a,b){ return b.sales-a.sales; }).slice(0,8);
+    .filter(function(x){ return x.net>0; }).sort(function(a,b){ return b.net-a.net; }).slice(0,8);
   const ovCatTitle = document.getElementById('ovCategoryTitle');
   if (ovCatTitle) ovCatTitle.innerHTML = '品类销售 TOP'+(catRanked.length||8)+' <span class="badge">按销售额</span>';
   if (catRanked.length) {
     registerChartClick('ovCategoryBar', function(params){
       const d = catRanked[params.dataIndex]; if(!d) return null;
-      return { label: scope+' · 品类销售', value: d.name+' 销售额 '+realMoney(d.sales)+'（'+d.items+' 个货品 · 净销 '+realMoney(d.net)+'）' };
+      return { label: scope+' · 品类销售', value: d.name+' 销售额 '+realMoney(d.net)+'（'+d.items+' 个货品 · 订单销售额（含退款） '+realMoney(d.sales)+'）' };
     });
     getChart('ovCategoryBar')?.setOption({
       tooltip:{trigger:'axis',axisPointer:{type:'shadow'}}, grid:{left:8,right:40,top:8,bottom:24,containLabel:true},
       xAxis:{type:'value',axisLabel:{color:'#5f8087',fontSize:11,formatter:function(v){return v>=10000?(v/10000)+'万':v;}},splitLine:{lineStyle:{color:'#e8f0ee'}}},
       yAxis:{type:'category',data:catRanked.map(function(x){return String(x.name).slice(0,8);}).reverse(),axisLabel:{color:'#5f8087',fontSize:11,width:96,overflow:'truncate',ellipsis:'…'}},
-      series:[{name:'销售额',type:'bar',barWidth:'55%',data:catRanked.map(function(x){return Math.round(x.sales);}).reverse(),itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#0d8a78'},{offset:1,color:'#35b39d'}]),borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:'#16343b',fontSize:11,formatter:function(p){return p.value>=10000?(p.value/10000).toFixed(1)+'万':p.value;}}}]
+      series:[{name:'销售额',type:'bar',barWidth:'55%',data:catRanked.map(function(x){return Math.round(x.net);}).reverse(),itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#0d8a78'},{offset:1,color:'#35b39d'}]),borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:'#16343b',fontSize:11,formatter:function(p){return p.value>=10000?(p.value/10000).toFixed(1)+'万':p.value;}}}]
     }, true);
   } else {
     getChart('ovCategoryBar')?.setOption({title:{text:'暂无品类数据（请导入「系统货品」排名表）',left:'center',top:'center',textStyle:{color:'#6b8d94',fontSize:12}},series:[]}, true);
@@ -1359,7 +1359,7 @@ function renderStoreSalesBar(){
 // 用青色渐变区分平台排行（橙色），货品级明细仍可到「产品概览」查看。
 function renderProductSalesBar(){
   const prods = (APP_DATA.monthlyReport && APP_DATA.monthlyReport.systemProducts) || [];
-  const sorted = prods.slice().sort(function(a,b){ return (Number(b.sales)||0)-(Number(a.sales)||0); }).slice(0,15);
+  const sorted = prods.slice().sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); }).slice(0,15);
   const titleEl = document.getElementById('productSalesChartTitle');
   if (titleEl) titleEl.innerHTML = '产品销售额统计图（'+ML_CURR+' · 货品级 TOP15） <span class="badge">导入数据</span>';
   if (!sorted.length) {
@@ -1371,9 +1371,9 @@ function renderProductSalesBar(){
     const i = (params && typeof params.dataIndex === 'number') ? params.dataIndex : -1;
     if (i < 0 || !top[i]) return null;
     const p = top[i];
-    let value = (p.name || '货品') + ' 销售额 ' + realMoney(Number(p.sales)||0);
-    const net = Number(p.netSales)||0, gp = Number(p.grossProfit)||0;
-    if (net > 0) value += '；净销 ' + realMoney(net);
+    let value = (p.name || '货品') + ' 销售额 ' + realMoney(Number(p.netSales)||0) + '（表内净销售额列）';
+    const net = Number(p.sales)||0, gp = Number(p.grossProfit)||0;
+    if (net > 0) value += '；订单销售额（含退款） ' + realMoney(net);
     if (gp > 0) value += ' · 毛利 ' + realMoney(gp);
     return { label: chartScopeLabel('产品销售额统计图'), value: value };
   });
@@ -1382,7 +1382,7 @@ function renderProductSalesBar(){
     grid:{left:136,right:50,bottom:20,top:10},
     xAxis:{type:'value',axisLabel:{color:'#5f8087',formatter:function(v){return (v/10000).toFixed(0)+'万';}},splitLine:{lineStyle:{color:'#e8f0ee'}}},
     yAxis:{type:'category',data:top.map(function(d){return String(d.name||'').slice(0,12);}),axisLabel:{color:'#5f8087',fontSize:11,width:96,overflow:'truncate',ellipsis:'…'}},
-    series:[{type:'bar',barWidth:'55%',data:top.map(function(d){return Number(d.sales)||0;}),itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#0d8a78'},{offset:1,color:'#17a08c'}]),borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:'#16343b',fontSize:11,formatter:function(p){return p.value>=10000?(p.value/10000).toFixed(1)+'万':p.value;}}}]
+    series:[{type:'bar',barWidth:'55%',data:top.map(function(d){return Number(d.netSales)||0;}),itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#0d8a78'},{offset:1,color:'#17a08c'}]),borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:'#16343b',fontSize:11,formatter:function(p){return p.value>=10000?(p.value/10000).toFixed(1)+'万':p.value;}}}]
   });
 }
 
@@ -1392,7 +1392,7 @@ function renderLinkSalesRank(){
   const sorted = links.slice().sort(function(a,b){ return (Number(b.sales)||0)-(Number(a.sales)||0); });
   if (sorted.length) {
     document.getElementById('salesProductTitle').innerHTML = '商品销售排行（'+ML_CURR+' · 商品个体 TOP20） <span class="badge">导入数据</span>';
-    document.getElementById('salesProductThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>销售额</th><th>净销</th><th>毛利</th><th>退款率</th><th>客单价</th>';
+    document.getElementById('salesProductThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利</th><th>退款率</th><th>客单价</th>';
     document.getElementById('salesProductTbody').innerHTML = sorted.slice(0,20).map(function(l,i){
       return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(l.linkName)+'">'+escAttr(String(l.linkName||'').slice(0,18))+'</td><td title="'+escAttr(l.shop)+'">'+escAttr(String(l.shop||'').slice(0,12))+'</td><td>'+realMoney(l.sales)+'</td><td class="trend-up">'+realMoney(l.netSales)+'</td><td>'+realMoney(l.grossProfit)+'</td><td>'+realPct(l.refundRate)+'</td><td>'+realMoney(l.avgPrice)+'</td></tr>';
     }).join('');
@@ -1444,8 +1444,8 @@ let productRankMode = 'sales';
 function productFeeOf(p){ return (Number(p.netSales)||0)>0 ? (Number(p.adSpend)||0)/(Number(p.netSales)||0)*100 : 0; }
 function productRankMeta(){
   return [
-    { k:'sales',  label:'总销售额' },
-    { k:'net',    label:'净销额' },
+    { k:'sales',  label:'订单销售额（含退款）' },
+    { k:'net',    label:'销售额' },
     { k:'fee',    label:'费比' },
     { k:'ad',     label:'推广费' },
     { k:'refund', label:'退款率' }
@@ -1490,7 +1490,7 @@ function renderProductRankTable(){
   const skus = (APP_DATA.monthlyReport && APP_DATA.monthlyReport.systemSkus) || [];
   const skuIdx = {};
   skus.forEach(function(s){ const n = String(s.name||'').trim(); if (n) { (skuIdx[n] = skuIdx[n] || []).push(s); } });
-  th.innerHTML = '<th>#</th><th></th><th>货品</th><th>编号</th><th>品牌</th><th>分类</th><th>销售额</th><th>净销</th><th>费比</th><th>毛利额</th><th>毛利率</th><th>退款率</th><th>退货率</th><th>推广费</th><th>客单价</th><th>单件率</th>';
+  th.innerHTML = '<th>#</th><th></th><th>货品</th><th>编号</th><th>品牌</th><th>分类</th><th>订单销售额（含退款）</th><th>销售额</th><th>费比</th><th>毛利额</th><th>毛利率</th><th>退款率</th><th>退货率</th><th>推广费</th><th>客单价</th><th>单件率</th>';
   const top = rows.slice(0,20);
   const sum = function(field){ return top.reduce(function(s,d){ return s+(Number(d[field])||0); },0); };
   const tSales = sum('sales'), tNet = sum('netSales'), tGp = sum('grossProfit'), tAd = sum('adSpend');
@@ -1525,16 +1525,21 @@ function renderProductPeriod(period){
   if (!rep) { renderNoDataFor('product'); return; }
   // 货品归纳（系统货品 = 同类商品的总和）
   const prods = (rep.systemProducts || []).slice().sort(function(a,b){return (Number(b.sales)||0)-(Number(a.sales)||0);});
-  const totSales = prods.reduce(function(s,p){return s+(Number(p.sales)||0);},0);
+  // ── 用户指定口径（v0.4.14）──
+  //   货品销售额 = 产品表「净销售订单 / 净销售额」列合计（8 月 449.2 万）——这是面板对外展示的「销售额」；
+  //   表内「销售订单 / 销售额」列（8 月 578.9 万）改称「订单销售额（含退款）」，不再叫销售额。
+  //   毛利率分母与源表「毛利率」列一致（源表口径 = 毛利额 ÷ 净销售额，已逐行核对：
+  //   空气压力波 530,891.19 ÷ 1,217,684.71 = 43.60% = 表内值）。
+  const totSales = prods.reduce(function(s,p){return s+(Number(p.sales)||0);},0);       // 订单销售额（含退款）
   const totGp = prods.reduce(function(s,p){return s+(Number(p.grossProfit)||0);},0);
-  const totNet = prods.reduce(function(s,p){return s+(Number(p.netSales)||0);},0);
+  const totNet = prods.reduce(function(s,p){return s+(Number(p.netSales)||0);},0);      // 销售额（表内净销售额列）
   const totAd = prods.reduce(function(s,p){return s+(Number(p.adSpend)||0);},0);
-  const avgMargin = totSales>0 ? (totGp/totSales*100) : 0;
+  const avgMargin = totNet>0 ? (totGp/totNet*100) : 0;
   document.getElementById('productKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">在销货品</div><div class="kpi-value">'+prods.length+'</div><div class="kpi-sub">同类商品总和（'+ML_CURR+'）</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">货品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">商品排名口径 · '+ML_CURR+'</div></div>',
-    '<div class="kpi-card orange"><div class="kpi-label">货品毛利额</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">毛利率 '+realPct(avgMargin)+'</div></div>',
-    '<div class="kpi-card purple"><div class="kpi-label">货品净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">推广 '+realMoney(totAd)+'</div></div>'
+    '<div class="kpi-card green"><div class="kpi-label">货品销售额</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">产品表 · 净销售额列</div></div>',
+    '<div class="kpi-card teal"><div class="kpi-label">货品订单销售额（含退款）</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">产品表 · 销售额列</div></div>',
+    '<div class="kpi-card orange"><div class="kpi-label">货品毛利额</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">毛利率 '+realPct(avgMargin)+'（毛利÷销售额）</div></div>'
   ].join('');
   // 货品排行明细：支持 总销售额 / 净销额 / 费比 / 退款率 切换 + 点击展开单品（SKU）。
   // 原有的货品销售额/毛利额/净销三张柱状图与下方排行明细重复，已删除，避免重复展示。
@@ -1565,7 +1570,7 @@ function warnOf(l){
 function buildLinkRankToggle(){
   const el = document.getElementById('linkRankToggle');
   if (!el) return;
-  const modes = [{k:'net',label:'净销'},{k:'sales',label:'销售额'},{k:'ad',label:'推广费'},{k:'refund',label:'退款率'}];
+  const modes = [{k:'net',label:'销售额'},{k:'sales',label:'订单销售额（含退款）'},{k:'ad',label:'推广费'},{k:'refund',label:'退款率'}];
   el.innerHTML = modes.map(function(m){
     return '<button class="pt-btn'+(linkRankMode===m.k?' active':'')+'" data-mode="'+m.k+'" onclick="switchLinkRank(this)">'+m.label+'</button>';
   }).join('');
@@ -1593,7 +1598,7 @@ function renderLinkRankTable(){
   else if (linkRankMode === 'ad') rank = [...links].sort(function(a,b){ return (Number(b.adSpend)||0)-(Number(a.adSpend)||0); });
   else if (linkRankMode === 'refund') rank = [...links].sort(function(a,b){ return (Number(b.refundRate)||0)-(Number(a.refundRate)||0); });
   else rank = [...links].sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); });
-  th.innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>销售额</th><th>净销</th><th>毛利</th><th>净销占比</th><th>退款率</th><th>推广费</th><th>费比</th><th>客单价</th><th>预警</th>';
+  th.innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利</th><th>销售额占比</th><th>退款率</th><th>推广费</th><th>费比</th><th>客单价</th><th>预警</th>';
   tb.innerHTML = rank.slice(0,20).map(function(l,i){
     const fee = (Number(l.netSales)||0)>0 ? (Number(l.adSpend)||0)/(Number(l.netSales)||0)*100 : 0;
     return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(l.linkName)+'">'+escAttr(String(l.linkName||'').slice(0,16))+'</td><td>'+escAttr(l.shop)+'</td><td>'+realMoney(l.sales)+'</td><td class="trend-up">'+realMoney(l.netSales)+'</td><td>'+realMoney(l.grossProfit)+'</td><td>'+realPct(totalNet?(Number(l.netSales)||0)/totalNet*100:0)+'</td><td class="'+(Number(l.refundRate)>=30?'trend-down':'')+'">'+realPct(l.refundRate)+'</td><td>'+realMoney(l.adSpend)+'</td><td class="'+(fee>20?'trend-down':'')+'">'+realPct(fee)+'</td><td>'+realMoney(l.avgPrice)+'</td><td class="warn">'+warnOf(l)+'</td></tr>';
@@ -1604,7 +1609,7 @@ function renderLinkRankTable(){
 function renderLinkGrade(){
   const el = document.getElementById('linkGrade');
   if (!el) return;
-  const links = platformLinks().slice().sort(function(a,b){ return (Number(b.sales)||0)-(Number(a.sales)||0); });
+  const links = platformLinks().slice().sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); });
   const n = links.length;
   const gradeOf = function(i){
     const p = n ? i/n : 0;
@@ -1617,7 +1622,7 @@ function renderLinkGrade(){
   const order = ['S','A','B','C','D'];
   const color = { S:'#f0a500', A:'#e67e22', B:'#0d8a78', C:'#8b5cf6', D:'#7f8c8d' };
   const agg = { S:{n:0,sales:0}, A:{n:0,sales:0}, B:{n:0,sales:0}, C:{n:0,sales:0}, D:{n:0,sales:0} };
-  links.forEach(function(l,i){ const g = gradeOf(i); agg[g].n++; agg[g].sales += Number(l.sales)||0; });
+  links.forEach(function(l,i){ const g = gradeOf(i); agg[g].n++; agg[g].sales += Number(l.netSales)||0; });
   if (!n) { getChart('linkGrade')?.setOption({title:{text:'暂无商品数据',left:'center',top:'center',textStyle:{color:'#6b8d94',fontSize:12}},series:[]}); return; }
   const data = order.map(function(g){ return { name:g, value:Math.round(agg[g].sales), count:agg[g].n, itemStyle:{color:color[g]} }; });
   getChart('linkGrade')?.setOption({
@@ -1636,17 +1641,19 @@ function renderLinkPeriod(period){
   const links = platformLinks();
   const sorted = [...links].sort(function(a,b){ return (Number(b.sales)||0)-(Number(a.sales)||0); });
   const tot = sorted.length;
+  // 口径同产品概览：商品销售额 = 链接表「净销售额」列；表内「销售额」列 = 订单销售额（含退款）
   const totSales = tot ? sorted.reduce(function(s,l){return s+(Number(l.sales)||0);},0) : 0;
   const totNet = tot ? sorted.reduce(function(s,l){return s+(Number(l.netSales)||0);},0) : 0;
   const totAd = tot ? sorted.reduce(function(s,l){return s+(Number(l.adSpend)||0);},0) : 0;
+  const totRefund = tot ? sorted.reduce(function(s,l){return s+(Number(l.refundAmount)||0);},0) : 0;
   const avgFee = totNet>0 ? (totAd/totNet*100) : 0;
   const feeOf = function(l){ return (Number(l.netSales)||0)>0 ? (Number(l.adSpend)||0)/(Number(l.netSales)||0)*100 : 0; };
   const highFee = sorted.filter(function(l){ return feeOf(l)>20; }).length;
   document.getElementById('linkKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+tot+'</div><div class="kpi-sub">商品个体（'+ML_CURR+'）</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">商品销售额</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">商品排名口径 · '+ML_CURR+'</div></div>',
-    '<div class="kpi-card orange"><div class="kpi-label">商品净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">推广 '+realMoney(totAd)+'</div></div>',
-    '<div class="kpi-card purple"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">费比>20% '+highFee+' 个</div></div>'
+    '<div class="kpi-card green"><div class="kpi-label">商品销售额</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">链接表 · 净销售额列</div></div>',
+    '<div class="kpi-card teal"><div class="kpi-label">商品订单销售额（含退款）</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">退款 '+realMoney(totRefund)+'</div></div>',
+    '<div class="kpi-card purple"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">推广费÷销售额 · 费比>20% '+highFee+' 个</div></div>'
   ].join('');
   // 商品净销 TOP20 柱状图已删除：与下方「商品排行/商品明细」重复，仅保留费比分层分布
   // 费比分层
@@ -1764,27 +1771,27 @@ function npRender(){
   // ③ 新品货品 TOP10（销售额 + 净销售额）
   const t10 = p.top10 || [];
   const t10Badge = document.getElementById('npTopProdBadge');
-  if (t10Badge) t10Badge.textContent = '共 ' + p.newCnt + ' 个新品货品 · 销售额/净销售额';
+  if (t10Badge) t10Badge.textContent = '共 ' + p.newCnt + ' 个新品货品 · 销售额 / 订单销售额（含退款）';
   if (t10.length){
     registerChartClick('npChartTopProd', function(params){
       const r = t10[params && params.dataIndex];
       if (!r) return null;
-      return { label: '新品追踪 · ' + npClip(r.name, 20), value: r.name + '：销售额 ' + realMoney(r.sales) + '，净销售额 ' + realMoney(r.netSales) + '（占新品 ' + realPct(p.newSales > 0 ? r.sales / p.newSales * 100 : 0) + '）' };
+      return { label: '新品追踪 · ' + npClip(r.name, 20), value: r.name + '：销售额 ' + realMoney(r.netSales) + '，订单销售额（含退款） ' + realMoney(r.sales) + '（占新品 ' + realPct(p.newSales > 0 ? r.netSales / p.newSales * 100 : 0) + '）' };
     });
     getChart('npChartTopProd')?.setOption({
       tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
         const r = t10[ps[0] && ps[0].dataIndex];
         if (!r) return '';
-        return '<b>' + escAttr(r.name) + '</b><br/>销售额：' + realMoney(r.sales) + '<br/>净销售额：' + realMoney(r.netSales)
-          + '<br/>占新品：' + realPct(p.newSales > 0 ? r.sales / p.newSales * 100 : 0);
+        return '<b>' + escAttr(r.name) + '</b><br/>销售额：' + realMoney(r.netSales) + '<br/>订单销售额（含退款）：' + realMoney(r.sales)
+          + '<br/>占新品：' + realPct(p.newSales > 0 ? r.netSales / p.newSales * 100 : 0);
       }},
-      legend:{ data:['销售额','净销售额'], top:0, textStyle:{ color:NP_C.muted, fontSize:11 } },
+      legend:{ data:['订单销售额（含退款）','销售额'], top:0, textStyle:{ color:NP_C.muted, fontSize:11 } },
       grid:{ left:152, right:22, top:34, bottom:6 },
       xAxis:{ type:'value', axisLabel:{ color:NP_C.muted, fontSize:11, formatter:function(v){ return npWan(v).toFixed(1) + '万'; } }, splitLine:{ lineStyle:{ color:NP_C.grid } } },
       yAxis:{ type:'category', data:t10.map(function(r){ return r.name; }), axisLabel:{ color:NP_C.muted, fontSize:11, width:142, overflow:'truncate', ellipsis:'…' } },
       series:[
-        { name:'销售额', type:'bar', data:t10.map(function(r){ return r.sales; }), itemStyle:{ color:NP_C.new }, barMaxWidth:11 },
-        { name:'净销售额', type:'bar', data:t10.map(function(r){ return r.netSales; }), itemStyle:{ color:NP_C.accent }, barMaxWidth:11 }
+        { name:'订单销售额（含退款）', type:'bar', data:t10.map(function(r){ return r.sales; }), itemStyle:{ color:NP_C.new }, barMaxWidth:11 },
+        { name:'销售额', type:'bar', data:t10.map(function(r){ return r.netSales; }), itemStyle:{ color:NP_C.accent }, barMaxWidth:11 }
       ]
     }, true);
   } else chartPlaceholder('npChartTopProd', '暂无新品');
@@ -1845,7 +1852,7 @@ function npRender(){
     registerChartClick('npChartTopSpec', function(params){
       const r = ts[params && params.dataIndex];
       if (!r) return null;
-      return { label: '新品追踪 · 规格', value: r.name + '：' + realMoney(r.sales) };
+      return { label: '新品追踪 · 规格', value: r.name + '：销售额 ' + realMoney(r.sales) };
     });
     getChart('npChartTopSpec')?.setOption({
       tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
@@ -1927,7 +1934,7 @@ function npRenderProdTable(p){
   const shown = rows.length > NP_TABLE_MAX ? rows.slice(0, NP_TABLE_MAX) : rows;
   const badge = document.getElementById('npProdBadge');
   if (badge) badge.textContent = '共 ' + rows.length + ' 个' + (shown.length < rows.length ? '（仅列前 ' + shown.length + ' 个）' : '') + ' · 按销售额降序';
-  thead.innerHTML = '<th>商品名称</th><th>货品编号</th><th>规格数</th><th>销售额</th><th>净销售额</th><th>毛利额</th><th>毛利率</th>'
+  thead.innerHTML = '<th>商品名称</th><th>货品编号</th><th>规格数</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利额</th><th>毛利率</th>'
     + '<th>退款率</th><th>退货比例</th><th>发货后退款率</th><th>销售件数</th><th>销售成本</th><th>推广费</th>';
   tb.innerHTML = shown.length ? shown.map(function(r){
     return '<tr><td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
@@ -1954,7 +1961,7 @@ function npRenderSpecTable(p){
   const shown = rows.length > NP_TABLE_MAX ? rows.slice(0, NP_TABLE_MAX) : rows;
   const badge = document.getElementById('npSpecBadge');
   if (badge) badge.textContent = '共 ' + rows.length + ' 行' + (shown.length < rows.length ? '（仅列前 ' + shown.length + ' 行）' : '') + ' · 按销售额降序';
-  thead.innerHTML = '<th>商品名称</th><th>规格</th><th>销售额</th><th>净销售额</th><th>毛利额</th><th>毛利率</th><th>退款率</th><th>退货比例</th>';
+  thead.innerHTML = '<th>商品名称</th><th>规格</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利额</th><th>毛利率</th><th>退款率</th><th>退货比例</th>';
   tb.innerHTML = shown.length ? shown.map(function(r){
     return '<tr><td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
       + '<td title="' + escAttr(r.specName) + '">' + escAttr(r.specName) + '</td>'
@@ -2002,15 +2009,16 @@ function renderNewProductPeriod(period){
   const sorted = [...skus].sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); });
   const tot = sorted.length;
   const sum = function(field){ return sorted.reduce(function(s,r){ return s+(Number(r[field])||0); },0); };
+  // 口径同产品/商品层：SKU 销售额 = 规格表「净销售额」列；表内「销售额」列 = 订单销售额（含退款）
   const totNet = sum('netSales'), totGp = sum('grossProfit'), totSales = sum('sales');
-  const avgMargin = totSales>0 ? (totGp/totSales*100) : 0;
-  const totAd = sum('adSpend'), totOff = sum('offlineFee'), totOther = sum('otherFee');
+  const avgMargin = totNet>0 ? (totGp/totNet*100) : 0;
+  const totAd = sum('adSpend'), totOff = sum('offlineFee'), totOther = sum('otherFee'), totRefund = sum('refundAmount');
   // KPI（真实：SKU 规格级）
   document.getElementById('newProductKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+tot+'</div><div class="kpi-sub">'+ML_CURR+'</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">SKU 净销</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">商品排名口径 · 销售−退款</div></div>',
-    '<div class="kpi-card orange"><div class="kpi-label">SKU 毛利</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">平均毛利率 '+realPct(avgMargin)+'</div></div>',
-    '<div class="kpi-card purple"><div class="kpi-label">SKU 推广费</div><div class="kpi-value">'+realMoney(totAd)+'</div><div class="kpi-sub">线下 '+realMoney(totOff)+'</div></div>'
+    '<div class="kpi-card green"><div class="kpi-label">SKU 销售额</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">规格表 · 净销售额列</div></div>',
+    '<div class="kpi-card teal"><div class="kpi-label">SKU 订单销售额（含退款）</div><div class="kpi-value">'+realMoney(totSales)+'</div><div class="kpi-sub">退款 '+realMoney(totRefund)+'</div></div>',
+    '<div class="kpi-card orange"><div class="kpi-label">SKU 毛利</div><div class="kpi-value">'+realMoney(totGp)+'</div><div class="kpi-sub">毛利率 '+realPct(avgMargin)+'（毛利÷销售额）</div></div>'
   ].join('');
   // SKU 净销 TOP15 柱状图已删除（与下方「SKU 规格明细」重复）。
   // SKU 费用结构饼图已替换：源表「线下费用/其他」整列均为 0，饼图只会呈现「推广投放 100%」
@@ -2031,7 +2039,7 @@ function renderNewProductPeriod(period){
   } else { getChart('newProductFunnel')?.setOption({title:{text:'暂无退款数据',left:'center',top:'center',textStyle:{color:'#6b8d94',fontSize:12}},series:[]}); }
   // SKU 明细 TOP20
   if (tot) {
-    document.getElementById('npThead').innerHTML='<th>#</th><th>货品</th><th>规格</th><th>编号</th><th>销售额</th><th>净销</th><th>毛利</th><th>毛利率</th><th>退款率</th><th>推广费</th><th>客单价</th>';
+    document.getElementById('npThead').innerHTML='<th>#</th><th>货品</th><th>规格</th><th>编号</th><th>订单销售额（含退款）</th><th>销售额</th><th>毛利</th><th>毛利率</th><th>退款率</th><th>推广费</th><th>客单价</th>';
     document.getElementById('npTbody').innerHTML = sorted.slice(0,20).map(function(s,i){
       return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(s.name)+'">'+escAttr(String(s.name||'').slice(0,12))+'</td><td title="'+escAttr(s.specName)+'">'+escAttr(String(s.specName||'').slice(0,12))+'</td><td>'+escAttr(s.code)+'</td><td>'+realMoney(s.sales)+'</td><td class="trend-up">'+realMoney(s.netSales)+'</td><td>'+realMoney(s.grossProfit)+'</td><td>'+realPct(s.grossMargin)+'</td><td>'+realPct(s.refundRate)+'</td><td>'+realMoney(s.adSpend)+'</td><td>'+realMoney(s.avgPrice)+'</td></tr>';
     }).join('');
@@ -2044,7 +2052,7 @@ let promoRankMode = 'fee'; // 推广排行：fee=费比 / ad=推广费 / net=净
 function buildPromoRankToggle(){
   const el = document.getElementById('promoRankToggle');
   if (!el) return;
-  const modes = [{k:'fee',label:'费比'},{k:'ad',label:'推广费'},{k:'net',label:'净销'},{k:'refund',label:'退款率'}];
+  const modes = [{k:'fee',label:'费比'},{k:'ad',label:'推广费'},{k:'net',label:'销售额'},{k:'refund',label:'退款率'}];
   el.innerHTML = modes.map(function(m){
     return '<button class="pt-btn'+(promoRankMode===m.k?' active':'')+'" data-mode="'+m.k+'" onclick="switchPromoRank(this)">'+m.label+'</button>';
   }).join('');
@@ -2072,7 +2080,7 @@ function renderPromoRankTable(){
   else if (promoRankMode === 'net') rank = [...links].sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); });
   else if (promoRankMode === 'refund') rank = [...links].sort(function(a,b){ return (Number(b.refundRate)||0)-(Number(a.refundRate)||0); });
   else rank = [...links].sort(function(a,b){ return feeOf(b)-feeOf(a); });
-  th.innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>'+ML_CURR+'净销</th><th>'+ML_CURR+'推广费</th><th>费比</th><th>退款率</th>';
+  th.innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>'+ML_CURR+'销售额</th><th>'+ML_CURR+'推广费</th><th>费比</th><th>退款率</th>';
   tb.innerHTML = rank.slice(0,20).map(function(l,i){
     const fee = feeOf(l);
     return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(l.linkName)+'">'+escAttr(String(l.linkName||'').slice(0,16))+'</td><td>'+escAttr(l.shop)+'</td><td>'+realMoney(l.netSales)+'</td><td>'+realMoney(l.adSpend)+'</td><td class="'+(fee>20?'trend-down':'')+'">'+realPct(fee)+'</td><td>'+realPct(l.refundRate)+'</td></tr>';
@@ -2093,9 +2101,9 @@ function renderPromoPeriod(period){
   // KPI（真实：来自商品（链接）推广数据）
   document.getElementById('promoKpi').innerHTML = [
     '<div class="kpi-card blue"><div class="kpi-label">推广总花费（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totAd)+'</div><div class="kpi-sub">'+tot+' 商品</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">商品排名口径 · 推广费÷净销</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">整体费比</div><div class="kpi-value">'+realPct(avgFee)+'</div><div class="kpi-sub">推广费÷销售额</div></div>',
     '<div class="kpi-card orange"><div class="kpi-label">费比>20%</div><div class="kpi-value">'+sorted.filter(function(l){return feeOf(l)>20;}).length+'</div><div class="kpi-sub">需优化</div></div>',
-    '<div class="kpi-card purple"><div class="kpi-label">净销售额（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">商品排名口径</div></div>'
+    '<div class="kpi-card purple"><div class="kpi-label">销售额（'+ML_CURR+'）</div><div class="kpi-value">'+realMoney(totNet)+'</div><div class="kpi-sub">链接表 · 净销售额列</div></div>'
   ].join('');
   // 费比分层（真实）
   const feeBins = [[0,0.5,'<0.5%'],[0.5,1,'0.5-1%'],[1,2,'1-2%'],[2,3,'2-3%'],[3,4,'3-4%'],[4,5,'4-5%'],[5,10,'5-10%'],[10,15,'10-15%'],[15,20,'15-20%'],[20,Infinity,'>20%']].map(function(b){
@@ -2167,7 +2175,7 @@ function renderRefundPeriod(period){
   // 失真产品数据：净销<2000 或 退款率>100%，从有效排行剔除，单列标记
   const distortedRank = distorted.slice().sort(function(a,b){ return (Number(b.refundAmount)||0)-(Number(a.refundAmount)||0); });
   document.getElementById('refundAbnormalTitle').innerHTML = '失真产品数据（净销&lt;2000 或 退款率&gt;100%） <span class="badge">'+distorted.length+'</span>';
-  document.getElementById('refundAbnormalThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>出现位置</th><th>'+ML_CURR+'销售额</th><th>'+ML_CURR+'净销</th><th>退款金额</th><th>退款率</th><th>数据标记</th>';
+  document.getElementById('refundAbnormalThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>出现位置</th><th>'+ML_CURR+'订单销售额（含退款）</th><th>'+ML_CURR+'销售额</th><th>退款金额</th><th>退款率</th><th>数据标记</th>';
   const distortedRows = distortedRank.slice(0,50).map(function(l,i){
     const tag = (Number(l.netSales)||0) < 2000
       ? '<span class="abn-tag" title="净销<2000，样本过小，判为失真数据">净销失真</span>'
@@ -2199,7 +2207,7 @@ function switchRefundRank(el){
 function renderRefundRankTable(){
   const normal = classifyRefundLinks(platformLinks()).normal;
   document.getElementById('refundProductTitle').innerHTML = '退款商品明细（有效商品，按'+(refundRankMode==='amount'?'退款金额':'退款率')+'降序 TOP50） <span class="badge">'+normal.length+'</span>';
-  document.getElementById('refundProductThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>出现位置</th><th>'+ML_CURR+'销售额</th><th>'+ML_CURR+'净销</th><th>退款金额</th><th>退款率</th><th>退货率</th>';
+  document.getElementById('refundProductThead').innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th><th>出现位置</th><th>'+ML_CURR+'订单销售额（含退款）</th><th>'+ML_CURR+'销售额</th><th>退款金额</th><th>退款率</th><th>退货率</th>';
   const sorted = normal.slice().sort(function(a,b){
     return refundRankMode==='amount'
       ? (Number(b.refundAmount)||0)-(Number(a.refundAmount)||0)
@@ -2309,8 +2317,8 @@ function analyzeLinkWarn(el){
 // （净销 / 销售额 / 退款率），通过顶部按键切换 Top 20 呈现，默认净销。
 let wkRankMode = 'netSales'; // netSales=净销 / sales=销售额 / refundRate=退款率
 const WEEKLY_RANK_MODES = [
-  { k:'netSales',   label:'净销' },
-  { k:'sales',      label:'销售额' },
+  { k:'netSales',   label:'销售额' },
+  { k:'sales',      label:'订单销售额（含退款）' },
   { k:'refundRate', label:'退款率' }
 ];
 function wkRankToggleHtml(){
@@ -2332,7 +2340,7 @@ function wkRankSorted(rows){
   return (rows||[]).slice().sort(function(a,b){ return (Number(b[wkRankMode])||0)-(Number(a[wkRankMode])||0); });
 }
 // 表头排序列标记（▼）：让「当前排行属性」在列头一眼可见
-function wkRankColLabel(){ return { netSales:'净销', sales:'销售额', refundRate:'退款率' }[wkRankMode] || ''; }
+function wkRankColLabel(){ return { netSales:'销售额', sales:'订单销售额（含退款）', refundRate:'退款率' }[wkRankMode] || ''; }
 function wkMark(label){ return label===wkRankColLabel() ? '<th style="color:#e67e22">'+label+' ▼</th>' : '<th>'+label+'</th>'; }
 function renderWeeklyReportView(){
   const toggleEl = document.getElementById('reviewPeriodToggle');
@@ -2671,7 +2679,7 @@ function renderWeeklyProductsRank(){
   if (!th || !tb) return;
   const skuIdx = skuIndexOf();
   th.innerHTML = '<th>#</th><th></th><th>货品</th><th>编号</th><th>品牌</th><th>品类</th>'
-    + wkMark('销售额') + wkMark('净销') + '<th>毛利</th><th>毛利率</th>'
+    + wkMark('订单销售额（含退款）') + wkMark('销售额') + '<th>毛利</th><th>毛利率</th>'
     + wkMark('退款率') + '<th>单件率</th><th>退货率</th><th>推广费</th><th>客单价</th>';
   tb.innerHTML = wkRankSorted(rows).slice(0,20).map(function(p,i){
     const nm = String(p.name||'');
@@ -2757,7 +2765,7 @@ function renderWeeklySkusRank(){
   const tb = document.getElementById('wkSkuTbody');
   if (!th || !tb) return;
   th.innerHTML = '<th>#</th><th>货品</th><th>规格</th><th>编号</th>'
-    + wkMark('销售额') + wkMark('净销') + '<th>毛利</th><th>毛利率</th>'
+    + wkMark('订单销售额（含退款）') + wkMark('销售额') + '<th>毛利</th><th>毛利率</th>'
     + wkMark('退款率') + '<th>发货前退</th><th>发货后退</th><th>收货后退</th><th>平台费</th><th>推广费</th><th>客单价</th>';
   tb.innerHTML = wkRankSorted(rows).slice(0,20).map(function(s,i){
     return '<tr><td>'+(i+1)+'</td><td title="'+s.name+'">'+String(s.name||'').slice(0,12)+'</td><td title="'+s.specName+'">'+String(s.specName||'').slice(0,12)+'</td><td>'+s.code+'</td><td>'+realMoney(s.sales)+'</td><td class="trend-up">'+realMoney(s.netSales)+'</td><td>'+realMoney(s.grossProfit)+'</td><td>'+realPct(s.grossMargin)+'</td><td>'+realPct(s.refundRate)+'</td><td>'+realPct(s.preShipRefundRate)+'</td><td>'+realPct(s.postShipRefundRate)+'</td><td>'+realPct(s.receivedRefundRate)+'</td><td>'+realMoney(s.platformFee)+'</td><td>'+realMoney(s.adSpend)+'</td><td>'+realMoney(s.avgPrice)+'</td></tr>';
@@ -2832,8 +2840,8 @@ function renderNoDataFor(view){
 // 「店铺经销明细」为全店列示（含全部店铺且无退款率列），不参与该三属性切换。
 let mrRankMode = 'netSales'; // netSales=净销 / sales=销售额 / refundRate=退款率
 const MR_RANK_MODES = [
-  { k:'netSales',   label:'净销' },
-  { k:'sales',      label:'销售额' },
+  { k:'netSales',   label:'销售额' },
+  { k:'sales',      label:'订单销售额（含退款）' },
   { k:'refundRate', label:'退款率' }
 ];
 function mrRankToggleHtml(){
@@ -2850,7 +2858,7 @@ function switchMrRank(mode, el){
   if (el && el.getAttribute('data-rank') !== mode) el.classList.add('active');
   renderMrRankTables();
 }
-function mrRankColLabel(){ return { netSales:'净销', sales:'销售额', refundRate:'退款率' }[mrRankMode] || ''; }
+function mrRankColLabel(){ return { netSales:'销售额', sales:'订单销售额（含退款）', refundRate:'退款率' }[mrRankMode] || ''; }
 function mrMark(label){ return label===mrRankColLabel() ? '<th style="color:#e67e22">'+label+' ▼</th>' : '<th>'+label+'</th>'; }
 function mrRankSorted(rows){ return (rows||[]).slice().sort(function(a,b){ return (Number(b[mrRankMode])||0)-(Number(a[mrRankMode])||0); }); }
 function renderMrRankTables(){ renderMrProductTable(); renderMrLinkTable(); renderMrSkuTable(); }
@@ -2861,7 +2869,7 @@ function renderMrProductTable(){
   const rep = APP_DATA.monthlyReport;
   const products = (rep && rep.systemProducts) || [];
   th.innerHTML = '<th>#</th><th>货品</th><th>编号</th><th>品牌</th><th>品类</th>'
-    + mrMark('销售额') + mrMark('净销') + '<th>毛利</th><th>毛利率</th>'
+    + mrMark('订单销售额（含退款）') + mrMark('销售额') + '<th>毛利</th><th>毛利率</th>'
     + mrMark('退款率') + '<th>客单价</th>';
   tb.innerHTML = mrRankSorted(products).slice(0,20).map(function(p,i){
     return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(p.name)+'">'+escAttr(String(p.name||'').slice(0,16))+'</td><td>'+escAttr(p.code)+'</td><td>'+escAttr(p.brand)+'</td><td>'+escAttr(p.category)+'</td><td>'+realMoney(p.sales)+'</td><td class="trend-up">'+realMoney(p.netSales)+'</td><td>'+realMoney(p.grossProfit)+'</td><td>'+realPct(p.grossMargin)+'</td><td>'+realPct(p.refundRate)+'</td><td>'+realMoney(p.avgPrice)+'</td></tr>';
@@ -2874,7 +2882,7 @@ function renderMrLinkTable(){
   const rep = APP_DATA.monthlyReport;
   const links = (rep && rep.platformLinks) || [];
   th.innerHTML = '<th>#</th><th>商品（链接）</th><th>店铺</th>'
-    + mrMark('销售额') + mrMark('净销') + '<th>毛利</th>'
+    + mrMark('订单销售额（含退款）') + mrMark('销售额') + '<th>毛利</th>'
     + mrMark('退款率') + '<th>推广费</th><th>客单价</th>';
   tb.innerHTML = mrRankSorted(links).slice(0,20).map(function(l,i){
     return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(l.linkName)+'">'+escAttr(String(l.linkName||'').slice(0,16))+'</td><td title="'+escAttr(l.shop)+'">'+escAttr(String(l.shop||'').slice(0,12))+'</td><td>'+realMoney(l.sales)+'</td><td class="trend-up">'+realMoney(l.netSales)+'</td><td>'+realMoney(l.grossProfit)+'</td><td>'+realPct(l.refundRate)+'</td><td>'+realMoney(l.adSpend)+'</td><td>'+realMoney(l.avgPrice)+'</td></tr>';
@@ -2887,7 +2895,7 @@ function renderMrSkuTable(){
   const rep = APP_DATA.monthlyReport;
   const skus = (rep && rep.systemSkus) || [];
   th.innerHTML = '<th>#</th><th>货品</th><th>规格</th><th>编号</th>'
-    + mrMark('销售额') + mrMark('净销') + '<th>毛利</th>'
+    + mrMark('订单销售额（含退款）') + mrMark('销售额') + '<th>毛利</th>'
     + mrMark('退款率') + '<th>推广费</th><th>客单价</th>';
   tb.innerHTML = mrRankSorted(skus).slice(0,20).map(function(s,i){
     return '<tr><td>'+(i+1)+'</td><td title="'+escAttr(s.name)+'">'+escAttr(String(s.name||'').slice(0,12))+'</td><td title="'+escAttr(s.specName)+'">'+escAttr(String(s.specName||'').slice(0,12))+'</td><td>'+escAttr(s.code)+'</td><td>'+realMoney(s.sales)+'</td><td class="trend-up">'+realMoney(s.netSales)+'</td><td>'+realMoney(s.grossProfit)+'</td><td>'+realPct(s.refundRate)+'</td><td>'+realMoney(s.adSpend)+'</td><td>'+realMoney(s.avgPrice)+'</td></tr>';
@@ -2913,12 +2921,12 @@ function renderMonthlyReportView(){
   const storeRefund = storeList.reduce(function(s,x){ return s+(x.refund||0); },0);
   const storeMargin = storeSales>0 ? (storeGp/storeSales*100) : 0;
   // 层级 KPI：货品 / 商品（链接）/ SKU / 店铺
-  // ⚠ 前三个是「商品排名口径」的净销（源表 578.9 万销售额 − 退款），与下方「经销店铺 · 财务口径」
-  // 的 428.4 万不是同一口径 —— 副标题必须写明，否则卡片并排会被读成「净销 449 万 > 销售收入 428 万」。
+  // ⚠ 前三张是「商品排名口径」的销售额（= 源表「净销售额」列，8 月 449.2 万），与下方
+  // 「经销店铺 · 财务口径」的销售收入 428.4 万不是同一口径 —— 副标题必须写明来源列。
   const kpiCards = [
-    '<div class="kpi-card blue"><div class="kpi-label">货品（系统货品）</div><div class="kpi-value">'+products.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(products,'netSales'))+'</div></div>',
-    '<div class="kpi-card green"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+links.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(links,'netSales'))+'</div></div>',
-    '<div class="kpi-card orange"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+skus.length+'</div><div class="kpi-sub">商品排名口径 · 净销 '+realMoney(sum(skus,'netSales'))+'</div></div>',
+    '<div class="kpi-card blue"><div class="kpi-label">货品（系统货品）</div><div class="kpi-value">'+products.length+'</div><div class="kpi-sub">商品排名口径 · 销售额 '+realMoney(sum(products,'netSales'))+'（净销售额列）</div></div>',
+    '<div class="kpi-card green"><div class="kpi-label">商品（链接）</div><div class="kpi-value">'+links.length+'</div><div class="kpi-sub">商品排名口径 · 销售额 '+realMoney(sum(links,'netSales'))+'（净销售额列）</div></div>',
+    '<div class="kpi-card orange"><div class="kpi-label">SKU 规格</div><div class="kpi-value">'+skus.length+'</div><div class="kpi-sub">商品排名口径 · 销售额 '+realMoney(sum(skus,'netSales'))+'（净销售额列）</div></div>',
     '<div class="kpi-card purple"><div class="kpi-label">经销店铺 <span style="font-size:11px;opacity:.75">财务口径</span></div><div class="kpi-value">'+storeList.length+'</div><div class="kpi-sub">销售收入 '+realMoney(storeSales)+'</div></div>'
   ].join('');
   // 注：这里原有一份未被任何渲染使用的 metrics 数组（含与「销售收入」等值的「正向销售收入」行），
@@ -3009,18 +3017,18 @@ function renderMonthlyCharts(rep){
   } else { getChart('mrOverviewBar')?.setOption({title:{text:'暂无店铺数据',left:'center',top:'center',textStyle:{color:'#6b8d94',fontSize:12}},series:[]}); }
   // 2) 货品销售额占比 TOP8
   if (products.length) {
-    const top = products.slice().sort(function(a,b){ return (Number(b.sales)||0)-(Number(a.sales)||0); }).slice(0,8);
+    const top = products.slice().sort(function(a,b){ return (Number(b.netSales)||0)-(Number(a.netSales)||0); }).slice(0,8);
     registerChartClick('mrRatingPie', function(params){
       const i = (params && typeof params.dataIndex === 'number') ? params.dataIndex : -1;
       if (i < 0 || !top[i]) return null;
       const p = top[i];
-      const tot = top.reduce(function(s,x){ return s + (Number(x.sales)||0); },0);
-      const share = tot > 0 ? ((Number(p.sales)||0)/tot*100) : 0;
-      return { label: '月复盘 · 货品销售额占比（' + ML_CURR + '）', value: (p.name || '货品') + ' 销售额 ' + realMoney(Number(p.sales)||0) + ' · 占比 ' + share.toFixed(1) + '%' };
+      const tot = top.reduce(function(s,x){ return s + (Number(x.netSales)||0); },0);
+      const share = tot > 0 ? ((Number(p.netSales)||0)/tot*100) : 0;
+      return { label: '月复盘 · 货品销售额占比（' + ML_CURR + '）', value: (p.name || '货品') + ' 销售额 ' + realMoney(Number(p.netSales)||0) + '（表内净销售额列） · 占比 ' + share.toFixed(1) + '%' };
     });
     getChart('mrRatingPie')?.setOption({
       tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{color:'#5f8087',fontSize:11}},
-      series:[{type:'pie',radius:['38%','62%'],center:['50%','45%'],data:top.map(function(p){return {name:String(p.name||'').slice(0,10),value:Math.round(Number(p.sales)||0)};}),label:{color:'#16343b',fontSize:11}}]
+      series:[{type:'pie',radius:['38%','62%'],center:['50%','45%'],data:top.map(function(p){return {name:String(p.name||'').slice(0,10),value:Math.round(Number(p.netSales)||0)};}),label:{color:'#16343b',fontSize:11}}]
     });
   } else { getChart('mrRatingPie')?.setOption({title:{text:'暂无货品数据',left:'center',top:'center',textStyle:{color:'#6b8d94',fontSize:12}},series:[]}); }
   // 3) 店铺毛利 / 推广费 TOP10
@@ -3954,20 +3962,20 @@ function renderCompareNewTrack(){
     const r = top[params && params.dataIndex];
     if (!r) return null;
     return { label:'数据对比 · 新品对比 · ' + npClip(r.name, 20),
-      value: r.name + '：本期销售额 ' + realMoney(r.sales) + '（占本期新品 ' + realPct(np.newSales > 0 ? r.sales / np.newSales * 100 : 0) + '，毛利率 ' + realPct(r.grossMargin) + '，退款率 ' + realPct(r.refundRate) + '）' };
+      value: r.name + '：本期销售额 ' + realMoney(r.netSales) + '（占本期新品 ' + realPct(np.newSales > 0 ? r.netSales / np.newSales * 100 : 0) + '，毛利率 ' + realPct(r.grossMargin) + '，退款率 ' + realPct(r.refundRate) + '）' };
   });
   getChart('compareNewTrackTop')?.setOption({
     tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' }, textStyle:{ fontSize:12 }, formatter:function(ps){
       const r = top[ps[0] && ps[0].dataIndex];
       if (!r) return '';
-      return '<b>' + escAttr(r.name) + '</b><br/>本期销售额：' + realMoney(r.sales)
-        + '<br/>占本期新品：' + realPct(np.newSales > 0 ? r.sales / np.newSales * 100 : 0)
+      return '<b>' + escAttr(r.name) + '</b><br/>本期销售额：' + realMoney(r.netSales)
+        + '<br/>占本期新品：' + realPct(np.newSales > 0 ? r.netSales / np.newSales * 100 : 0)
         + '<br/>毛利率：' + realPct(r.grossMargin) + '　退款率：' + realPct(r.refundRate);
     }},
     grid:{ left:152, right:74, top:16, bottom:6 },
     xAxis:{ type:'value', axisLabel:{ color:C.muted, fontSize:11, formatter:function(v){ return (Number(v) / 10000).toFixed(1) + '万'; } }, splitLine:{ lineStyle:{ color:C.grid } } },
     yAxis:{ type:'category', data:top.map(function(r){ return r.name; }), axisLabel:{ color:C.muted, fontSize:11, width:142, overflow:'truncate', ellipsis:'…' } },
-    series:[{ type:'bar', data:top.map(function(r){ return r.sales; }), itemStyle:{ color:C.curr }, barMaxWidth:12,
+    series:[{ type:'bar', data:top.map(function(r){ return r.netSales; }), itemStyle:{ color:C.curr }, barMaxWidth:12,
       label:{ show:true, position:'right', color:C.text, fontSize:11, formatter:function(x){ return (Number(x.value) / 10000).toFixed(1) + '万'; } } }]
   }, true);
 
@@ -3994,12 +4002,12 @@ function renderCompareNewTrack(){
     const cnt = document.getElementById('compareNewTrackCount');
     if (cnt) cnt.textContent = '有效 ' + validNew.length + ' / ' + allNew.length + ' 个' + (shown.length < validNew.length ? '（仅列前 ' + shown.length + ' 个）' : '');
     tbody.innerHTML = shown.map(function(r, i){
-      const share = np.newSales > 0 ? (r.sales / np.newSales) * 100 : 0;
+      const share = np.newSales > 0 ? (r.netSales / np.newSales) * 100 : 0;
       return '<tr><td>' + (i + 1) + '</td>'
         + '<td title="' + escAttr(r.name) + '">' + escAttr(r.name) + '</td>'
         + '<td>' + escAttr(r.code) + '</td>'
         + '<td>' + r.specCount + '</td>'
-        + '<td>' + realMoney(r.sales) + '</td>'
+        + '<td>' + realMoney(r.netSales) + '</td>'
         + '<td>' + realPct(share) + '</td>'
         + '<td>' + realPct(r.grossMargin) + '</td>'
         + '<td>' + realPct(r.refundRate) + '</td>'

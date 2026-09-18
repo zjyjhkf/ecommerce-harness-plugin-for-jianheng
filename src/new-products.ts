@@ -316,6 +316,17 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
     const newNames = new Set(newProd.map((p) => String(p.name ?? '')))
     newSku = allSku.filter((s) => newNames.has(String(s.name ?? '')))
   }
+  // ── 两个层级必须同集合 ──
+  // 规格层若独立按「规格名首次出现」判定，会把大量老品的新规格也算成新品规格，
+  // 屏幕上就会出现「新品销售成本 ¥108.8 万 > 新品销售额 ¥20.8 万」这种同屏自相矛盾的数字
+  // （实测 8 月：规格层 236 行 / 销售额 203.7 万，而货品层只有 64 个新品 / 净销售额 20.8 万）。
+  // 因此当货品层有结果时，规格层收敛到「所属货品属于本期新品」的那些规格行；
+  // 收敛后若一行不剩（规格表货品名与货品表对不上），保留原结果，避免整块空白。
+  if (newProd.length > 0 && newSku.length > 0) {
+    const newProdNames = new Set(newProd.map((p) => String(p.name ?? '')))
+    const narrowed = newSku.filter((s) => newProdNames.has(String(s.name ?? '')))
+    if (narrowed.length > 0) newSku = narrowed
+  }
 
   if (basis === 'none' || (newProd.length === 0 && newSku.length === 0)) {
     const why = hasPrev || label
@@ -327,8 +338,10 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
   const newKeySet = new Set(newProd.map((p) => prodKey(p)))
   const oldProd = allProd.filter((p) => !newKeySet.has(prodKey(p)))
 
-  const newSales = sumBy(newProd, (p) => p.sales)
-  const totalSales = sumBy(allProd, (p) => p.sales)
+  // 口径（用户指定 v0.4.14）：面板展示的「销售额」= 源表「净销售额」列；
+  // 源表「销售额」列（含退款订单额）在本模块称作「订单销售额（含退款）」。
+  const newSales = sumBy(newProd, (p) => p.netSales)
+  const totalSales = sumBy(allProd, (p) => p.netSales)
   const newSkuSales = sumBy(newSku, (s) => s.sales)
 
   // ── 规格维度汇总（件数/成本/退款三段拆解只有规格表有） ──
@@ -342,7 +355,7 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
   // ── 货品级指标 ──
   // 毛利率口径：毛利额 ÷ 净销售额（与月度表内「毛利率」列一致；
   // 用销售额做分母会把比率整体压低十几个百分点，实测 43.6% vs 31.8%）。
-  const oldSales = sumBy(oldProd, (p) => p.sales)
+  const oldSales = sumBy(oldProd, (p) => p.netSales)
   const newNet = sumBy(newProd, (p) => p.netSales)
   const oldNet = sumBy(oldProd, (p) => p.netSales)
   const newGm = newNet > 0 ? (sumBy(newProd, (p) => p.grossProfit) / newNet) * 100 : 0
@@ -407,7 +420,7 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
     .sort((a, b) => b.sales - a.sales)
 
   const top1 = products[0]
-  const top1Share = top1 && newSales > 0 ? (top1.sales / newSales) * 100 : 0
+  const top1Share = top1 && newSales > 0 ? (top1.netSales / newSales) * 100 : 0
   const specDist = [...specCntOf.entries()]
     .map(([name, cnt]) => ({ name, cnt }))
     .sort((a, b) => b.cnt - a.cnt)
@@ -417,8 +430,8 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
   const pieProd = top1 ? top1.name : ''
   const pieAll = specs.filter((s) => s.name === pieProd).slice(0, 8)
   const pieRest = specs.filter((s) => s.name === pieProd).slice(8)
-  const specPieItems = pieAll.map((s) => ({ name: s.specName, value: s.sales }))
-  if (pieRest.length) specPieItems.push({ name: '其他规格', value: sumBy(pieRest, (s) => s.sales) })
+  const specPieItems = pieAll.map((s) => ({ name: s.specName, value: s.netSales }))
+  if (pieRest.length) specPieItems.push({ name: '其他规格', value: sumBy(pieRest, (s) => s.netSales) })
 
   return {
     available: true,
@@ -450,7 +463,7 @@ function computeNewProducts(curr: MonthlyReport | null, prev: MonthlyReport | nu
     top1Name: pieProd,
     top10: products.slice(0, 10).reverse().map((p) => ({ name: p.name, sales: p.sales, netSales: p.netSales })),
     donut: { newSales, oldSales },
-    specTop10: specs.slice(0, 10).reverse().map((s) => ({ name: s.specName, sales: s.sales })),
+    specTop10: specs.slice(0, 10).reverse().map((s) => ({ name: s.specName, sales: s.netSales })),
     specPie: { prodName: pieProd, items: specPieItems },
     specDist,
     products,

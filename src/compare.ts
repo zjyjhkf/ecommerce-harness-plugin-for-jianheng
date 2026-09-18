@@ -115,8 +115,10 @@ const metric = (id: string, label: string, unit: CompareUnit, wavg = false, weig
  *  v0.4.0 精简：删除正向销售收入/仓库物流费/毛利率/客单价/浏览量/销售件数等非核心按键，
  *  全层级统一保留核心五类——销售额 / 净销额 / 毛利 / 推广费 / 退款率（利润表层级再加费比）。 */
 const CORE_ROW_METRICS: CompareMetricDef[] = [
-  metric('sales', '销售额', 'money'),
-  metric('netSales', '净销额', 'money'),
+  // 名称按用户口径（v0.4.14）：面板展示的「销售额」= 源表「净销售额」列；
+  // 源表「销售额」列（含退款的订单额）改称「订单销售额（含退款）」。
+  metric('sales', '订单销售额（含退款）', 'money'),
+  metric('netSales', '销售额', 'money'),
   metric('grossProfit', '毛利', 'money'),
   metric('adSpend', '推广费', 'money'),
   metric('refundRate', '退款率', 'pct', true),

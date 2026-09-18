@@ -564,42 +564,49 @@ export function mergeMonthly(
   if (part.systemSkus) merged.systemSkus = part.systemSkus
   if (part.storeProfit) merged.storeProfit = part.storeProfit
   if (part.kind !== 'storeProfit') merged.lastKind = part.kind
-  // 口径统一（每次合并后重算，幂等）：净销售额 = 销售额 − 退款
-  enforceNetSalesRule(merged)
+  // 口径统一（每次合并后重算，幂等）：净销售额以表内「净销售额」列为准
+  applyNetSalesRule(merged)
   merged.updatedAt = new Date().toISOString()
   return merged
 }
 
 /**
- * 口径统一：**净销售额 = 销售额 − 退款**（面板只呈现这一种净销口径）。
+ * 口径统一（用户指定，v0.4.14 修订）：**三张排名表一律以表内「净销售额」列为准**。
  *
- * 为什么要在插件侧统一：
- *   源表的「净销售额」列与「销售额 − 退款金额」并不相等 —— 实测 8 月差 2,620 元、
- *   7 月差 3,431~3,454 元（0.06%，逐行叠加的系统性小额偏差，非个别脏行）。
- *   直接取「净销售额」列时，屏幕上会出现「概览条一个数、排行榜另一个数」之类的对不上账；
- *   统一为推导式后，凡是在同一行里能拿到销售额与退款的层级，都严格满足
- *   销售额 − 退款 = 净销售额。
+ * 背景：源表「销售订单 / 销售额」列并不是用户口径的销售额 ——
+ *   8 月产品表：销售额列 618 行合计 5,788,518.93（578.9 万），净销售额列合计 4,492,466.32（449.2 万）；
+ *   链接表 / 规格表的净销售额列合计同为 449.2 万（三表彼此一致），
+ *   而 578.9 − 退款 129.3 万 = 449.5 万，与表内列差 2,629 元（源表两列自身的 0.06% 偏差）。
+ * 按用户口径：**面板展示的「销售额」= 表内「净销售额」列**，表内「销售额」列改称
+ * 「订单销售额（含退款）」。因此本函数不再改写链接/规格行的 netSales。
  *
- * 适用范围（按源表列的可得出性划分）：
- *   - 平台链接 / 系统规格：**同一行里两列都有** → 直接相减，逐行精确成立；
- *   - 系统货品：**该表没有「退款金额」列**（导出模板缺列）。两条跨表补路都验证过不可靠：
+ * 本函数只做**兜底**：当整张表都没有「净销售额」列（旧导出模板缺列）而销售额 > 0 时，
+ * 用 销售额 − 退款金额 推导，避免整行净额为 0 被当成无销售。
+ *   - 平台链接 / 系统规格：同一行两列都有 → 可兜底；
+ *   - 系统货品：该表**没有「退款金额」列**（导出模板缺列），两条跨表补路都验证过不可靠：
  *       · 按「货品名」聚合规格退款 —— 真实数据有 17 组同名不同编号的货品，同一笔退款会被
  *         重复扣减（实测货品层退款 180.05 万 vs 规格层 129.34 万）；
  *       · 按「商家编码前缀」关联 —— 8 月 1538 行规格里只有 903 行能匹配上，覆盖不足。
- *     因此货品层保留表内「净销售额」列，不做没有依据的推算；它与链接/规格层的
- *     合计差 0.26 万，正是源表两列本身的不一致，面板不做掩饰。
+ *     因此货品层只认表内「净销售额」列，不做没有依据的推算。
  *   - 利润表逐店：源表只有「销售收入 / 退款」两列，净销由面板按 销售收入 − 退款 推导
- *     （见 data-center.html storeRows），同样恒等。
+ *     （见 data-center.html storeRows），恒等。
  *
- * 幂等：始终由 sales / refundAmount 现算，不依赖上一次结果，可在每次合并后重复调用。
+ * 幂等：只在表内列缺失时补值，重复调用结果不变。
  */
-export function enforceNetSalesRule(rep: MonthlyReport): void {
-  for (const l of rep.platformLinks ?? []) {
-    l.netSales = (Number(l.sales) || 0) - (Number(l.refundAmount) || 0)
+export function applyNetSalesRule(rep: MonthlyReport): void {
+  // ⚠ 只在**整列缺失**时兜底（表内一行净销售额都没有），不能逐行补：
+  //   真实 8 月链接表有 521 行「净销售额」为空（其中 100 行销售额 > 0，多为几元的小链接），
+  //   逐行补会把合计从 4,492,466.25 抬到 4,492,523.25（+57 元），
+  //   与货品/规格层不再一致，四舍五入后三张表就变成 449.3 / 449.2 / 449.2 万。
+  const patch = (rows: Array<{ sales?: number; netSales?: number; refundAmount?: number }> | undefined): void => {
+    if (!rows || !rows.length) return
+    if (rows.some((r) => Number(r.netSales) > 0)) return
+    for (const r of rows) {
+      if ((Number(r.sales) || 0) > 0) r.netSales = (Number(r.sales) || 0) - (Number(r.refundAmount) || 0)
+    }
   }
-  for (const s of rep.systemSkus ?? []) {
-    s.netSales = (Number(s.sales) || 0) - (Number(s.refundAmount) || 0)
-  }
+  patch(rep.platformLinks as never)
+  patch(rep.systemSkus as never)
 }
 
 /** 解析 JSON（{monthlyReport:{...}} 或直接 MonthlyReport）→ MonthlyReport | null */

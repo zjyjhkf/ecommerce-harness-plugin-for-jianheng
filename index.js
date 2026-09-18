@@ -945,17 +945,20 @@ function mergeMonthly(base, part) {
   if (part.systemSkus) merged.systemSkus = part.systemSkus;
   if (part.storeProfit) merged.storeProfit = part.storeProfit;
   if (part.kind !== "storeProfit") merged.lastKind = part.kind;
-  enforceNetSalesRule(merged);
+  applyNetSalesRule(merged);
   merged.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   return merged;
 }
-function enforceNetSalesRule(rep) {
-  for (const l of rep.platformLinks ?? []) {
-    l.netSales = (Number(l.sales) || 0) - (Number(l.refundAmount) || 0);
-  }
-  for (const s of rep.systemSkus ?? []) {
-    s.netSales = (Number(s.sales) || 0) - (Number(s.refundAmount) || 0);
-  }
+function applyNetSalesRule(rep) {
+  const patch = (rows) => {
+    if (!rows || !rows.length) return;
+    if (rows.some((r) => Number(r.netSales) > 0)) return;
+    for (const r of rows) {
+      if ((Number(r.sales) || 0) > 0) r.netSales = (Number(r.sales) || 0) - (Number(r.refundAmount) || 0);
+    }
+  };
+  patch(rep.platformLinks);
+  patch(rep.systemSkus);
 }
 function parseMonthlyReportJson(value) {
   if (value === null || typeof value !== "object") return null;
@@ -3199,8 +3202,10 @@ var metric = (id, label, unit, wavg = false, weight = "sales") => ({
   weight
 });
 var CORE_ROW_METRICS = [
-  metric("sales", "\u9500\u552E\u989D", "money"),
-  metric("netSales", "\u51C0\u9500\u989D", "money"),
+  // 名称按用户口径（v0.4.14）：面板展示的「销售额」= 源表「净销售额」列；
+  // 源表「销售额」列（含退款的订单额）改称「订单销售额（含退款）」。
+  metric("sales", "\u8BA2\u5355\u9500\u552E\u989D\uFF08\u542B\u9000\u6B3E\uFF09", "money"),
+  metric("netSales", "\u9500\u552E\u989D", "money"),
   metric("grossProfit", "\u6BDB\u5229", "money"),
   metric("adSpend", "\u63A8\u5E7F\u8D39", "money"),
   metric("refundRate", "\u9000\u6B3E\u7387", "pct", true)
@@ -3704,14 +3709,19 @@ function computeNewProducts(curr, prev) {
     const newNames = new Set(newProd.map((p) => String(p.name ?? "")));
     newSku = allSku.filter((s) => newNames.has(String(s.name ?? "")));
   }
+  if (newProd.length > 0 && newSku.length > 0) {
+    const newProdNames = new Set(newProd.map((p) => String(p.name ?? "")));
+    const narrowed = newSku.filter((s) => newProdNames.has(String(s.name ?? "")));
+    if (narrowed.length > 0) newSku = narrowed;
+  }
   if (basis === "none" || newProd.length === 0 && newSku.length === 0) {
     const why = hasPrev || label ? "\u672C\u671F\u672A\u8BC6\u522B\u5230\u65B0\u54C1\uFF1A\u6708\u5EA6\u8868\u300C\u5206\u7C7B\u300D\u5217\u65E2\u65E0\u4E0E\u672C\u671F\u6708\u4EFD\u4E00\u81F4\u7684\u4E0A\u5E02\u6807\u7B7E\uFF0C\u4E5F\u65E0\u53EF\u6BD4\u4E0A\u4E00\u671F\u7528\u4E8E\u300C\u9996\u6B21\u4E0A\u699C\u300D\u5224\u5B9A\u3002" : "\u672C\u671F\u672A\u8BC6\u522B\u5230\u65B0\u54C1\uFF1A\u6708\u5EA6\u8868\u300C\u5206\u7C7B\u300D\u5217\u65E0\u4E0A\u5E02\u6708\u4EFD\u6807\u7B7E\uFF0C\u4E14\u5C1A\u672A\u5BFC\u5165\u4E0A\u4E00\u671F\uFF0C\u65E0\u6CD5\u505A\u300C\u9996\u6B21\u51FA\u73B0\u300D\u5224\u5B9A\u3002\u8BF7\u518D\u5BFC\u5165\u4E0A\u4E00\u671F\u6708\u5EA6\u590D\u76D8\u540E\u67E5\u770B\u3002";
     return EMPTY(why, period, prevPeriod, hasPrev);
   }
   const newKeySet = new Set(newProd.map((p) => prodKey(p)));
   const oldProd = allProd.filter((p) => !newKeySet.has(prodKey(p)));
-  const newSales = sumBy(newProd, (p) => p.sales);
-  const totalSales = sumBy(allProd, (p) => p.sales);
+  const newSales = sumBy(newProd, (p) => p.netSales);
+  const totalSales = sumBy(allProd, (p) => p.netSales);
   const newSkuSales = sumBy(newSku, (s) => s.sales);
   const newUnits = sumBy(newSku, (s) => s.salesCount);
   const newCost = sumBy(newSku, (s) => s.salesCost);
@@ -3719,7 +3729,7 @@ function computeNewProducts(curr, prev) {
   const refundPre = weighted(newSku.map((s) => s.preShipRefundRate), newSku.map((s) => s.sales));
   const refundPost = weighted(newSku.map((s) => s.postShipRefundRate), newSku.map((s) => s.sales));
   const refundReceived = weighted(newSku.map((s) => s.receivedRefundRate), newSku.map((s) => s.sales));
-  const oldSales = sumBy(oldProd, (p) => p.sales);
+  const oldSales = sumBy(oldProd, (p) => p.netSales);
   const newNet = sumBy(newProd, (p) => p.netSales);
   const oldNet = sumBy(oldProd, (p) => p.netSales);
   const newGm = newNet > 0 ? sumBy(newProd, (p) => p.grossProfit) / newNet * 100 : 0;
@@ -3778,13 +3788,13 @@ function computeNewProducts(curr, prev) {
     receivedRefundRate: s.receivedRefundRate
   })).sort((a, b) => b.sales - a.sales);
   const top1 = products[0];
-  const top1Share = top1 && newSales > 0 ? top1.sales / newSales * 100 : 0;
+  const top1Share = top1 && newSales > 0 ? top1.netSales / newSales * 100 : 0;
   const specDist = [...specCntOf.entries()].map(([name2, cnt]) => ({ name: name2, cnt })).sort((a, b) => b.cnt - a.cnt).slice(0, 15).reverse();
   const pieProd = top1 ? top1.name : "";
   const pieAll = specs.filter((s) => s.name === pieProd).slice(0, 8);
   const pieRest = specs.filter((s) => s.name === pieProd).slice(8);
-  const specPieItems = pieAll.map((s) => ({ name: s.specName, value: s.sales }));
-  if (pieRest.length) specPieItems.push({ name: "\u5176\u4ED6\u89C4\u683C", value: sumBy(pieRest, (s) => s.sales) });
+  const specPieItems = pieAll.map((s) => ({ name: s.specName, value: s.netSales }));
+  if (pieRest.length) specPieItems.push({ name: "\u5176\u4ED6\u89C4\u683C", value: sumBy(pieRest, (s) => s.netSales) });
   return {
     available: true,
     reason: "",
@@ -3815,7 +3825,7 @@ function computeNewProducts(curr, prev) {
     top1Name: pieProd,
     top10: products.slice(0, 10).reverse().map((p) => ({ name: p.name, sales: p.sales, netSales: p.netSales })),
     donut: { newSales, oldSales },
-    specTop10: specs.slice(0, 10).reverse().map((s) => ({ name: s.specName, sales: s.sales })),
+    specTop10: specs.slice(0, 10).reverse().map((s) => ({ name: s.specName, sales: s.netSales })),
     specPie: { prodName: pieProd, items: specPieItems },
     specDist,
     products,

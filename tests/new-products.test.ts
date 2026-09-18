@@ -65,9 +65,10 @@ test('新品追踪：分类列是「YY年M月」上市月份时，取与本期�
   assert.ok(p.basisLabel.includes('26年7月'), '口径说明里带上月份标签：' + p.basisLabel)
   assert.equal(p.newCnt, 2)
   assert.equal(p.oldCnt, 2)
-  assert.equal(p.newSales, 1500)
-  assert.equal(p.totalSales, 6500)
-  assert.ok(Math.abs(p.newShare - (1500 / 6500) * 100) < 0.01, '占全店 = 新品/全部')
+  // 口径（v0.4.14）：新品销售额取源表「净销售额」列（700+400），不是「销售额」列（1000+500）
+  assert.equal(p.newSales, 1100)
+  assert.equal(p.totalSales, 4600, '全店同样取净销售额列（700+400+1500+2000）')
+  assert.ok(Math.abs(p.newShare - (1100 / 4600) * 100) < 0.01, '占全店 = 新品净额/全部净额')
   // 毛利率分母是净销售额：新品 (300+200)/(700+400) = 45.45%
   assert.ok(Math.abs(p.newGm - (500 / 1100) * 100) < 0.01, '毛利率 = 毛利额/净销售额，实算 ' + p.newGm.toFixed(2))
   // 退款率按销售额加权：(1000*20 + 500*10)/1500 = 16.67%
@@ -86,7 +87,7 @@ test('新品追踪：同名不同编号的货品按「货品编号」划分，�
   const p = buildNewProductPayload(store)
   assert.equal(p.newCnt, 1, '只有编号 C-NEW 那行是新品')
   assert.equal(p.oldCnt, 2, '同名但编号不同的 C-OLD 必须留在老品侧')
-  assert.equal(p.newSales, 1000, '新品销售额只算 C-NEW')
+  assert.equal(p.newSales, 800, '新品销售额只算 C-NEW（取净销售额列 800）')
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -107,7 +108,7 @@ test('新品追踪：跨期按「货品名」判首次出现，编号两期不�
   assert.equal(p.basis, 'newcomer')
   assert.equal(p.newCnt, 1, '只有「真正的新货」是新品；换过编号的两个老货不算')
   assert.equal(p.oldCnt, 2)
-  assert.equal(p.newSales, 300, '新品销售额不含换编号的老货')
+  assert.equal(p.newSales, 200, '新品销售额不含换编号的老货（净销售额列 200）')
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -128,7 +129,7 @@ test('新品追踪：分类列无月份标签时回退为「上期未出现、�
   assert.equal(p.basis, 'newcomer', '无月份标签 → 走首次上榜判据')
   assert.ok(p.basisLabel.includes('首次出现'), p.basisLabel)
   assert.equal(p.newCnt, 1)
-  assert.equal(p.newSales, 900)
+  assert.equal(p.newSales, 700, '净销售额列 700')
   assert.equal(p.oldCnt, 2)
   rmSync(dir, { recursive: true, force: true })
 })
@@ -219,9 +220,9 @@ test('新品追踪 prevSide：连续导入三期后，上一期概览按同一�
   assert.equal(p.prevSide!.period, '2026-05-01~2026-05-31')
   assert.equal(p.prevSide!.basis, 'category')
   assert.equal(p.prevSide!.newCnt, 1, '5月新品是「五月新货」')
-  assert.equal(p.prevSide!.newSales, 1000)
-  assert.ok(Math.abs(p.prevSide!.newShare - (1000 / 3000) * 100) < 0.01, '上期占全店 = 1000/3000')
-  assert.equal(p.prevSide!.totalSales, 3000)
+  assert.equal(p.prevSide!.newSales, 800, '净销售额列 800')
+  assert.ok(Math.abs(p.prevSide!.newShare - (800 / 2300) * 100) < 0.01, '上期占全店 = 800/2300（净额口径）')
+  assert.equal(p.prevSide!.totalSales, 2300, '5 月全店净额 = 800+1500')
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -256,7 +257,7 @@ test('新品追踪 prevSide：上期为首次上榜判据时同样可用，且�
   assert.ok(p.prevSide, '上一期（7月）也应能判定')
   assert.equal(p.prevSide!.basis, 'newcomer')
   assert.equal(p.prevSide!.newCnt, 1, '7月新品是「乙」（6月没有它）')
-  assert.equal(p.prevSide!.newSales, 300)
+  assert.equal(p.prevSide!.newSales, 200, '净销售额列 200')
   rmSync(dir, { recursive: true, force: true })
 })
 
